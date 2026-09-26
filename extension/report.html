@@ -6,14 +6,19 @@
   <meta name="color-scheme" content="light">
   <title>Review notebook — Diffuse</title>
   <link rel="stylesheet" href="report.css">
+  <link rel="stylesheet" href="report-sidebar.css">
   <link rel="stylesheet" href="jira-export.css">
   <script src="report.js" type="module"></script>
+  <link rel="stylesheet" href="ui-chrome.css">
+  <script src="select-controls.js" defer></script>
 </head>
 <body>
   <aside class="sidebar">
     <a class="brand" href="report.html" aria-label="Diffuse review notebook"><span class="brand-mark" aria-hidden="true"><i></i><i></i></span>Diffuse<span class="brand-tag">Review</span></a>
     <div class="sidebar-intro"><h1>The details.<br>The next steps.</h1><p>Clear observations, with the evidence to act on them.</p></div>
     <div class="list-heading"><h2>Saved reviews</h2><button id="refresh-reviews" class="small-icon" title="Refresh reviews" aria-label="Refresh reviews">↻</button></div>
+    <div class="review-visibility-tabs" role="group" aria-label="Review visibility"><button id="review-view-saved" type="button" aria-pressed="true">Saved</button><button id="review-view-hidden" type="button" aria-pressed="false">Hidden</button></div>
+    <p id="hidden-reviews-hint" class="hidden-reviews-hint" hidden>Hidden reviews keep all their comments and evidence. Restore them at any time.</p>
     <nav id="review-list" class="review-list" aria-label="Saved reviews"><p class="sidebar-empty">Loading your reviews…</p></nav>
     <footer class="sidebar-footer"><span class="local-message"><span class="local-indicator" aria-hidden="true"></span>Saved in this Chrome profile.</span><p>AI analysis is optional. You choose what to send to Anthropic using your own key.</p><button id="ai-settings" class="sidebar-settings" type="button">AI settings ↗</button><a class="sidebar-settings" href="jira-settings.html">Jira settings ↗</a></footer>
   </aside>
@@ -22,8 +27,8 @@
     <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
     <section class="export-toolbar" id="export-toolbar" hidden>
       <div><h2>Share the full review</h2><p id="handoff-description">Every observation, its evidence, and the next step.</p></div>
-      <div class="export-actions"><button id="copy-report" class="button primary">Copy entire report <span aria-hidden="true">↗</span></button><button id="download-html" class="button">Download HTML</button><button id="download-markdown" class="button subtle">Markdown ↓</button><button id="delete-review" class="button danger-subtle">Delete review</button></div>
-      <details class="export-help"><summary>What is included when I copy or download?</summary><p>All observations are included, even when a category is selected. Pasting images depends on the destination; use <strong>Copy image</strong> if it strips them. HTML keeps embedded screenshots and playable clips. Pasted video is represented by a screenshot and filename.</p></details>
+      <div class="export-actions"><button id="copy-report" class="button primary">Copy entire report <span aria-hidden="true">↗</span></button><button id="download-html" class="button">Download HTML</button><button id="download-markdown" class="button subtle">AI handoff .md ↓</button><button id="delete-review" class="button danger-subtle">Delete review</button></div>
+      <details class="export-help"><summary>What is included when I copy or download?</summary><p>Every saved observation and viewport is included, regardless of filters. <strong>AI handoff .md</strong> gives a coding assistant the full review, requested changes, and verification steps. Include the <strong>HTML report</strong> alongside it for screenshots and playable clips. When copying the report, image support depends on the destination; pasted video is represented by a screenshot and filename.</p></details>
     </section>
     <div id="report-content" aria-busy="true"><section class="empty-state"><span class="empty-symbol" aria-hidden="true">◧</span><h2>Getting your notebook ready.</h2><p>Your saved review evidence will appear here.</p></section></div>
   </main>

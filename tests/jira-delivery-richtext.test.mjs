@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {jiraIssueFields} from '../extension/jira-format.mjs';
 import {createDeliveryService} from '../backend/delivery-service.mjs';
 
 const CLOUD = '1324a887-45db-1bf4-1e99-ef0ff456d421';
 const ADF = {type: 'doc', version: 1, content: [{type: 'paragraph', content: [{type: 'text', text: 'Explain the requested change.'}]}]};
-function fixture(fieldValue) {
+function fixture(fieldValue, description = ADF) {
   let persisted;
   const page = values => ({values, startAt: 0, isLast: true, nextStartAt: null});
   const service = createDeliveryService({
@@ -26,7 +27,7 @@ function fixture(fieldValue) {
     async prepare() {
       return service.prepare({connection: {id: randomUUID()}, accessToken: 'fixture-token', request: {
         clientDeliveryId: randomUUID(), commentId: randomUUID(), revision: 'a'.repeat(64), cloudId: CLOUD,
-        projectId: '10001', issueTypeId: '10002', summary: 'Review observation', description: ADF,
+        projectId: '10001', issueTypeId: '10002', summary: 'Review observation', description,
         fields: fieldValue === undefined ? {} : {customfield_10001: fieldValue}, attachments: []
       }});
     },
@@ -50,4 +51,14 @@ test('a malformed rich-text document is rejected before persisting a delivery', 
   const app = fixture({type: 'doc', version: 1, content: [{type: 'html', content: [{type: 'text', text: '<script>fixture</script>'}]}]});
   await assert.rejects(app.prepare(), error => error.code === 'invalid_input');
   assert.equal(app.saved(), undefined);
+});
+
+
+test('the same rich ADF survives delivery preparation in descriptions and required textarea fields', async () => {
+  const description = jiraIssueFields({fields: {comment: 'The action is hard to find.', expected: 'Put Save beside Cancel.', component: 'Form footer', state: 'Editing', steps: 'Open form.\nChange a value.'}}).description;
+  description.content.push({type: 'codeBlock', attrs: {language: 'text', wrap: true, hideLineNumbers: true}, content: [{type: 'text', text: 'Suggested implementation prompt.'}]});
+  const app = fixture(description, description);
+  assert.equal((await app.prepare()).status, 'prepared');
+  assert.deepEqual(app.saved().request.description, description);
+  assert.deepEqual(app.saved().request.fields.customfield_10001, description);
 });

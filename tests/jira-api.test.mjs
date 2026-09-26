@@ -110,9 +110,9 @@ test('issue creation validates and sends exact core fields and returns only the 
   assert.equal(calls[0].init.method, 'POST');
 });
 
-test('the production formatter text, headings, line breaks and HTTP links fit the accepted ADF subset', async () => {
+test('the production formatter panels, steps, evidence, AI prompt and links fit the accepted ADF subset', async () => {
   const {client, calls} = fixture([json({id: '10100', key: 'DIF-12'}, 201)]);
-  const formatted = jiraIssueFields({fields: {comment: 'First line\nSecond line', expected: 'Use the prototype label', category: 'copy', severity: 'minor'}}, {productionUrl: 'https://example.com/page'});
+  const formatted = jiraIssueFields({fields: {comment: 'First line\nSecond line', expected: 'Use the prototype label', category: 'copy', severity: 'minor', component: 'Save', state: 'Editing', steps: 'Open page\nSelect Edit'}, ai: {provider: 'anthropic'}, evidence: {production: {dataUrl: `data:image/png;base64,${PNG.toString('base64')}`}}}, {productionUrl: 'https://example.com/page'});
   await client.createIssue({...ISSUE, ...formatted});
   assert.deepEqual(JSON.parse(calls[0].init.body).fields.description, formatted.description);
 });

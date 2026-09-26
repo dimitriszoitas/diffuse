@@ -438,7 +438,7 @@ async function initializeTab(role) {
   const tabId = role === 'source' ? current.sourceTabId : current.targetTabId;
   const tab = await chrome.tabs.get(tabId);
   await assertPageAccess(tab.url, chrome, 'This page moved to a site that Diffuse cannot access. Open Diffuse on this page and start a new review.');
-  await chrome.scripting.executeScript({target: {tabId}, files: ['inspector.js', 'content.js']});
+  await chrome.scripting.executeScript({target: {tabId}, files: ['inspector.js', 'select-controls.js', 'content.js']});
   if (session?.id !== current.id) return;
   const response = await tabMessage(tabId, 'INITIALIZE', {role, session: current});
   if (!response?.ok) throw new Error(response?.error || 'Could not prepare the page for comparison.');

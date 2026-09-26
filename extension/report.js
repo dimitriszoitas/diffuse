@@ -1,5 +1,6 @@
+import {suggestedAiPrompt} from './ai-handoff.mjs';
 import {
-  commentTitle, evidenceImages, evidenceVideo, fileStem, formatDate, formatMarkdown, categoryKey, recordedFocusCrop, safeMediaUrl, commentIsAudit, reviewIsAudit,
+  commentTitle, evidenceImages, evidenceVideo, fileStem, formatDate, formatMarkdown, formatAiHandoffMarkdown, categoryKey, recordedFocusCrop, safeMediaUrl, commentIsAudit, reviewIsAudit,
   formatReviewHtml, formatStandaloneHtml, reviewTitle, REPORT_STYLES, categoryLabel,
 } from './report-format.mjs';
 import {getReview, listReviews} from './review-store.mjs';
@@ -15,6 +16,10 @@ let selectedReview = null;
 let loadingRevision = 0;
 let editingCommentId = null;
 let editingReviewId = null;
+const HIDDEN_REVIEWS_KEY = 'diffuseHiddenReviewIds';
+let hiddenReviewIds = new Set();
+let reviewListView = 'saved';
+let reviewVisibilityBusy = false;
 const jiraExporter = createJiraExporter({onError: message => notice(message, 'warning')});
 
 async function request(type, payload = {}) {
@@ -47,14 +52,27 @@ function emptyState(title, description) {
 
 function renderReviewList() {
   ui['review-list'].replaceChildren();
-  ui['review-count'].textContent = `${reviews.length} saved review${reviews.length === 1 ? '' : 's'}`;
-  if (!reviews.length) {
+  const hiddenCount = reviews.filter(review => hiddenReviewIds.has(review.id)).length;
+  const visibleReviews = reviews.filter(review => hiddenReviewIds.has(review.id) === (reviewListView === 'hidden'));
+  ui['review-count'].textContent = `${reviews.length - hiddenCount} saved · ${hiddenCount} hidden`;
+  for (const view of ['saved', 'hidden']) {
+    const button = ui[`review-view-${view}`];
+    button.textContent = `${view === 'saved' ? 'Saved' : 'Hidden'} · ${view === 'saved' ? reviews.length - hiddenCount : hiddenCount}`;
+    button.setAttribute('aria-pressed', String(reviewListView === view));
+    button.disabled = reviewVisibilityBusy;
+  }
+  ui['review-list'].setAttribute('aria-label', reviewListView === 'hidden' ? 'Hidden reviews' : 'Saved reviews');
+  ui['hidden-reviews-hint'].hidden = reviewListView !== 'hidden';
+  if (!visibleReviews.length) {
     const paragraph = document.createElement('p');
     paragraph.className = 'sidebar-empty';
-    paragraph.textContent = 'Start a comparison or page audit and save your first observation. It will be waiting here.';
+    paragraph.textContent = reviewListView === 'hidden' ? 'No hidden reviews. Hide a saved review to move it here.' : hiddenCount ? 'Your reviews are in Hidden. Restore any review to show it here again.' : 'Save your first observation on a page. Its review will be waiting here.';
     ui['review-list'].append(paragraph);
   }
-  for (const review of reviews) {
+  for (const review of visibleReviews) {
+    const row = document.createElement('div');
+    row.className = 'review-row';
+    row.dataset.reviewId = review.id;
     const button = document.createElement('button');
     button.className = `review-item${review.id === selectedReview?.id ? ' active' : ''}`;
     button.type = 'button';
@@ -68,8 +86,35 @@ function renderReviewList() {
     meta.textContent = `${review.mode === 'audit' ? 'Audit · ' : ''}${count} observation${count === 1 ? '' : 's'} · ${formatDate(review.updatedAt || review.createdAt).split(' ')[0]}`;
     button.append(title, meta);
     button.addEventListener('click', () => selectReview(review.id));
-    ui['review-list'].append(button);
+    const visibility = document.createElement('button');
+    visibility.type = 'button';
+    visibility.className = 'review-visibility-action';
+    const hidden = hiddenReviewIds.has(review.id);
+    visibility.textContent = hidden ? 'Restore' : 'Hide';
+    visibility.setAttribute('aria-label', `${hidden ? 'Restore' : 'Hide'} ${reviewTitle(review)}`);
+    visibility.title = hidden ? 'Show this review in Saved again' : 'Move this review to Hidden; its evidence stays saved';
+    visibility.disabled = reviewVisibilityBusy;
+    visibility.addEventListener('click', () => setReviewHidden(review, !hidden));
+    row.append(button, visibility);
+    ui['review-list'].append(row);
   }
+}
+
+async function setReviewHidden(review, hidden) {
+  if (reviewVisibilityBusy) return;
+  reviewVisibilityBusy = true;
+  renderReviewList();
+  try {
+    const saved = await chrome.storage.local.get(HIDDEN_REVIEWS_KEY);
+    const next = new Set(Array.isArray(saved[HIDDEN_REVIEWS_KEY]) ? saved[HIDDEN_REVIEWS_KEY] : []);
+    hidden ? next.add(review.id) : next.delete(review.id);
+    const ids = [...next].filter(id => reviews.some(item => item.id === id));
+    await chrome.storage.local.set({[HIDDEN_REVIEWS_KEY]: ids});
+    hiddenReviewIds = new Set(ids);
+    await loadReviews(selectedReview?.id === review.id ? null : selectedReview?.id);
+    notice(hidden ? 'Review hidden. Find it in Hidden whenever you want to restore it. All comments and evidence remain saved.' : 'Review restored to Saved.');
+  } catch (error) { notice(error.message, 'error'); }
+  finally { reviewVisibilityBusy = false; renderReviewList(); }
 }
 
 async function prepareReviewEvidence(review) {
@@ -130,17 +175,27 @@ function setExportEnabled(enabled) {
 async function loadReviews(preferredId = selectedReview?.id || new URL(location.href).searchParams.get('review')) {
   ui['refresh-reviews'].disabled = true;
   try {
-    const savedReviews = await listReviews();
+    const [savedReviews, preferences] = await Promise.all([listReviews(), chrome.storage.local.get(HIDDEN_REVIEWS_KEY)]);
     reviews = Array.isArray(savedReviews) ? savedReviews : [];
-    if (!reviews.length) {
+    const storedIds = Array.isArray(preferences[HIDDEN_REVIEWS_KEY]) ? preferences[HIDDEN_REVIEWS_KEY] : [];
+    const validIds = new Set(reviews.map(review => review.id));
+    hiddenReviewIds = new Set(storedIds.filter(id => typeof id === 'string' && validIds.has(id)));
+    if (hiddenReviewIds.size !== storedIds.length) await chrome.storage.local.set({[HIDDEN_REVIEWS_KEY]: [...hiddenReviewIds]});
+    const preferred = reviews.find(review => review.id === preferredId);
+    if (preferred) reviewListView = hiddenReviewIds.has(preferred.id) ? 'hidden' : 'saved';
+    const visibleReviews = reviews.filter(review => hiddenReviewIds.has(review.id) === (reviewListView === 'hidden'));
+    if (!visibleReviews.length) {
       loadingRevision++;
       selectedReview = null;
       ui['export-toolbar'].hidden = true;
       renderReviewList();
-      emptyState('The details make the difference.', 'Save an observation in a comparison or page audit. Its screenshots and engineering context will appear here, ready to share.');
+      const url = new URL(location.href);url.searchParams.delete('review');history.replaceState(null, '', url.href);
+      if (reviewListView === 'hidden') emptyState('No hidden reviews.', 'Reviews you hide stay saved here until you restore them.');
+      else if (hiddenReviewIds.size) emptyState('Your reviews are in Hidden.', 'Open Hidden in the sidebar to read or restore them. Their comments and evidence are still saved.');
+      else emptyState('The details make the difference.', 'Save an observation on a page. Its screenshots and engineering context will appear here, ready to share.');
       return;
     }
-    const next = reviews.find((review) => review.id === preferredId) || reviews[0];
+    const next = visibleReviews.find((review) => review.id === preferredId) || visibleReviews[0];
     renderReviewList();
     await selectReview(next.id);
   } catch (error) {
@@ -277,7 +332,12 @@ function renderReview() {
     item.addEventListener('click', () => { activeViewport = key; applyFilters(); });
     viewportFilters.append(item);
   }
-  if (cards.length) ui['report-content'].querySelector('.report-heading').append(viewportFilters);
+  if (cards.length) {
+    const categoryFilters = ui['report-content'].querySelector('.review-categories');
+    const row = document.createElement('div'); row.className = 'review-filter-row';
+    row.setAttribute('role', 'group'); row.setAttribute('aria-label', 'Filter observations');
+    categoryFilters.before(row); row.append(categoryFilters, viewportFilters);
+  }
   categoryLinks.forEach(link => {
     link.setAttribute('role', 'button');
     link.setAttribute('aria-pressed', String(link.dataset.categoryFilter === 'all'));
@@ -299,6 +359,10 @@ function renderReview() {
       }),
     );
     card.querySelector('.comment-heading').after(actions);
+    const prompt = suggestedAiPrompt(comment);
+    if (prompt) card.querySelector('.ai-handoff')?.append(actionButton('Copy AI prompt', '', async () => {
+      await navigator.clipboard.writeText(prompt); notice('AI prompt copied.');
+    }));
     const images = evidenceImages(comment, index, {audit: commentIsAudit(comment, review)});
     card.querySelectorAll('.evidence-image').forEach((figure) => {
       // Crops are shown first, while this stable index identifies their original media.
@@ -423,8 +487,8 @@ ui['download-html'].addEventListener('click', () => {
 });
 ui['download-markdown'].addEventListener('click', () => {
   if (!selectedReview) return;
-  download(formatMarkdown(selectedReview), `${fileStem(reviewTitle(selectedReview))}.md`, 'text/markdown;charset=utf-8');
-  notice('Markdown download started. Screenshots are embedded as data URLs; viewer support varies. Download HTML for playable recordings and reliable image display.');
+  download(formatAiHandoffMarkdown(selectedReview), `${fileStem(reviewTitle(selectedReview))}-ai-handoff.md`, 'text/markdown;charset=utf-8');
+  notice('AI handoff downloaded with every observation and viewport. Include the HTML report or evidence files for visual context.');
 });
 ui['delete-review'].addEventListener('click', async () => {
   if (!selectedReview) return;
@@ -440,6 +504,11 @@ ui['delete-review'].addEventListener('click', async () => {
   finally { ui['delete-review'].disabled = !selectedReview; }
 });
 ui['refresh-reviews'].addEventListener('click', () => loadReviews());
+for (const view of ['saved', 'hidden']) ui[`review-view-${view}`].addEventListener('click', () => {
+  if (reviewVisibilityBusy) return;
+  reviewListView = view;
+  loadReviews(null);
+});
 ui['ai-settings'].addEventListener('click', async () => {
   ui['ai-settings'].disabled = true;
   try { await request('OPEN_AI_SETTINGS'); }

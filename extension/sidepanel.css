@@ -25,3 +25,5 @@ body[data-composer-open=true] #dock-workspace,body[data-composer-open=true] #pan
 #panel-composer>.sticky-save{position:relative;bottom:auto;flex-shrink:0;margin:0;padding:10px 0 max(4px,env(safe-area-inset-bottom));background:#f7f4fc}
 #panel-composer .sticky-save .feedback{margin:0 0 8px;padding:10px 12px;max-height:24dvh;overflow:auto;font-size:14px;line-height:1.5}
 #panel-recover-comment{width:100%;margin:0 0 8px}
+
+.control-pair:has(select[name=severity]){grid-template-columns:1fr}

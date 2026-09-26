@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {commentViewportKey, commentMatchesViewport, viewportLabel} from '../extension/viewport-profile.mjs';
+import {commentViewportKey, commentMatchesViewport, viewportLabel, viewportKey} from '../extension/viewport-profile.mjs';
 import {formatReviewHtml, formatMarkdown} from '../extension/report-format.mjs';
 import {jiraIssueFields} from '../extension/jira-format.mjs';
 
@@ -9,6 +9,7 @@ test('viewport grouping preserves explicit capture view and safely classifies ol
   assert.equal(commentViewportKey(comment(390,'phone')), 'phone');
   assert.equal(commentViewportKey(comment(900,'desktop')), 'desktop');
   assert.equal(commentViewportKey(comment(1440)), 'desktop');
+  assert.equal(commentViewportKey(comment(1280)), 'laptop');
   assert.equal(commentViewportKey(comment(1024)), 'tablet');
   assert.equal(commentViewportKey(comment(390)), 'phone');
   assert.equal(commentViewportKey(comment(390,'malicious')), 'phone');
@@ -16,6 +17,20 @@ test('viewport grouping preserves explicit capture view and safely classifies ol
   assert.equal(commentMatchesViewport(comment(390),'desktop'), false);
   assert.equal(commentMatchesViewport(comment(390),'phone'), true);
   assert.equal(commentMatchesViewport({},'desktop'), true);
+});
+test('Laptop width has distinct boundaries while explicit legacy profiles remain unchanged', () => {
+  for(const [width,key] of [[1440,'desktop'],[1439,'laptop'],[1280,'laptop'],[1279,'tablet'],[768,'tablet'],[767,'phone'],[NaN,'unknown']])assert.equal(viewportKey(width),key);
+  for(const key of ['desktop','tablet']){
+    const saved=comment(1280,key),before=structuredClone(saved);
+    assert.equal(commentViewportKey(saved),key);
+    assert.equal(commentMatchesViewport(saved,'laptop'),false);
+    assert.deepEqual(saved,before);
+  }
+  const laptop=comment(1280,'laptop');laptop.context.production.viewport.height=800;
+  assert.equal(commentMatchesViewport(laptop,'laptop'),true);
+  assert.equal(commentMatchesViewport(laptop,'desktop'),false);
+  assert.equal(viewportLabel(laptop),'Laptop · 1280 × 800');
+  assert.equal(commentViewportKey({selection:{context:laptop.context.production}}),'laptop');
 });
 test('reports and Jira retain the viewport beside the same saved observation', () => {
   const capture=comment(390,'phone');

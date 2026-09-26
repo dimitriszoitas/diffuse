@@ -1,6 +1,6 @@
 # Diffuse — live design comparison and page audits
 
-**0.7.1 makes the interface more compact, supports local HTML files, and keeps a page toolbar visible beside the drawer.** Jira handoff supports individual or selected review observations: preview the destination, ticket text and evidence before explicitly creating tickets. The hosted service is deployed; a real account grant and ticket creation still need end-to-end verification. The current Atlassian app is private to its owner, and the service permits the existing approved extension installation.
+**0.7.2 adds a 1280px Laptop view, compact controls with minimize/expand, custom dropdowns and severity radios, Hide/Restore for saved reviews, and a whole-review AI handoff.** Reload handling preserves unsaved text for copying and asks you to refresh stale pages. Jira handoff supports individual or selected observations with formatted descriptions: preview the destination, text and evidence before explicitly creating tickets. The hosted service is deployed; a real account grant and ticket creation still need end-to-end verification. The current Atlassian app is private to its owner, and the service permits the existing approved extension installation.
 
 Diffuse includes one review workflow with an optional live Diff and native Chrome side drawer. Open it from the popup’s top-right drawer icon or the page toolbar’s **Dock in sidebar** button. The webpage resizes beside Diffuse; a compact toolbar stays on the page while the drawer holds comment drafts and review panels. Closing the drawer restores the full floating controls and preserves the unfinished comment. Chrome chooses the drawer side and owns its resize handle.
 
@@ -17,7 +17,7 @@ Diffuse layers a **continuously running prototype** over a production page in Ch
 3. Choose **Load unpacked** and select the **`extension` folder inside this project**. Do not select the project folder itself.
 4. Pin **Diffuse — Live design comparison** in Chrome’s extensions menu.
 
-The extension loads directly from its files; no build step is needed. After changing extension code, choose **Reload** on its card in `chrome://extensions`, then refresh both comparison pages.
+The extension loads directly from its files; no build step is needed. If Diffuse updates while a page is open, its old controls stop and show a refresh notice. Unsaved comment text remains available to copy before refreshing; an interrupted Save is never retried automatically. After changing extension code, choose **Reload** on its card in `chrome://extensions`, then refresh both comparison pages.
 
 **Upgrading an existing installation:** replace the extension files in the same installed folder, then choose **Reload** on the existing extension card. Do not remove and reinstall the extension or load it from a different folder path: saved reviews belong to its extension ID in this Chrome profile. Keep that installation path unchanged to preserve access to them. Download an HTML report when you want a portable copy of a review.
 
@@ -41,11 +41,11 @@ Page clicks operate the reviewed page. Switch to the reference to interact with 
 
 ## Responsive viewport views
 
-Use **Desktop (1440 × 900)**, **Laptop / tablet (1024 × 768)**, or **Phone (390 × 844)** in the page toolbar or drawer. These change real CSS layout dimensions and media queries on the reviewed page and its connected reference. They do not emulate a device operating system, mobile user agent or touch input. **Reset / Use window size** restores normal sizing; ending the review releases viewport control too.
+Use **Desktop (1440 × 900)**, **Laptop (1280 × 800)**, **Tablet (1024 × 768)**, or **Phone (390 × 844)** in the page toolbar or drawer. These change real CSS layout dimensions and media queries on the reviewed page and its connected reference. They do not emulate a device operating system, mobile user agent or touch input. **Reset / Use window size** restores normal sizing; ending the review releases viewport control too.
 
 Chrome requires the extension's **debugger** permission for these controls and shows a debugging notice while a preset is active. Close DevTools on the review tabs before using a preset; Diffuse does not take over another debugger. A pending comment, capture, recording or AI operation must finish before switching.
 
-Every captured comment keeps its viewport view and exact dimensions. Pins and drawer comments show the current view; report filters let you see all views or one at a time. Jira descriptions and exports include the captured viewport. Older comments are grouped using their recorded width (1280px and above: desktop; 768–1279px: laptop/tablet; below 768px: phone); comments without dimensions remain accessible in every live view and under Unspecified viewport in reports.
+Every captured comment keeps its viewport view and exact dimensions. Pins and drawer comments show the current view; report filters let you see all views or one at a time. Jira descriptions and exports include the captured viewport. Comments without a saved viewport label are grouped by their recorded width (1440px and above: desktop; 1280–1439px: laptop; 768–1279px: tablet; below 768px: phone). Existing saved labels remain unchanged. Comments without dimensions remain accessible in every live view and under Unspecified viewport in reports.
 
 ## Comment with screenshot evidence
 
@@ -99,13 +99,15 @@ AI errors distinguish authentication, model access, API credit, rate limits, and
 
 ## Review, copy, and export
 
-Open **Review (n)** on the page or **Review reports** in the extension popup. The notebook lists saved reviews, including earlier comparison sessions. You can edit a comment’s written fields while keeping its original evidence, or delete comments and reviews.
+Open **Review (n)** on the page or **Review reports** in the extension popup. The notebook lists saved reviews, including earlier comparison sessions. You can edit a comment’s written fields while keeping its original evidence, or delete comments and reviews. **Hide** moves a review to the **Hidden** list without deleting anything; **Restore** brings it back. Severity uses labeled, color-coded radio choices. Category and viewport filters share one horizontally scrollable row.
 
 Reports include your manual comments and accepted AI comments, with their categories. Pending and dismissed AI suggestions are not exported. API keys are never exported.
 
 - **Copy entire report** copies formatted text and screenshot content for pasting into a document or ticket. Image support depends on the destination; use **Copy image** or **Download image** when it strips images. A plain-text fallback is shown if rich copying is unavailable.
 - **Download HTML** saves a self-contained report with embedded screenshots and playable recordings. It opens offline and is the most complete portable copy.
-- **Markdown ↓** exports the report as Markdown with screenshot data URLs; viewer support varies. Playable video stays in the HTML export, or can be attached separately using **Download recording**.
+- **AI handoff .md ↓** exports every saved finding across all viewports in one concise Markdown file: overall task, finding IDs, Current → Change to → Verify, captured context, and evidence filenames. It omits image/video data so a coding assistant can use it efficiently. Include the HTML report or referenced evidence files for visual verification. No new AI request is made.
+
+Accepted AI findings also include a collapsible **Suggested AI prompt** with **Copy AI prompt**. Jira descriptions preserve this prompt in a copyable code block, with Current, a highlighted Change to panel, context, numbered steps, and evidence filenames. Jira uses its native styling; screenshots and recordings are uploaded as attachments.
 
 Pasting a report into another app does not preserve playable video: the copied report represents it with screenshots and a filename. Use the Jira flow below to send selected observations and attach their saved files directly.
 
@@ -164,7 +166,7 @@ Chrome can retain previously granted site permissions. Manage or revoke them in 
 
 ## Current boundaries
 
-- **Native viewport, no automatic resizing.** Diffuse preserves the source page’s rendered viewport. Match viewport size and zoom before judging alignment. Chrome can keep a captured background tab at its previous size: after resizing the browser, open **Prototype ↗** once, then return with **Alt+Shift+P**. Diffuse updates the capture dimensions when the prototype resizes. A mismatch warning signals when sizes differ; pixel nudges correct offsets, not different responsive layouts.
+- **Match viewport and zoom.** Viewport presets apply the same CSS layout dimensions to the reviewed page and its reference. In window-size mode, match viewport size and zoom before judging alignment. Chrome can keep a captured background tab at its previous size: after resizing the browser, open **Prototype ↗** once, then return with **Alt+Shift+P**. Diffuse updates the capture dimensions when the prototype resizes. A mismatch warning signals when sizes differ; pixel nudges correct offsets, not different responsive layouts.
 - **One review session at a time.** A comparison uses two tabs; an audit uses one. Keep the session’s tabs open. Navigation, capture interruption, browser lifecycle changes, or changing site permissions may require reconnecting or starting again.
 - **Page scrolling is approximate when layouts differ.** Different content heights, virtualized lists, sticky elements, and custom scroll behavior can prevent a perfect match. Turn off linked scrolling and align manually when necessary.
 - **Nested scrolling needs a reliable match.** A shared `data-diffuse-scroll` label is the strongest option. Cross-origin frames, closed shadow roots, canvas-based interfaces, and unrelated app structures may not expose comparable scroll targets. Their visuals may still appear in the captured video.

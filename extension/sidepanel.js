@@ -135,12 +135,12 @@
   }
 
   function paintComments() {
-    const group=width=>!Number.isFinite(width)||width<=0?'unknown':width>=1280?'desktop':width>=768?'tablet':'phone';
+    const group=width=>!Number.isFinite(width)||width<=0?'unknown':width>=1440?'desktop':width>=1280?'laptop':width>=768?'tablet':'phone';
     const viewport=session?.viewportPreset||group(session?.targetViewport?.width);
     const all=session?.comments||[];
-    const comments=all.filter(item=>{const context=item.context?.production||item.selection?.context;const key=context?.viewportProfile?.key||group(context?.viewport?.width);return key==='unknown'||key===viewport;});
+    const comments=all.filter(item=>{const context=item.context?.production||item.selection?.context;const saved=context?.viewportProfile?.key;const key=['desktop','laptop','tablet','phone'].includes(saved)?saved:group(context?.viewport?.width);return key==='unknown'||key===viewport;});
     const key=JSON.stringify([viewport,comments.map(item=>[item.id,item.fields])]);if(key===commentsKey)return;commentsKey=key;
-    const label={desktop:'Desktop',tablet:'Laptop / tablet',phone:'Phone'}[viewport]||'This view';
+    const label={desktop:'Desktop',laptop:'Laptop',tablet:'Tablet',phone:'Phone'}[viewport]||'This view';
     const list=$('panel-comments');list.replaceChildren();list.append(node('h2',`${label} comments · ${comments.length}`));
     if(all.length>comments.length)list.append(node('p',`${all.length-comments.length} comments are in other viewport views. All remain in Review reports.`,'muted'));
     if(!comments.length){list.append(node('p','Comments for this view will appear here and as pins on the page.','muted'));return;}

@@ -2,6 +2,8 @@
   if (globalThis.__diffuseLiveController) return;
   globalThis.__diffuseLiveController = true;
 
+  let contextInvalidated = false;
+  let contextTimer = null;
   let session = null;
   let role = null;
   let host = null;
@@ -51,12 +53,34 @@
   let aiSavedThreshold = null;
   let aiPreviewContext = null;
   let docked = false;
+  const toolbarState = {sessionId: null, minimized: false};
   let panelNotifyTimer = null;
   let draftEvidenceRevision = 0;
   let commentFieldRevisions = new Map();
 
   const viewport = () => ({width: innerWidth, height: innerHeight, dpr: devicePixelRatio});
-  const send = (type, data = {}) => chrome.runtime.sendMessage({namespace: 'diffuse', target: 'worker', type, sessionId: session?.id, ...data});
+  const reloadMessage = 'Diffuse was updated. Refresh this page, then reopen Diffuse.';
+  function runtimeAvailable() {
+    try { return Boolean(globalThis.chrome?.runtime?.id); } catch { return false; }
+  }
+  function reloadError() {
+    return Object.assign(new Error(reloadMessage), {code: 'EXTENSION_CONTEXT_INVALIDATED'});
+  }
+  // sendMessage can throw before returning a Promise after an extension reload.
+  // Normalize both failure paths, and never retry a potentially completed write.
+  async function send(type, data = {}) {
+    if (contextInvalidated || !runtimeAvailable()) { invalidateContext(); throw reloadError(); }
+    try {
+      const result = await chrome.runtime.sendMessage({namespace: 'diffuse', target: 'worker', type, sessionId: session?.id, ...data});
+      if (contextInvalidated || !runtimeAvailable()) { invalidateContext(); throw reloadError(); }
+      return result;
+    } catch (error) {
+      if (contextInvalidated || !runtimeAvailable() || /extension context invalidated/i.test(error?.message || String(error))) {
+        invalidateContext(); throw reloadError();
+      }
+      throw error;
+    }
+  }
   const quietSend = (type, data) => send(type, data).catch(() => {});
   const el = id => root?.getElementById(id);
   const hasReference = () => Number.isInteger(session?.sourceTabId);
@@ -102,6 +126,26 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
 @media(forced-colors:active){button,input,select,textarea,summary,#toolbar,#comment-panel,#ai-panel,#saved-comment-bubble{border-color:ButtonText}.comment-pin,#handle{forced-color-adjust:none}.mark{forced-color-adjust:none}button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid Highlight}}
 .viewport-bar{border-top:1px solid var(--line);gap:8px;padding:8px 12px}.viewport-segments{display:flex;gap:2px;border:1px solid var(--line);border-radius:10px;padding:2px}.viewport-segments button{font-size:14px;min-height:44px;padding:5px 9px;border:1px solid transparent;background:transparent}.viewport-segments button[aria-pressed=true]{background:var(--accent);color:var(--ink)}.viewport-bar .composer-note{font-size:14px;margin:0}:host([data-docked]) .viewport-bar{display:none!important}
 @media(max-width:650px){#toolbar .bar{padding:7px 9px;gap:6px}#toolbar .bar button,#toolbar .bar summary{font-size:14px;padding:5px 9px;min-height:44px}#toolbar .brand{font-size:18px;gap:8px}#toolbar #status,#toolbar #recording-note{display:none}#toolbar .viewport-bar{gap:5px}#toolbar .viewport-segments{gap:0}#toolbar #viewport-caption{flex-basis:100%}}
+
+/* Compact toolbar. The minimum target stays 44px; excess space is removed from the shell. */
+#toolbar{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px;padding:6px 8px;bottom:12px;width:max-content;max-width:min(1120px,calc(100% - 24px));border-radius:14px;font-size:14px;line-height:1.4}
+#toolbar>.comparison-bar{display:contents}#toolbar>.review-bar,#toolbar>.viewport-bar{display:flex;align-items:center;flex-wrap:wrap;gap:4px;padding:0;border:0;margin:0;min-width:0}
+#toolbar button,#toolbar summary{min-width:44px;min-height:44px;font-size:14px;padding:5px 9px;border-radius:8px;gap:6px}#toolbar .brand{font-size:18px;gap:7px;margin:0 5px 0 0;letter-spacing:-.4px}#toolbar .mark{width:23px;height:26px}#toolbar .mark:before,#toolbar .mark:after{width:15px;height:22px}#toolbar .mark:after{left:8px;top:3px}
+#toolbar #status,#toolbar .separator,#toolbar #recording-note{display:none}#toolbar .control{gap:6px;font-size:14px}#toolbar .control input[type=range]{width:70px;min-width:70px}#toolbar .control output{min-width:34px}#toolbar #dock-sidebar{width:44px;padding:0}#toolbar .viewport-segments{gap:0;padding:1px;border-radius:9px}#toolbar .viewport-segments button{padding:5px 8px}#toolbar .alignment .control{display:flex;grid-column:1/-1}#toolbar #viewport-caption{max-width:170px;font-size:14px;line-height:1.3;overflow-wrap:anywhere}#toolbar #warning,#toolbar #diff-hint{flex-basis:100%;padding:6px 8px;margin:0}
+#toolbar-toggle{flex-shrink:0;margin-left:auto;width:44px;padding:0!important;background:transparent}#toolbar-toggle svg{width:20px;height:20px}#toolbar-mini{display:none;align-items:center;gap:8px}#toolbar-mini .brand{margin:0}#minimized-record{color:var(--ink);background:var(--coral);border-color:var(--coral)}
+#toolbar[data-minimized=true]{width:max-content;max-width:calc(100% - 16px);padding:4px 6px 4px 12px;gap:6px;border-radius:14px}#toolbar[data-minimized=true]>.bar,#toolbar[data-minimized=true]>#warning,#toolbar[data-minimized=true]>#diff-hint{display:none!important}#toolbar[data-minimized=true]>#toolbar-mini{display:flex}#toolbar[data-minimized=true]>#toolbar-toggle{margin-left:0;order:0}
+:host([data-docked]) #toolbar{gap:4px;padding:6px;width:max-content;max-width:calc(100% - 16px)}:host([data-docked]) #toolbar>.review-bar{display:contents}:host([data-docked]) #toolbar #toolbar-toggle{margin-left:0}:host([data-docked]) #toolbar[data-minimized=true]{padding-left:12px}
+@media(max-width:650px){#toolbar{bottom:8px;max-height:42vh;overflow:auto;max-width:calc(100% - 16px);width:calc(100% - 16px);gap:4px;padding:5px 6px}#toolbar .brand{margin-right:0}#toolbar>.review-bar,#toolbar>.viewport-bar{justify-content:center;flex:1 1 100%;gap:4px}#toolbar .control{flex-wrap:nowrap}#toolbar .viewport-segments{max-width:100%}#toolbar #viewport-caption{flex-basis:auto;max-width:none;font-size:14px}#toolbar #toolbar-toggle{margin-left:0;order:-1}#toolbar>.comparison-bar>.brand{order:-2}#toolbar>.review-bar button{padding-inline:6px}#toolbar #viewport-caption{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}#toolbar[data-minimized=true]{overflow:visible;flex-wrap:nowrap}#toolbar[data-minimized=true] #toolbar-mini{min-width:0;flex-wrap:wrap}#toolbar[data-minimized=true] #minimized-record{font-size:14px}:host([data-docked]) #toolbar{width:max-content}:host([data-docked]) #toolbar>.review-bar{flex:none}}
+
+:host([data-context-invalidated]) > :not(style):not(#context-reload-notice):not(#comment-panel){display:none!important}
+:host([data-context-invalidated]:not([data-reload-draft])) #comment-panel{display:none!important}
+:host([data-context-invalidated]) #comment-panel{max-height:calc(100% - 180px);pointer-events:auto}
+#context-reload-notice{position:absolute;bottom:12px;right:12px;width:490px;max-width:calc(100% - 24px);max-height:150px;overflow:auto;pointer-events:auto;background:var(--panel);border:1px solid var(--accent);border-radius:14px;padding:14px;box-shadow:0 8px 30px #120c2455;font-size:14px;line-height:1.5;z-index:50}
+#context-reload-notice p{margin:0 0 10px}#context-reload-notice button{font-size:14px;min-height:44px}
+
+*{scrollbar-width:thin;scrollbar-color:#9381ae transparent}*::-webkit-scrollbar{width:8px;height:8px}*::-webkit-scrollbar-track{background:transparent}*::-webkit-scrollbar-thumb{background:#9381ae;border:2px solid transparent;background-clip:padding-box;border-radius:8px}*::-webkit-scrollbar-corner{background:transparent}
+.composer-row:has(select[id$=severity]){grid-template-columns:1fr}
+@media(forced-colors:active){*{scrollbar-color:auto}}
   `;
 
   function makeOverlay() {
@@ -114,12 +158,12 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
       <div id="toolbar" role="region" aria-label="Diffuse live comparison">
         <div class="bar comparison-bar"><span class="brand"><span class="mark" aria-hidden="true"></span>Diffuse</span><span id="status" role="status">Preparing review</span><button id="diff" type="button" aria-describedby="diff-hint">Diff</button><span class="separator"></span>
         <label class="control">Opacity <input id="opacity" type="range" min="0" max="100" value="55"><output id="opacity-value">55%</output></label>
-        <label class="control"><input id="linked" type="checkbox" checked>Link scroll</label>
         <button id="hide" type="button" aria-pressed="false">Hide reference</button>
-        <details id="align"><summary>Adjust</summary><div class="alignment"><label class="reveal-field">Reveal position <input id="reveal" type="range" min="0" max="100" value="50"><output id="reveal-value">50%</output></label><label>Horizontal <input id="offset-x" type="number" min="-3000" max="3000" value="0" step="1"></label><label>Vertical <input id="offset-y" type="number" min="-3000" max="3000" value="0" step="1"></label><button id="reset" type="button">Reset alignment</button><small>Click the slider or use arrow keys to adjust the reveal without dragging.</small></div></details>
-        <button id="source" type="button">Reference ↗</button><button id="reconnect" type="button" hidden>Reconnect</button><button id="dock-sidebar" type="button">Dock in sidebar</button><button id="stop" type="button" aria-label="Stop review">Stop</button></div>
-        <div class="bar review-bar"><button id="comment" type="button" aria-pressed="false">Comment</button><button id="area-comment" type="button" aria-pressed="false" title="Select an area, or hold C and drag on the page">Area · C</button><button id="review" type="button">Review (0)</button><button id="record" type="button" title="Record this page as shown. No audio. Up to 30 seconds.">Record comparison</button><button id="ai-review" type="button">AI review</button><span class="composer-note" id="recording-note">Screenshots with every comment · video optional</span></div>
-        <div id="viewport-controls" class="bar viewport-bar"><div class="viewport-segments" role="group" aria-label="Change responsive viewport"><button type="button" data-preset="desktop" aria-pressed="false" title="Desktop · 1440 × 900">Desktop</button><button type="button" data-preset="tablet" aria-pressed="false" title="Laptop / tablet · 1024 × 768">Laptop / tablet</button><button type="button" data-preset="phone" aria-pressed="false" title="Phone · 390 × 844">Phone</button></div><button id="viewport-native" type="button" aria-label="Restore window viewport" title="Use the window’s native size" hidden>Reset</button><span id="viewport-caption" class="composer-note" role="status"></span></div>
+        <details id="align"><summary>Adjust</summary><div class="alignment"><label class="control"><input id="linked" type="checkbox" checked>Link scroll</label><label class="reveal-field">Reveal position <input id="reveal" type="range" min="0" max="100" value="50"><output id="reveal-value">50%</output></label><label>Horizontal <input id="offset-x" type="number" min="-3000" max="3000" value="0" step="1"></label><label>Vertical <input id="offset-y" type="number" min="-3000" max="3000" value="0" step="1"></label><button id="reset" type="button">Reset alignment</button><button id="source" type="button">Open reference ↗</button><small>Click the slider or use arrow keys to adjust the reveal without dragging.</small></div></details>
+        <button id="reconnect" type="button" hidden>Reconnect</button><button id="dock-sidebar" type="button" aria-label="Dock in sidebar" title="Dock in sidebar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M15 4v16" stroke="currentColor" stroke-width="1.7"/></svg></button><button id="stop" type="button" aria-label="Stop review">Stop</button></div>
+        <div class="bar review-bar"><button id="comment" type="button" aria-pressed="false">Comment</button><button id="area-comment" type="button" aria-pressed="false" title="Select an area, or hold C and drag on the page">Area</button><button id="review" type="button">Review (0)</button><button id="record" type="button" title="Record this page as shown. No audio. Up to 30 seconds.">Record comparison</button><button id="ai-review" type="button">AI review</button><span id="recording-note" hidden></span></div>
+        <div id="viewport-controls" class="bar viewport-bar"><div class="viewport-segments" role="group" aria-label="Change responsive viewport"><button type="button" data-preset="desktop" aria-pressed="false" title="Desktop · 1440 × 900">Desktop</button><button type="button" data-preset="laptop" aria-pressed="false" title="Laptop · 1280 × 800">Laptop</button><button type="button" data-preset="tablet" aria-pressed="false" title="Tablet · 1024 × 768">Tablet</button><button type="button" data-preset="phone" aria-pressed="false" title="Phone · 390 × 844">Phone</button></div><button id="viewport-native" type="button" aria-label="Restore window viewport" title="Use the window’s native size" hidden>Reset</button><span id="viewport-caption" class="composer-note" role="status"></span></div>
+        <div id="toolbar-mini"><span class="brand"><span class="mark" aria-hidden="true"></span>Diffuse</span><button id="minimized-record" type="button" hidden>Stop recording</button></div><button id="toolbar-toggle" type="button" aria-label="Minimize Diffuse toolbar" title="Minimize toolbar" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path id="toolbar-toggle-icon" d="M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <div id="warning" role="status"></div><div id="diff-hint" class="composer-note" style="padding:0 16px 12px" hidden></div>
       </div>
       <div id="selection-outline" hidden aria-hidden="true"><span id="selection-label"></span></div>
@@ -152,10 +196,13 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
         <div class="composer-footer"><div id="comment-error" class="composer-error" role="alert"></div><div class="composer-actions"><button id="cancel-comment" type="button">Cancel</button><button id="save-comment" type="submit" form="comment-form">Save comment</button></div></div>
       </section>`;
     document.documentElement.append(host);
+    globalThis.DiffuseSelect?.enhance(root, {theme: 'dark'});
     liftAboveDialogs();
     video = el('reference');
     if(video)video.muted = true;
     for(const button of el('viewport-controls').querySelectorAll('button'))button.addEventListener('click',()=>changeViewport(button.dataset.preset||null));
+    el('toolbar-toggle').addEventListener('click',()=>{if(contextInvalidated)return;toolbarState.minimized=!toolbarState.minimized;el('align').open=false;paintToolbarState();});
+    el('minimized-record').addEventListener('click',()=>{if(contextInvalidated)return;if(recording&&!recordingBusy)stopRecording();});
     el('opacity').addEventListener('input', event => updateSettings({opacity: Number(event.target.value) / 100}));
     el('reveal').addEventListener('input',event=>updateSettings({reveal:Number(event.target.value)}));
     el('linked').addEventListener('change', event => {
@@ -290,6 +337,7 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
   }
 
   function updatePanelState() {
+    if (contextInvalidated) return;
     if(!root)return;
     const open=!docked&&['comment-panel','ai-panel'].some(id=>!el(id).hidden);
     el('panel-backdrop').hidden=!open;
@@ -301,7 +349,7 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
   }
 
   function notifyPanel() {
-    if(!docked||role!=='target'||panelNotifyTimer!==null)return;
+    if(contextInvalidated||!docked||role!=='target'||panelNotifyTimer!==null)return;
     panelNotifyTimer=setTimeout(()=>{panelNotifyTimer=null;if(docked&&session)quietSend('PANEL_STATE_CHANGED');},60);
   }
 
@@ -312,12 +360,12 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
       &&(!Number.isFinite(captured.visualScale)||Math.abs(captured.visualScale-(visualViewport?.scale||1))<0.01));
   }
 
-  function viewportGroup(width) { return !Number.isFinite(width)||width<=0?'unknown':width>=1280?'desktop':width>=768?'tablet':'phone'; }
+  function viewportGroup(width) { return !Number.isFinite(width)||width<=0?'unknown':width>=1440?'desktop':width>=1280?'laptop':width>=768?'tablet':'phone'; }
   function currentViewportGroup() { return session?.viewportPreset || viewportGroup(innerWidth); }
   function commentViewportGroup(comment) {
     const context=comment.context?.production||comment.selection?.context;
     const key=context?.viewportProfile?.key;
-    return ['desktop','tablet','phone'].includes(key)?key:viewportGroup(context?.viewport?.width);
+    return ['desktop','laptop','tablet','phone'].includes(key)?key:viewportGroup(context?.viewport?.width);
   }
   function commentInCurrentViewport(comment) { const key=commentViewportGroup(comment);return key==='unknown'||key===currentViewportGroup(); }
 
@@ -341,6 +389,7 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
   }
 
   function paintViewport() {
+    if (contextInvalidated) return;
     if(!root||!el('viewport-controls'))return;
     const key=currentViewportGroup(),busy=viewportActionBusy||session?.viewportChanging||Boolean(diffDisabledReason());
     for(const button of el('viewport-controls').querySelectorAll('button')){button.disabled=Boolean(busy);if(button.dataset.preset)button.setAttribute('aria-pressed',String(button.dataset.preset===key));}
@@ -668,6 +717,7 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
   }
 
   function renderAiSuggestions() {
+    if (contextInvalidated) return;
     if(!root)return;
     const list=el('ai-suggestions');const restoreFocus=list.contains(root.activeElement);list.replaceChildren();
     const threshold=Number(el('ai-threshold').value)||0;
@@ -883,6 +933,7 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
   }
 
   function showCaptureFailure(error, action) {
+    if (contextInvalidated) return;
     if (!root) return;
     pendingCaptureAction = action;
     el('comment-panel').hidden = false;
@@ -944,6 +995,7 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
   }
 
   function paintEvidenceChoice() {
+    if (contextInvalidated) return;
     if (!root) return;
     const wantsVideo = evidenceChoice === 'recording';
     const clip = commentDraft?.evidence?.video;
@@ -999,6 +1051,7 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
   }
 
   function openComment(draft) {
+    if (contextInvalidated) return;
     if (!root || !draft?.id) return;
     const sameDraft = commentDraft?.id === draft.id;
     if(!sameDraft)commentFieldRevisions.clear();
@@ -1043,6 +1096,7 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
   }
 
   function closeComment() {
+    if (contextInvalidated) return;
     if (commentSaving || recording || recordingBusy || !root) return;
     el('recording-preview').pause();
     el('recording-preview').removeAttribute('src');
@@ -1106,6 +1160,7 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
   }
 
   function setRecording(value) {
+    if (contextInvalidated) return;
     recording = value || null;
     clearInterval(recordingTimer);
     recordingTimer = recording ? setInterval(paintReviewControls, 250) : null;
@@ -1153,7 +1208,21 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
     }
   }
 
+  function paintToolbarState() {
+    if(contextInvalidated||!root)return;
+    const minimized=toolbarState.minimized;
+    el('toolbar').dataset.minimized=String(minimized);
+    el('toolbar-toggle').setAttribute('aria-expanded',String(!minimized));
+    el('toolbar-toggle').setAttribute('aria-label',minimized?'Expand Diffuse toolbar':'Minimize Diffuse toolbar');
+    el('toolbar-toggle').title=minimized?'Expand toolbar':'Minimize toolbar';
+    el('toolbar-toggle-icon').setAttribute('d',minimized?'M6 14l6-6 6 6':'M5 12h14');
+    el('minimized-record').hidden=!recording;
+    el('minimized-record').textContent=el('record').textContent;
+    el('minimized-record').disabled=Boolean(recordingBusy);
+  }
+
   function paintReviewControls() {
+    if (contextInvalidated) return;
     if(root&&session)paintViewport();
     if (!root) return;
     const diffReason=diffDisabledReason();
@@ -1173,11 +1242,12 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
       const started = typeof recording.startedAt === 'number' ? recording.startedAt : Date.parse(recording.startedAt);
       const elapsed = Number.isFinite(started) ? Math.min(30, Math.max(0, Math.floor((Date.now() - started) / 1000))) : 0;
       el('record').textContent = recordingBusy ? 'Saving recording…' : `Stop recording · 00:${String(elapsed).padStart(2, '0')}`;
-      el('recording-note').textContent = 'Page as shown · no audio · stops at 30s';
+      el('record').title = 'Stop recording. No audio. Stops automatically at 30 seconds.';
     } else {
-      el('record').textContent = recordingBusy ? 'Starting recording…' : 'Record page';
-      el('recording-note').textContent = 'Screenshots with every comment · video optional';
+      el('record').textContent = recordingBusy ? 'Starting recording…' : 'Record';
+      el('record').title = 'Record this page as shown. No audio. Up to 30 seconds.';
     }
+    paintToolbarState();
     el('save-comment').disabled = commentSaving || !commentDraft || recordingBusy || Boolean(recording);
     el('cancel-comment').disabled = commentSaving || recordingBusy || Boolean(recording);
     el('close-comment').disabled = commentSaving || recordingBusy || Boolean(recording);
@@ -1193,6 +1263,7 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
   function finiteOffset(value) { const number = Number(value); return Number.isFinite(number) ? Math.min(3000, Math.max(-3000, number)) : 0; }
 
   function paint() {
+    if (contextInvalidated) return;
     if (!root || !session) return;
     const audit=isAudit();
     for(const id of ['opacity','linked','hide','align','source','reconnect']){
@@ -1232,6 +1303,7 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
   }
 
   function updateSettings(partial) {
+    if (contextInvalidated) return;
     if (!session || isAudit()) return;
     session.settings = {...session.settings, ...partial};
     paint();
@@ -1250,6 +1322,7 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
   }
 
   function syncScroll(target) {
+    if (contextInvalidated) return;
     if (isAudit() || !session?.settings?.linked || role !== 'target') return;
     const descriptor = scrollDescriptor(target);
     if (!descriptor) {
@@ -1298,6 +1371,7 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
       if (peer === pc) { localWarning = 'The live stream has not arrived. Use Reconnect, or restart from the prototype tab.'; quietSend('STREAM_STATUS', {status: 'reconnecting'}); paint(); }
     }, 12000);
     pc.ontrack = event => {
+      if (contextInvalidated || peer !== pc || !video) return;
       video.srcObject = event.streams[0] || new MediaStream([event.track]);
       video.play().catch(() => { localWarning = 'Click the page to allow the live preview to play.'; paint(); });
       checkFrame(pc, thisConnectionId);
@@ -1332,7 +1406,63 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
     });
   }
 
+  function stopResources() {
+    clearInterval(contextTimer); contextTimer = null;
+    clearInterval(pinsTimer); pinsTimer = null;
+    clearInterval(recordingTimer); recordingTimer = null;
+    clearTimeout(panelNotifyTimer); panelNotifyTimer = null;
+    pickerAbort?.abort(); pickerAbort = null;
+    modalObserver?.disconnect(); modalObserver = null;
+    abort?.abort(); abort = null;
+    clearTimeout(settingsTimer); clearTimeout(resizeTimer); clearTimeout(reconnectTimer); clearTimeout(connectionDeadline);
+    settingsTimer = null;
+    if (frameCallback !== null && video) video.cancelVideoFrameCallback(frameCallback);
+    frameCallback = null;
+    if (scrollFrame !== null) cancelAnimationFrame(scrollFrame);
+    scrollFrame = null;
+    if (peer) { peer.onconnectionstatechange = null; peer.ontrack = null; peer.close(); peer = null; }
+    if (video) { video.pause(); video.srcObject = null; }
+  }
+
+  function invalidateContext() {
+    if (contextInvalidated) return;
+    contextInvalidated = true;
+    globalThis.DiffuseSelect?.destroy(root, {preserveUI: true});
+    stopResources();
+    if (!root || !host) return;
+    // Keep the original fields/evidence in memory for copying. Do not send a
+    // discard, replay Save, or tear down the DOM while async handlers settle.
+    docked = false;
+    host.removeAttribute('data-docked');
+    host.removeAttribute('data-evidence-hidden');
+    host.setAttribute('data-context-invalidated', '');
+    host.toggleAttribute('data-reload-draft', Boolean(commentDraft));
+    for (const node of root.querySelectorAll('button,select,input,textarea')) {
+      if (node.matches('textarea,input:not([type]),input[type=text]')) node.readOnly = true;
+      else node.disabled = true;
+    }
+    for (const panel of root.querySelectorAll('[aria-modal]')) panel.setAttribute('aria-modal', 'false');
+    el('recording-preview')?.pause();
+    const notice = document.createElement('section');
+    notice.id = 'context-reload-notice'; notice.setAttribute('role', 'alert');
+    const text = document.createElement('p');
+    text.textContent = reloadMessage + (commentDraft ? ' Your unsaved text is still here to copy before refreshing. If you were saving, check Review reports before adding it again.' : ' Saved reviews are kept.');
+    const dismiss = document.createElement('button');
+    dismiss.id = 'dismiss-reload-notice'; dismiss.type = 'button'; dismiss.textContent = 'Dismiss';
+    dismiss.addEventListener('click', () => host.remove());
+    notice.append(text, dismiss); root.append(notice);
+    if (commentDraft) { el('comment-panel').hidden = false; el('comment-form').hidden = false; }
+    // Let people select/copy their text, but block stale form and keyboard actions.
+    for (const type of ['click','submit','input','change','keydown']) root.addEventListener(type, event => {
+      if (event.composedPath().includes(notice)) return;
+      event.stopImmediatePropagation();
+      if (type === 'submit') event.preventDefault();
+    }, {capture: true});
+  }
+
   function cleanup() {
+    if (root) globalThis.DiffuseSelect?.destroy(root);
+    stopResources();
     stopPicking(false);
     clearInterval(pinsTimer);pinsTimer=null;
     areaArmed=false;areaDrag=null;cHeld=false;ignoreNextAreaClick=false;openPinId=null;pinItems=[];pinsUrl='';pinsViewport='';
@@ -1342,24 +1472,18 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
     commentDraft = null; pendingCaptureAction = null; selectedElement = null; selectionMetadata = null;
     evidenceChoice = 'screenshot'; evidencePreviouslyHidden = null;
     docked=false;clearTimeout(panelNotifyTimer);panelNotifyTimer=null;draftEvidenceRevision=0;commentFieldRevisions.clear();
-    modalObserver?.disconnect(); modalObserver = null;
-    abort?.abort(); abort = null;
-    clearTimeout(settingsTimer); clearTimeout(resizeTimer); clearTimeout(reconnectTimer); clearTimeout(connectionDeadline);
-    settingsTimer = null;
-    if (frameCallback !== null && video) video.cancelVideoFrameCallback(frameCallback);
-    frameCallback = null;
-    if (scrollFrame !== null) cancelAnimationFrame(scrollFrame);
-    scrollFrame = null;
-    if (peer) { peer.onconnectionstatechange = null; peer.close(); peer = null; }
-    if (video) { video.srcObject = null; video = null; }
+    video = null;
     host?.remove(); host = null; root = null; session = null; role = null; localWarning = ''; connectionId = null;
   }
 
   async function receive(message) {
+    if (contextInvalidated || !runtimeAvailable()) { invalidateContext(); throw reloadError(); }
     if (message.type === 'INITIALIZE') {
+      if(toolbarState.sessionId!==message.session?.id){toolbarState.sessionId=message.session?.id||null;toolbarState.minimized=false;}
       cleanup();
       session = message.session; role = message.role;
       abort = new AbortController();
+      contextTimer = setInterval(() => { if (!runtimeAvailable()) invalidateContext(); }, 1000);
       if (role === 'target') { makeOverlay(); setRecording(session.recording || null); paint(); }
       const resize = () => {
         if(role==='target'){
@@ -1462,8 +1586,10 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
   }
 
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
+    if (contextInvalidated || !runtimeAvailable()) { invalidateContext(); return; }
     if (sender.id !== chrome.runtime.id || message?.namespace !== 'diffuse' || message.target) return;
-    receive(message).then(respond, error => { localWarning = error.message; paint(); respond({ok: false, error: error.message}); });
+    const reply = value => { try { respond(value); } catch { /* The sender may have reloaded as well. */ } };
+    receive(message).then(reply, error => { localWarning = error.message; paint(); reply({ok: false, error: error.message, code: error.code}); });
     return true;
   });
 })();

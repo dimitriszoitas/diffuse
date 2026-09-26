@@ -270,6 +270,41 @@ function populate(select, values, placeholder, labelOf = item => item.name || it
   select.disabled = !values.length;
 }
 
+// Render the exact ADF prepared for Jira using DOM text nodes only. Jira uses its
+// own colors and typography; the hierarchy and content stay the same.
+function descriptionPreview(description) {
+  function render(node) {
+    if (node.type === 'text') {
+      let child = document.createTextNode(node.text);
+      for (const mark of node.marks || []) {
+        const tag = {strong: 'strong', em: 'em', code: 'code', link: 'a'}[mark.type];
+        if (!tag) continue;
+        const wrapper = element(tag);
+        if (tag === 'a') {
+          let url;try { url = new URL(mark.attrs?.href); } catch { continue; }
+          if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) continue;
+          wrapper.href = url.href;wrapper.target = '_blank';wrapper.rel = 'noopener noreferrer';
+        }
+        wrapper.append(child);child = wrapper;
+      }
+      return child;
+    }
+    if (node.type === 'hardBreak') return element('br');
+    const tag = {heading: 'h4', paragraph: 'p', panel: 'section', orderedList: 'ol', bulletList: 'ul', listItem: 'li', codeBlock: 'pre'}[node.type];
+    if (!tag) return document.createTextNode('');
+    const block = element(tag);
+    if (node.type === 'panel') block.className = 'jira-description-change';
+    if (node.type === 'codeBlock') block.className = 'jira-description-prompt';
+    if (node.type === 'orderedList') block.start = node.attrs?.order ?? 1;
+    if (node.type === 'paragraph' && node.content?.[0]?.marks?.some(mark => mark.type === 'strong')) block.className = 'jira-description-context';
+    block.append(...(node.content || []).map(render));
+    return block;
+  }
+  const preview = element('div', null, 'jira-description-preview');
+  preview.append(...description.content.map(render));
+  return preview;
+}
+
 export function createJiraExporter({onError = () => {}, clientFactory, storage = globalThis.chrome?.storage?.local} = {}) {
   const selections = new Map();
   let observer;
@@ -289,7 +324,7 @@ export function createJiraExporter({onError = () => {}, clientFactory, storage =
     const heading = element('h2', 'Send observations to Jira');heading.id = 'jira-export-title';
     header.append(heading, button('Close', () => dialog.close()));
     const body = element('div', null, 'jira-export-body');
-    body.append(element('p', 'Choose a destination and review exactly what will be sent. Each selected observation becomes a separate Jira issue.'));
+    body.append(element('p', 'Choose a destination and review exactly what will be sent. Each observation becomes a separate Jira issue. Jira applies its own typography and panel colors.'));
     const grid = element('div', null, 'jira-export-grid');
     const account = selectField('Atlassian account', 'Choose an account');
     const site = selectField('Jira site', 'Choose a site');
@@ -306,16 +341,17 @@ export function createJiraExporter({onError = () => {}, clientFactory, storage =
       const item = element('li', null, 'jira-export-item');
       const formatted = jiraIssueFields(comment, review, {index});
       item.append(element('h3', formatted.summary));
-      const details = element('dl');
-      for (const [label, text] of [['Current', comment.fields?.comment], ['Requested change', comment.fields?.expected || 'No requested change was recorded.']]) {
-        details.append(element('dt', label), element('dd', text || 'No observation text was recorded.'));
-      }
-      item.append(details);
+      item.append(descriptionPreview(formatted.description));
       const evidence = jiraAttachments(comment, review, {index});
-      item.append(element('p', evidence.length ? `${evidence.length} evidence file${evidence.length === 1 ? '' : 's'}` : 'No evidence files are attached.'));
-      const files = element('ul', null, 'jira-export-files');
-      evidence.forEach(file => files.append(element('li', `${file.filename} · ${formatSize(mediaByteLength(file.dataUrl))}`)));
-      item.append(files);
+      const filesDetail = element('details', null, 'jira-export-attachments');
+      filesDetail.append(element('summary', evidence.length ? `${evidence.length} attached file${evidence.length === 1 ? '' : 's'} · upload details` : 'No saved evidence files'));
+      if (evidence.length) {
+        filesDetail.append(element('p', 'Files upload to the issue’s attachments after the ticket is created.'));
+        const files = element('ul', null, 'jira-export-files');
+        evidence.forEach(file => files.append(element('li', `${file.filename} · ${formatSize(mediaByteLength(file.dataUrl))}`)));
+        filesDetail.append(files);
+      }
+      item.append(filesDetail);
       const progress = element('div', '', 'jira-item-progress');progress.hidden = true;progress.setAttribute('role', 'status');
       item.append(progress);list.append(item);
       return {comment, index, evidence, progress, item};
@@ -466,7 +502,9 @@ export function createJiraExporter({onError = () => {}, clientFactory, storage =
     const send = button('Send selected to Jira', () => open(review, new Set(selected)).catch(reason => onError(reason.message)), true);
     const selectVisible = button('Select visible', () => { cards.forEach((card, index) => { if (!card.hidden) selected.add(review.comments[index].id); });update(); });
     const clear = button('Clear selection', () => { selected.clear();update(); });
-    bar.append(count, selectVisible, clear, send);container.prepend(bar);
+    bar.append(count, selectVisible, clear, send);
+    const issues = container.querySelector('.review-issues');
+    if (issues) issues.before(bar); else container.prepend(bar);
     const checkboxes = cards.map((card, index) => {
       const comment = review.comments[index];
       const label = element('label', null, 'jira-select-observation');const input = element('input');input.type = 'checkbox';
@@ -475,7 +513,7 @@ export function createJiraExporter({onError = () => {}, clientFactory, storage =
       input.addEventListener('change', () => { if (input.checked) selected.add(comment.id);else selected.delete(comment.id);update(); });
       const actions = card.querySelector('.comment-actions');
       const single = button('Send to Jira', () => open(review, new Set([comment.id])).catch(reason => onError(reason.message)));single.classList.add('jira-send-one');
-      actions.prepend(label);actions.append(single);return input;
+      card.prepend(label);actions.append(single);return input;
     });
     function update() {
       const hiddenSelected = cards.filter((card, index) => card.hidden && selected.has(review.comments[index].id)).length;

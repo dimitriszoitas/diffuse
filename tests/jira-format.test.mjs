@@ -1,5 +1,8 @@
+import {cleanFields} from '../extension/review-store.mjs';
+import {suggestedAiPrompt} from '../extension/ai-handoff.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {cloneReviewAdf} from '../backend/review-adf.mjs';
 import {jiraIssueFields, jiraAttachments} from '../extension/jira-format.mjs';
 
 const image = 'data:image/png;base64,YQ==';
@@ -17,34 +20,16 @@ function fixture() {
   };
 }
 
-function validateAdf(doc) {
-  assert.equal(doc.version, 1);
-  assert.equal(doc.type, 'doc');
-  assert.ok(doc.content.length);
-  for (const block of doc.content) {
-    assert.ok(['heading', 'paragraph'].includes(block.type));
-    if (block.type === 'heading') assert.equal(block.attrs.level, 3);
-    for (const node of block.content) {
-      assert.ok(['text', 'hardBreak'].includes(node.type));
-      if (node.type === 'text') assert.ok(typeof node.text === 'string' && node.text.length > 0);
-      for (const mark of node.marks || []) {
-        assert.equal(mark.type, 'link');
-        assert.ok(/^https?:/.test(mark.attrs.href));
-      }
-    }
-  }
-}
-
-function allText(doc) {
-  return doc.content.flatMap(block => block.content.map(node => node.text || '\n')).join('\n');
-}
+function validateAdf(doc) { assert.deepEqual(cloneReviewAdf(doc), doc); }
+function descendants(node) { return [node, ...(node.content || []).flatMap(descendants)]; }
+function allText(doc) { return descendants(doc).filter(node => node.type === 'text').map(node => node.text).join('\n'); }
 
 test('optional titles use the existing observation excerpt and optional expected text stays absent', () => {
   const comment = fixture();
   comment.fields.expected = '';
   const fields = jiraIssueFields(comment);
   assert.equal(fields.summary, comment.fields.comment);
-  assert.ok(!allText(fields.description).includes('Requested change'));
+  assert.ok(!allText(fields.description).includes('Change to'));
   validateAdf(fields.description);
   assert.equal(jiraIssueFields({}, {}, {index: 3}).summary, 'Observation 4');
   comment.fields.title = '👋'.repeat(200);
@@ -53,18 +38,26 @@ test('optional titles use the existing observation excerpt and optional expected
   assert.equal(summary, '👋'.repeat(127) + '…');
 });
 
-test('human-readable ADF contains captured details and preserves multiline reproduction steps', () => {
-  const fields = jiraIssueFields(fixture());
+test('readable ADF uses a change panel, compact context, numbered steps and matching evidence filenames', () => {
+  const comment = fixture();
+  comment.fields.category = 'ux-issue';comment.fields.severity = 'major';
+  comment.fields.steps = '1. Open a profile.\n2) Choose Edit.\n\n- Check Save.';
+  const fields = jiraIssueFields(comment);
   validateAdf(fields.description);
-  assert.deepEqual(fields.description.content.filter(node => node.type === 'heading').map(node => node.content[0].text), ['Current', 'Requested change', 'Component', 'State', 'Steps to reproduce', 'Page', 'Reference']);
-  assert.ok(fields.description.content.some(block => block.content.some(node => node.type === 'hardBreak')));
-  assert.equal(jiraIssueFields(fixture()).description.content[3].content[0].text, fixture().fields.expected);
-  const classified = fixture();
-  classified.fields.category = 'ux-issue';
-  classified.fields.severity = 'major';
-  const classification = allText(jiraIssueFields(classified).description);
-  assert.match(classification, /Category\nUX issue/);
-  assert.match(classification, /Severity\nMajor/);
+  const nodes = descendants(fields.description);
+  assert.deepEqual(nodes.filter(node => node.type === 'heading').map(node => node.content[0].text), ['Current', 'Change to', 'Steps to reproduce', 'Evidence', 'Pages']);
+  const change = nodes.find(node => node.type === 'panel');
+  assert.equal(change.attrs.panelType, 'info');
+  assert.equal(change.content[1].content[0].text, comment.fields.expected);
+  const context = fields.description.content.find(node => node.type === 'paragraph' && allText(node).includes('Component:'));
+  assert.match(allText(context), /Component: \nSave button/);
+  assert.match(allText(context), /Category: \nUX issue/);
+  assert.match(allText(context), /Severity: \nMajor/);
+  assert.deepEqual(nodes.find(node => node.type === 'orderedList').content.map(allText), ['Open a profile.', 'Choose Edit.', 'Check Save.']);
+  const evidence = nodes.find(node => node.type === 'bulletList');
+  assert.equal(evidence.content.length, jiraAttachments(comment).length);
+  for (const file of jiraAttachments(comment)) assert.ok(allText(evidence).includes(file.filename));
+  assert.ok(!nodes.some(node => node.type.startsWith('media')));
 });
 
 test('mixed reviews use each observation’s original page/reference; audit observations inherit no reference', () => {
@@ -82,7 +75,7 @@ test('mixed reviews use each observation’s original page/reference; audit obse
   assert.ok(allText(jiraIssueFields(comment, review).description).includes(review.productionUrl));
 });
 
-test('user markup remains literal text and no metadata, secret fields, AI prompts or media enter ADF', () => {
+test('user markup remains literal text and private metadata, credentials, original AI instructions and media bytes stay out of ADF', () => {
   const comment = fixture();
   comment.fields.comment = '<script>alert("hello")</script> [link](javascript:bad) {"type":"mention"}';
   comment.ai = {instructions: 'private prompt', apiKey: 'secret-key'};
@@ -103,7 +96,7 @@ test('invalid and credential-bearing URLs are omitted instead of replaced with a
     comment.context.production.url = url;
     comment.context.prototype.url = url;
     const fields = jiraIssueFields(comment, {productionUrl: 'https://wrong.example/', prototypeUrl: 'https://wrong-reference.example/'});
-    assert.ok(!fields.description.content.some(block => block.content.some(node => node.marks?.length)));
+    assert.ok(!descendants(fields.description).some(node => node.marks?.some(mark => mark.type === 'link')));
     assert.ok(!allText(fields.description).includes('wrong.example'));
   }
 });
@@ -143,4 +136,64 @@ test('conversion does not mutate saved observations or review fallbacks', () => 
   jiraIssueFields(comment, review);
   jiraAttachments(comment, review);
   assert.deepEqual({comment, review}, before);
+});
+
+
+test('Jira descriptions preserve the distinct Laptop viewport and captured dimensions', () => {
+  const comment=fixture();
+  comment.context.production.viewportProfile={key:'laptop',mode:'preset'};
+  comment.context.production.viewport={width:1280,height:800,dpr:1};
+  assert.match(allText(jiraIssueFields(comment).description),/Laptop · 1280 × 800/);
+});
+
+
+test('AI findings include a literal implementation prompt reflecting the saved edit, without credentials or original AI instructions', () => {
+  const comment = fixture();
+  comment.ai = {instructions: 'PRIVATE_AI_INSTRUCTIONS', apiKey: 'PRIVATE_KEY'};
+  comment.fields.expected = 'Use the edited Save label: <img src=x onerror=alert(1)>.';
+  const document = jiraIssueFields(comment).description;
+  const prompt = descendants(document).find(node => node.type === 'codeBlock');
+  assert.equal(prompt.attrs.language, 'text');
+  assert.equal(prompt.attrs.wrap, true);
+  assert.ok(prompt.content[0].text.includes(comment.fields.expected));
+  assert.ok(!JSON.stringify(document).includes('PRIVATE_'));
+  assert.ok(!prompt.content.some(node => node.marks));
+  validateAdf(document);
+  delete comment.ai;
+  assert.ok(!descendants(jiraIssueFields(comment).description).some(node => node.type === 'codeBlock'));
+});
+
+
+test('AI prompts with maximum saved field lengths and valid long URLs fit the ADF node limits without losing text', () => {
+  const comment = {ai: {acceptedAt: '2026-09-26T19:00:00Z'}, fields: cleanFields({
+    title: 'T'.repeat(180), comment: 'A'.repeat(8000), expected: 'B'.repeat(8000),
+    steps: 'C'.repeat(8000), component: 'D'.repeat(240), state: 'E'.repeat(240),
+  }), context: {
+    production: {url: 'https://app.example.test/?q=' + 'a'.repeat(4060)},
+    prototype: {url: 'https://prototype.example.test/?q=' + 'b'.repeat(4050)},
+  }};
+  const expectedPrompt = suggestedAiPrompt(comment);
+  assert.ok(expectedPrompt.length > 32768);
+  const description = jiraIssueFields(comment).description;
+  const prompt = descendants(description).find(node => node.type === 'codeBlock');
+  assert.ok(prompt.content.length > 1);
+  assert.ok(prompt.content.every(node => node.text.length <= 32768));
+  assert.equal(prompt.content.map(node => node.text).join(''), expectedPrompt);
+  validateAdf(description);
+});
+
+test('splitting a long AI prompt preserves a surrogate pair across the 32768-character boundary', () => {
+  const comment = {ai: {acceptedAt: '2026-09-26T19:00:00Z'}, fields: {comment: 'Check alignment.', state: 'Default'}, selection: {selector: 'BOUNDARY_MARKER'}};
+  const prefixLength = suggestedAiPrompt(comment).indexOf('BOUNDARY_MARKER');
+  assert.ok(prefixLength >= 0);
+  comment.selection.selector = 'x'.repeat(32767 - prefixLength) + '😀 after the boundary';
+  const expectedPrompt = suggestedAiPrompt(comment);
+  assert.equal(expectedPrompt.slice(32767, 32769), '😀');
+  const description = jiraIssueFields(comment).description;
+  const chunks = descendants(description).find(node => node.type === 'codeBlock').content.map(node => node.text);
+  assert.equal(chunks[0].length, 32767);
+  assert.ok(chunks[1].startsWith('😀'));
+  assert.equal(chunks.join(''), expectedPrompt);
+  assert.ok(chunks.every(chunk => chunk.length <= 32768 && !/[\uD800-\uDBFF]$/.test(chunk) && !/^[\uDC00-\uDFFF]/.test(chunk)));
+  validateAdf(description);
 });

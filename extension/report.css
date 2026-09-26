@@ -12,3 +12,26 @@
 #report-content .comment-card{padding:20px;margin-bottom:16px;border-radius:12px}#report-content .comment-heading{gap:12px}#report-content .issue-number{flex-basis:44px;width:44px;height:44px;border-radius:9px;font-size:18px}#report-content .issue-labels{margin-bottom:8px}#report-content .comment-heading h2{font-size:22px;line-height:1.35;margin-bottom:6px;letter-spacing:-.3px}#report-content .comment-fields{margin-top:16px}#report-content .field p{line-height:1.6}#report-content .requested-change{margin-top:14px;padding:12px 16px}#report-content .issue-context{margin-top:16px;padding:12px 0;gap:12px 28px}#report-content .reproduction,#report-content .evidence-section,#report-content .video-evidence{margin-top:18px}#report-content .section-description{margin-bottom:12px}#report-content .evidence-grid{gap:14px;margin-top:12px}#report-content .selected-detail .image-surface{padding:12px;min-height:140px}#report-content .full-evidence{padding-inline:14px}#report-content .full-evidence summary{min-height:44px;padding:10px 0}#report-content .full-evidence[open]{padding-bottom:14px}#report-content .engineering-context{margin-top:16px}#report-content .engineering-context summary{min-height:44px;padding:10px 0}#report-content .ai-provenance{margin-top:16px}
 @media(min-width:901px) and (max-width:1180px){.sidebar{width:300px}.workspace{margin-left:300px}}
 @media(max-width:640px){.workspace-bar{padding:12px 16px}.export-toolbar{margin:14px 12px 0;padding:12px}.notice{margin:12px}#report-content{padding:20px 12px 28px}#report-content .report-heading h1{font-size:28px}#report-content .comment-card{padding:16px}#report-content .comment-heading h2{font-size:20px}.comment-actions{padding-left:0}.dialog-header,.dialog-fields,.dialog-footer{padding:14px}.edit-category{padding:14px 14px 0}}
+
+@media(max-width:640px){.comment-actions .jira-select-observation{flex-basis:100%}.comment-actions .button{flex:1 1 130px;min-width:0;overflow-wrap:normal;word-break:normal}}
+
+/* Keep the review and its controls in one aligned workspace. */
+.export-toolbar{margin:12px 20px 0;padding:10px 14px;border-radius:10px;gap:8px 16px;align-items:center}
+.export-toolbar h2{font-size:16px;margin:0}.export-toolbar #handoff-description{display:none}
+.export-actions{gap:6px;margin-left:auto}.export-actions .button{padding:7px 11px}
+.export-help{flex-basis:auto;border:0;padding:0;margin:0}.export-help summary{padding:6px 0;font-size:13px;min-height:44px}.export-help[open]{flex-basis:100%;border-top:1px solid var(--line);padding-top:8px}
+#report-content{max-width:none;margin:0;padding:20px}.workspace .diffuse-report{max-width:none;margin:0}
+#report-content .report-heading{margin:0 0 12px}#report-content .report-heading h1{font-size:28px;line-height:1.25;max-width:none;margin:0 0 6px;letter-spacing:-.6px}
+#report-content .report-kicker,#report-content .report-note{display:none}
+#report-content .review-summary{font-size:14px;margin:0 0 12px}#report-content .review-urls{margin:0 0 12px;gap:8px}
+#report-content .review-urls>div{padding:8px 12px;border-radius:8px}#report-content .review-urls dt{font-size:13px}#report-content .review-urls dd{font-size:14px;margin-top:2px}
+#report-content .review-filter-row{display:flex;align-items:center;gap:12px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;padding:4px 3px 8px;margin:0 -3px;scroll-padding:4px}
+#report-content .review-filter-row .review-categories{display:flex;flex:none;align-items:center;flex-wrap:nowrap;gap:6px;margin:0;padding:0}
+#report-content .review-filter-row .viewport-filters{padding-left:12px;border-left:1px solid var(--line)}
+#report-content .review-filter-row .category-nav{flex:none;white-space:nowrap;min-height:44px;margin:0;padding:7px 10px;font-size:14px}
+#report-content .filter-status{font-size:13px;margin:0 0 10px}
+#report-content .jira-selection-bar{top:8px;padding:6px 10px;margin:0 0 14px;gap:6px;box-shadow:0 3px 14px #211a350a}
+#report-content .comment-card>.jira-select-observation{display:flex;align-items:center;gap:8px;width:max-content;min-height:44px;margin:-6px 0 8px;font-size:14px}
+#report-content .comment-card>.jira-select-observation input{width:20px;height:20px;accent-color:var(--violet)}
+#report-content .comment-card .field p,#report-content .requested-change p{max-width:95ch}
+@media(max-width:640px){.export-toolbar{margin:10px 12px 0;padding:10px}.export-actions{display:flex;flex-wrap:wrap;width:auto;margin:0}.export-actions .button{flex:1 1 auto}.export-help{flex-basis:100%}#report-content{padding:16px 12px}#report-content .report-heading h1{font-size:24px}#report-content .jira-selection-bar{top:0;flex-wrap:wrap}#report-content .jira-selection-bar strong{flex-basis:auto;margin-right:auto}#report-content .jira-selection-bar .button{flex:0 1 auto;font-size:13px}}

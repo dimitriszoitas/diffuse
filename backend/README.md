@@ -25,6 +25,8 @@ Connecting an account and loading export metadata create no tickets. The extensi
 
 The backend authenticates ownership, rechecks site access, loads all destination metadata pages and validates required fields. It accepts fixed Jira operations only. Tokens are encrypted; refreshes are serialized and committed before downstream API calls. OAuth uses hashed expiring state, a verifier-bound one-time handoff and fixed Chrome redirects.
 
+Descriptions use a bounded ADF subset shared by delivery validation and the outbound Jira client: headings, paragraphs, highlighted change panels, numbered reproduction steps, evidence lists and plain-text AI handoff blocks. The extension preview renders this same document. Jira supplies its own colors and typography. Evidence filenames in the description match separate uploads; no unverified Jira media IDs are embedded. Tables, mentions, arbitrary HTML and embed/extension nodes are rejected. Deploy this validator together with extension builds that produce the richer document.
+
 Evidence uses 512 KiB chunks to stay below hosted request limits. Limits are 20 files, 20 MiB per file and 40 MiB per observation, plus the Jira site's limit. Size, complete SHA-256 and file signature are validated before issue creation. Successful uploads delete temporary bytes; unfinished evidence expires after seven days while delivery receipts remain.
 
 Confirmed rejections allow an explicit retry. Unknown write outcomes are **needs-check**, with no automatic retry. A failed attachment resumes against the already-created issue. Closing the report can stop processing, but the delivery state persists. No request log should contain credentials, evidence bytes, ticket text or raw provider responses.

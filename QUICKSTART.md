@@ -1,4 +1,4 @@
-# Try Diffuse 0.7.1
+# Try Diffuse 0.7.2
 
 Compare a live prototype over production or audit one page. Leave pinned comments on elements or areas, record a short silent interaction, and copy the review for your engineering team. Claude can suggest findings when you connect your own Anthropic API key.
 
@@ -6,7 +6,7 @@ Compare a live prototype over production or audit one page. Leave pinned comment
 
 For a first installation:
 
-1. Unzip **Diffuse-0.7.1.zip**. Keep the resulting **Diffuse** folder somewhere permanent.
+1. Unzip **Diffuse-0.7.2.zip**. Keep the resulting **Diffuse** folder somewhere permanent.
 2. In your normal Chrome browser, open `chrome://extensions`.
 3. Turn on **Developer mode**, then click **Load unpacked** and choose that **Diffuse** folder.
 4. Pin **Diffuse — Live design comparison** using Chrome’s extensions menu.
@@ -20,6 +20,8 @@ You do not need to sign in to a special test browser or share a password with Di
 1. Open the page you want to review in Chrome.
 2. Click the Diffuse extension icon, then **Start review**. Allow access to this page if requested.
 3. Use the bottom toolbar to select an element or area, leave a comment, record an interaction, or request an AI review.
+
+Use the toolbar's **Minimize** icon to reduce it to a small Diffuse button. Click it to expand again. Pins and an open comment stay available; recording controls remain visible while a recording is running.
 
 There is no audit/comparison mode to choose. Without a reference, Diffuse reviews one page. Add a reference whenever you want to compare.
 
@@ -47,11 +49,11 @@ Click the split-window icon at the top right of the extension popup, or **Dock i
 
 Drag Chrome’s divider to resize the drawer. Close it using Chrome’s **×** above it to restore the page width and floating controls. Closing keeps the active review and unfinished comment. **Stop** ends the review instead. Chrome controls which side the drawer uses.
 
-On an unrelated tab, the drawer offers **Return to page**. Native drawer pixels are excluded from evidence. Existing area pins and AI highlights are hidden at a different viewport size rather than pointing at the wrong content; captured evidence remains unchanged.
+On an unrelated tab, the drawer offers **Return to page**. Native drawer pixels are excluded from evidence. Saved pins follow their anchors within the current viewport view. AI preview highlights and older area captures without an anchor remain tied to their captured size; captured evidence stays unchanged.
 
-## Check desktop, tablet and phone layouts
+## Check desktop, laptop, tablet and phone layouts
 
-The **Viewport** segments in the toolbar and drawer switch between Desktop (1440 × 900), Laptop / tablet (1024 × 768) and Phone (390 × 844). Comments stay with the view where they were captured. Use the report's viewport filter to see one view or all of them; Jira tickets retain the viewport label and dimensions.
+The **Viewport** segments in the toolbar and drawer switch between Desktop (1440 × 900), Laptop (1280 × 800), Tablet (1024 × 768) and Phone (390 × 844). Comments stay with the view where they were captured. Use the report's viewport filter to see one view or all of them; Jira tickets retain the viewport label and dimensions.
 
 Chrome asks for the updated extension's debugging permission and shows a notice while viewport control is active. Close DevTools on those tabs before switching. **Reset / Use window size** restores the normal layout. Save or cancel an open comment and finish recording or AI work before switching views.
 
@@ -93,11 +95,13 @@ New reviews ask for one actionable issue per finding. **Current** describes the 
 
 ## Copy or download your review
 
-Open **Review (n)** in the page toolbar or **Review reports** in the extension popup. Earlier saved reviews remain in the notebook.
+Open **Review (n)** in the page toolbar or **Review reports** in the extension popup. Earlier saved reviews remain in the notebook. Use **Hide** beside a review to clear it from the list; find it under **Hidden** and choose **Restore** when needed. Hiding preserves its comments and evidence.
 
 - **Copy entire report** copies formatted text and screenshots. If the destination drops images, use **Copy image** or **Download image** for each screenshot.
 - **Download HTML** keeps embedded screenshots and playable recordings together in one file that opens offline.
-- **Markdown ↓** is also available; support for embedded screenshot data varies by viewer. Pasted reports do not contain playable video—download HTML or attach the recording separately.
+- **AI handoff .md ↓** gives a coding assistant the entire review, across all viewports, with Current → Change to → Verify for every finding. Include the HTML report or evidence files alongside it; the Markdown contains filenames instead of bulky image/video data. Generating it makes no AI request.
+
+For a single accepted AI finding, expand **Suggested AI prompt** and choose **Copy AI prompt**. The same prompt appears in its Jira description, alongside formatted sections and numbered steps. Jira evidence remains in attachments.
 
 Comments and evidence stay locally in this Chrome profile across comparison sessions. Reload the same installed folder when upgrading. Download HTML when you want a portable copy.
 

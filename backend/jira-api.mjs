@@ -1,3 +1,4 @@
+import {cloneReviewAdf} from './review-adf.mjs';
 /** Server-only Jira REST adapter. The caller must revalidate that cloudId belongs to the
  * authenticated connection before every operation, and authorize the selected project,
  * required fields and issue before writes. This module has no retries or persistence.
@@ -110,45 +111,9 @@ function jsonValue(value, code = 'invalid_input', budget = {nodes: 0, bytes: 0},
   return result;
 }
 
-// Deliberately restricted to the text-only ADF produced by jira-format.mjs.
+// Both delivery validation and outbound requests use the same bounded ADF policy.
 function adf(value) {
-  safeKeys(value, ['type', 'version', 'content']);
-  if (value.type !== 'doc' || value.version !== 1 || !Array.isArray(value.content) ||
-      !value.content.length || value.content.length > 500) fail();
-  let nodes = 0, bytes = 0;
-  const content = value.content.map(block => {
-    safeKeys(block, ['type', 'attrs', 'content']);
-    if (!['paragraph', 'heading'].includes(block.type) || !Array.isArray(block.content) || block.content.length > 1000) fail();
-    const result = {type: block.type};
-    if (block.type === 'heading') {
-      safeKeys(block.attrs, ['level']);
-      result.attrs = {level: integer(block.attrs.level, {min: 1, max: 6})};
-    } else if (block.attrs !== undefined) fail();
-    result.content = block.content.map(node => {
-      if (++nodes > 5000) fail();
-      if (node?.type === 'hardBreak') { safeKeys(node, ['type']); return {type: 'hardBreak'}; }
-      safeKeys(node, ['type', 'text', 'marks']);
-      if (node.type !== 'text') fail();
-      const inline = {type: 'text', text: text(node.text, 32_768, 'invalid_input', {multiline: true})};
-      bytes += Buffer.byteLength(inline.text);
-      if (bytes > JIRA_API_LIMITS.issueBytes) fail();
-      if (node.marks !== undefined) {
-        if (!Array.isArray(node.marks) || node.marks.length > 4) fail();
-        inline.marks = node.marks.map(mark => {
-          if (mark?.type === 'link') {
-            safeKeys(mark, ['type', 'attrs']); safeKeys(mark.attrs, ['href']);
-            return {type: 'link', attrs: {href: safeUrl(mark.attrs.href)}};
-          }
-          safeKeys(mark, ['type']);
-          if (!['strong', 'em', 'code'].includes(mark.type)) fail();
-          return {type: mark.type};
-        });
-      }
-      return inline;
-    });
-    return result;
-  });
-  return {type: 'doc', version: 1, content};
+  try { return cloneReviewAdf(value, {maxBytes: JIRA_API_LIMITS.issueBytes}); } catch { fail(); }
 }
 
 function page(value, key, requestedStart, map) {

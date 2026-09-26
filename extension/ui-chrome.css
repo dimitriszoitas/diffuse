@@ -1,0 +1,6 @@
+/* Diffuse surfaces only; never change the reviewed website. */
+:root{--scroll-thumb:#a897be;--scroll-hover:#81708f;--scroll-track:transparent}
+*{scrollbar-width:thin;scrollbar-color:var(--scroll-thumb,#a897be) var(--scroll-track,transparent)}
+*::-webkit-scrollbar{width:8px;height:8px}*::-webkit-scrollbar-track{background:transparent}*::-webkit-scrollbar-thumb{background:var(--scroll-thumb,#a897be);border-radius:8px;border:2px solid transparent;background-clip:padding-box}*::-webkit-scrollbar-thumb:hover{background-color:var(--scroll-hover,#81708f)}*::-webkit-scrollbar-corner{background:transparent}
+.sidebar{--scroll-thumb:#88769f;--scroll-hover:#c9adff}.review-list{scrollbar-gutter:stable}
+@media(forced-colors:active){*{scrollbar-color:auto}}

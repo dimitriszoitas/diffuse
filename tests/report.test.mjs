@@ -513,3 +513,17 @@ test('changing references keeps each recorded URL attached to its own observatio
   assert.doesNotMatch(formatMarkdown(review), /obsolete.example.test/);
   assert.deepEqual(review, before);
 });
+
+
+test('Laptop observations retain their own group and exact dimensions in report exports', () => {
+  const review=fixture(),comment=review.comments[0];
+  comment.context.production.viewportProfile={key:'laptop',mode:'preset'};
+  comment.context.production.viewport={width:1280,height:800,dpr:1};
+  const before=structuredClone(review);
+  for(const html of [formatReviewHtml(review),formatReviewHtml(review,{clipboard:true}),formatStandaloneHtml(review)]) {
+    assert.match(html,/data-viewport="laptop"/);
+    assert.match(html,/Laptop · 1280 × 800/);
+  }
+  assert.match(formatMarkdown(review),/Laptop · 1280 × 800/);
+  assert.deepEqual(review,before);
+});

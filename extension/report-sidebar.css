@@ -1,0 +1,9 @@
+.review-visibility-tabs{display:flex;gap:6px;margin:0 0 10px;flex-shrink:0}
+.review-visibility-tabs button{flex:1;min-height:44px;padding:8px;border:1px solid #a897be;border-radius:8px;background:transparent;color:#e4dbf3;font-size:14px;font-weight:600}
+.review-visibility-tabs button[aria-pressed="true"]{background:#eee7fa;border-color:#eee7fa;color:#38205d}
+.hidden-reviews-hint{margin:0 6px 10px;color:#d4c7ed;font-size:14px;line-height:1.5}
+.review-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px;align-items:start;margin:4px 0}
+.review-row .review-item{min-width:0;width:100%;max-width:none;margin:0;padding:10px 8px}
+.review-visibility-action{min-width:44px;min-height:44px;padding:8px 6px;margin-top:4px;border:1px solid transparent;border-radius:8px;background:transparent;color:#e4dbf3;font-size:14px;line-height:1.4}
+.review-visibility-action:hover{border-color:#a897be;background:#392c4d}
+@media(max-width:900px){.review-visibility-tabs,.hidden-reviews-hint{grid-column:1/-1}.review-visibility-tabs{max-width:320px;margin:0}.review-row{flex:0 0 290px;max-width:calc(100vw - 36px);margin:0}.review-row .review-item{min-height:80px}.hidden-reviews-hint{margin:0}}

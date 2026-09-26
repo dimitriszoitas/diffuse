@@ -1,5 +1,6 @@
 export const VIEWPORT_PRESETS = Object.freeze({
   desktop: Object.freeze({width:1440,height:900}),
+  laptop: Object.freeze({width:1280,height:800}),
   tablet: Object.freeze({width:1024,height:768}),
   phone: Object.freeze({width:390,height:844}),
 });
@@ -20,7 +21,7 @@ export function createViewportController({chromeApi, assertPageAccess, onOwnersh
   }
   async function clear(){for(const tabId of [...owned])await release(tabId);selected=null;}
   async function applyNow(tabs,preset){
-    if(preset!==null&&!Object.hasOwn(VIEWPORT_PRESETS,preset))throw new Error('Choose Desktop, Laptop / tablet, Phone, or the native page size.');
+    if(preset!==null&&!Object.hasOwn(VIEWPORT_PRESETS,preset))throw new Error('Choose Desktop, Laptop, Tablet, Phone, or the native page size.');
     if(preset===null){await clear();return null;}
     if(!chromeApi.debugger)throw new Error('Reload the updated Diffuse extension to enable viewport presets.');
     const ids=[...new Set([tabs.targetTabId,tabs.sourceTabId].filter(Number.isInteger))];
@@ -38,6 +39,12 @@ export function createViewportController({chromeApi, assertPageAccess, onOwnersh
         }
         if(generation!==epoch)throw new Error('Viewport control was disconnected. Choose the preset again.');
         await command(tabId,'Emulation.setDeviceMetricsOverride',metrics(preset));
+        // Hidden captured pages can report the new innerWidth while retaining
+        // the old painted layout. Flush layout before their next video frame.
+        await command(tabId,'Runtime.evaluate',{
+          expression:'new Promise(resolve => { const done = () => resolve(true); const timer = setTimeout(done, 500); document.documentElement.getBoundingClientRect(); document.body?.getBoundingClientRect(); requestAnimationFrame(() => requestAnimationFrame(() => { clearTimeout(timer); done(); })); })',
+          awaitPromise:true,returnByValue:true,timeout:1500,
+        });
       }
       if(generation!==epoch)throw new Error('Viewport control was disconnected. Choose the preset again.');
       for(const tabId of [...owned])if(!ids.includes(tabId))await release(tabId);

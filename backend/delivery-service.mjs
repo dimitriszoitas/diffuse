@@ -1,3 +1,4 @@
+import {cloneReviewAdf} from './review-adf.mjs';
 import {createHash, randomUUID} from 'node:crypto';
 import {validateJiraAttachment} from './jira-api.mjs';
 
@@ -55,32 +56,9 @@ function only(value, keys) { if (!record(value) || Object.keys(value).some(key =
 function uuid(value) { if (typeof value !== 'string' || !UUID.test(value)) fail(); return value.toLowerCase(); }
 function connectionId(connection) { return uuid(connection?.id); }
 function adf(value) {
-  only(value, ['type', 'version', 'content']);
-  if (value.type !== 'doc' || value.version !== 1 || !Array.isArray(value.content) || !value.content.length || value.content.length > 500) fail();
-  let nodes = 0;
-  for (const block of value.content) {
-    only(block, ['type', 'attrs', 'content']);
-    if (!['paragraph', 'heading'].includes(block.type) || !Array.isArray(block.content)) fail();
-    if (block.type === 'heading') { only(block.attrs, ['level']); if (!Number.isInteger(block.attrs.level) || block.attrs.level < 1 || block.attrs.level > 6) fail(); }
-    else if (block.attrs !== undefined) fail();
-    for (const node of block.content) {
-      if (++nodes > 5000) fail();
-      if (node?.type === 'hardBreak') { only(node, ['type']); continue; }
-      only(node, ['type', 'text', 'marks']);
-      if (node.type !== 'text' || typeof node.text !== 'string' || !node.text || node.text.length > 32768) fail();
-      if (node.marks !== undefined) {
-        if (!Array.isArray(node.marks) || node.marks.length > 4) fail();
-        for (const mark of node.marks) {
-          if (mark?.type === 'link') {
-            only(mark, ['type', 'attrs']); only(mark.attrs, ['href']);
-            let url; try { url = new URL(mark.attrs.href); } catch { fail(); }
-            if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) fail();
-          } else { only(mark, ['type']); if (!['strong', 'em', 'code'].includes(mark.type)) fail(); }
-        }
-      }
-    }
-  }
+  try { return cloneReviewAdf(value, {maxBytes: DELIVERY_LIMITS.issueBytes}); } catch { fail(); }
 }
+
 function snapshot(input) {
   only(input, ['clientDeliveryId', 'commentId', 'revision', 'cloudId', 'projectId', 'issueTypeId', 'summary', 'description', 'fields', 'attachments']);
   const request = canonical(input);
