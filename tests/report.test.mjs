@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  escapeHtml, safePageUrl, safeMediaUrl, evidenceImages, evidenceVideo, metadataRows,
+  escapeHtml, safePageUrl, localFilePath, safeMediaUrl, evidenceImages, evidenceVideo, metadataRows,
   formatReviewHtml, formatStandaloneHtml, formatMarkdown, fileStem,
   aiMetadataRows, categoryLabel, categoryKey, CATEGORY_PALETTE, commentTitle, recordedFocusCrop,
 } from '../extension/report-format.mjs';
@@ -51,6 +51,33 @@ test('page links permit only HTTP and HTTPS and reject control-character obfusca
   const html = formatReviewHtml(review);
   assert.ok(!html.includes('href="javascript:'));
   assert.ok(html.includes('<span>javascript:alert(1)</span>'));
+});
+
+test('local HTML captures retain readable escaped paths without clickable file links or remote file hosts', () => {
+  const review = fixture();
+  const productionPath = 'file:///Users/designer/My%20demo/current%20%3Cscript%3E.html';
+  const referencePath = 'file:///Users/designer/My%20demo/reference%20%5Bapproved%5D.html';
+  review.productionUrl = productionPath;
+  review.prototypeUrl = referencePath;
+  review.comments[0].context.production.url = productionPath;
+  review.comments[0].context.prototype.url = referencePath;
+  const before = structuredClone(review);
+  assert.equal(localFilePath(productionPath), '/Users/designer/My demo/current <script>.html');
+  assert.equal(safePageUrl(productionPath), '', 'File locations remain forbidden in hyperlink helpers, including Jira ADF');
+  for (const html of [formatReviewHtml(review), formatReviewHtml(review, {clipboard: true}), formatStandaloneHtml(review)]) {
+    assert.match(html, /Local file: \/Users\/designer\/My demo\/current &lt;script&gt;\.html/);
+    assert.match(html, /Reference for this observation: <span>Local file: \/Users\/designer\/My demo\/reference \[approved\]\.html<\/span>/);
+    assert.doesNotMatch(html, /(?:href|src)=["']file:/i);
+    assert.doesNotMatch(html, /<script>/);
+  }
+  const markdown = formatMarkdown(review, {embedMedia: false});
+  assert.ok(markdown.includes('Production: Local file: /Users/designer/My demo/current \\<script\\>.html'));
+  assert.ok(markdown.includes('Reference for this observation: Local file: /Users/designer/My demo/reference \\[approved\\].html'));
+  const rows = new Map(metadataRows(review.comments[0]));
+  assert.equal(rows.get('context.production.url'), 'Local file: /Users/designer/My demo/current <script>.html');
+  assert.equal(rows.get('context.prototype.url'), 'Local file: /Users/designer/My demo/reference [approved].html');
+  for (const unsafe of ['file://server/private.html', 'file:///tmp/%0A.html', 'file:///tmp/%FF.html', 'javascript:alert(1)', 'data:text/html,<script>bad()</script>']) assert.equal(localFilePath(unsafe), '');
+  assert.deepEqual(review, before, 'Formatting never rewrites stored capture context');
 });
 
 test('media validation accepts only embedded base64 raster images and supported video', () => {

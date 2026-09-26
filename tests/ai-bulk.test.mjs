@@ -1,3 +1,5 @@
+import {assertPageAccess as coreAssertPageAccess} from '../extension/core.mjs';
+import {createViewportController} from '../extension/viewport-controller.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -42,10 +44,10 @@ async function harness() {
       return {ok:true,production:{dataUrl:message.dataUrl,annotatedDataUrl:'data:image/png;base64,YW5ub3RhdGVk'}};
     }},
     storage:{session:{get:async()=>({}),set:async()=>{}}},
-    tabs:{onUpdated:listener,onRemoved:listener,sendMessage:async(id,message)=>{state.messages.push(structuredClone(message));return {ok:true};},captureVisibleTab:async()=>{state.captures++;throw new Error('Unexpected screenshot');}},
+    tabs:{onUpdated:listener,onRemoved:listener,sendMessage:async(id,message)=>{state.messages.push(structuredClone(message));if(message.type==='ANCHOR_SELECTION'){if(state.failAnchor)throw new Error('Page unavailable');if(state.anchor)return{ok:true,selection:{...message.selection,anchor:state.anchor}};}return {ok:true};},captureVisibleTab:async()=>{state.captures++;throw new Error('Unexpected screenshot');}},
     permissions:{contains:async()=>true},
   };
-  const context=vm.createContext({chrome,reviews,crypto:webcrypto,protectAIStorage:async()=>{},viewportWarning:()=>'',DEFAULT_SETTINGS:{},AbortController,
+  const context=vm.createContext({createViewportController, assertPageAccess:(url,api=chrome,message)=>coreAssertPageAccess(url,api,message),chrome,reviews,crypto:webcrypto,protectAIStorage:async()=>{},viewportWarning:()=>'',DEFAULT_SETTINGS:{},AbortController,
     readAISettings:async()=>({hasKey:true,apiKey:'fixture-key',model:'fixture-model'}),reviewScreens:async()=>{state.providerCalls++;throw new Error('Unexpected provider request');},setTimeout:()=>1,clearTimeout(){},setInterval:()=>1,clearInterval(){},
   });
   vm.runInContext(source.replace(/^import .*\n/gm,'')+`
@@ -207,4 +209,27 @@ test('reference annotation failure leaves the suggestion pending without a half-
   worker.state.failAnnotationAt=0;
   const retry=await bulk(worker,['finding-1']);
   assert.equal(retry.acceptedCount,1);assert.equal(worker.state.comments.length,1);
+});
+
+
+test('accepted AI findings persist the observed anchor without changing their original screenshot coordinates',async()=>{
+  const worker=await harness();
+  worker.state.anchor={version:1,kind:'region',selector:'#card',identity:{tag:'section',attributes:{id:'card'}},space:'relative',relative:{x:0.1,y:0.2,width:0.3,height:0.1}};
+  const result=await bulk(worker,['finding-1']);
+  assert.equal(result.acceptedCount,1);
+  const comment=worker.state.comments[0];
+  assert.deepEqual(comment.selection.anchor,worker.state.anchor);
+  assert.equal(comment.selection.rect.viewport.x,100);
+  assert.equal(comment.selection.rect.document.y,360);
+  assert.equal(comment.selection.context.scroll.y,200);
+  assert.equal(worker.state.messages.filter(message=>message.type==='ANCHOR_SELECTION').length,1);
+});
+
+test('an unavailable page anchor does not discard retained AI evidence or block acceptance',async()=>{
+  const worker=await harness();worker.state.failAnchor=true;
+  const result=await bulk(worker,['finding-1']);
+  assert.equal(result.acceptedCount,1);
+  assert.equal(worker.state.comments[0].selection.anchor,undefined);
+  assert.ok(worker.state.comments[0].evidence.production.annotatedDataUrl);
+  assert.equal(worker.state.providerCalls,0);
 });

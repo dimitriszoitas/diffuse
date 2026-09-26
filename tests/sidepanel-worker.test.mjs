@@ -1,8 +1,10 @@
+import {createViewportController} from '../extension/viewport-controller.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
 import {webcrypto} from 'node:crypto';
+import {assertPageAccess, isReviewableUrl} from '../extension/core.mjs';
 
 const source = await readFile(new URL('../extension/background.js', import.meta.url), 'utf8');
 const event = () => ({listeners: [], addListener(listener) { this.listeners.push(listener); }, emit(...args) { return this.listeners.map(listener => listener(...args)); }});
@@ -38,7 +40,8 @@ async function harness({initial = currentSession(), waitForStorage = null} = {})
     offscreen: {closeDocument: async () => {}},
   };
   const reviews = {getReview: async () => ({comments: []}), putDraft: async draft => {state.savedDrafts.push(draft);}};
-  const context = vm.createContext({chrome, reviews, crypto: webcrypto, AbortController, DEFAULT_SETTINGS: {}, viewportWarning: () => '', sitePattern: url => url,
+  const context = vm.createContext({createViewportController,chrome, reviews, crypto: webcrypto, AbortController, DEFAULT_SETTINGS: {}, viewportWarning: () => '', isReviewableUrl,
+    assertPageAccess: (url, chromeApi = chrome, message) => assertPageAccess(url, chromeApi, message),
     protectAIStorage: async () => {}, readAISettings: async () => ({hasKey: false}), setTimeout, clearTimeout, setInterval, clearInterval});
   vm.runInContext(source.replace(/^import .*\n/gm, '') + `
     globalThis.api = {ready, handle, captureDraft, initializeTab, publish, syncPanelDocking,
@@ -52,7 +55,7 @@ async function harness({initial = currentSession(), waitForStorage = null} = {})
   };
   const attach = async (sender = panelSender(), windowId = 7) => {const port = connect(sender); port.onMessage.emit({type: 'ATTACH', windowId}); await context.api.flushPanels(); return port;};
   if (!waitForStorage) await context.api.ready;
-  return {...context.api, chrome, state, connect, attach, contextData, send: (message, sender = panelSender()) => context.api.handle(message, sender)};
+  return {...context.api, context, chrome, state, connect, attach, contextData, send: (message, sender = panelSender()) => context.api.handle(message, sender)};
 }
 
 test('only the exact sidepanel document can attach; its connection is required for requests', async () => {
@@ -173,4 +176,33 @@ test('region capture rejects stale viewport coordinates before taking a screensh
     await assert.rejects(worker.captureDraft(selection), /resized after selection/);
   }
   assert.equal(worker.state.captures, 0); assert.equal(worker.state.savedDrafts.length, 0);
+});
+
+
+test('missing content receiver reports a recoverable state without replaying Save', async () => {
+  const worker = await harness(); await worker.attach();
+  const original = worker.chrome.tabs.sendMessage;
+  worker.chrome.tabs.sendMessage = async (tabId, message) => {
+    if (['PANEL_STATE', 'PANEL_COMMAND'].includes(message.type)) {worker.state.messages.push(message); throw new Error('Could not establish connection. Receiving end does not exist.');}
+    return original(tabId, message);
+  };
+  const state = await worker.send({type:'PANEL_STATE', windowId:7});
+  assert.equal(state.ok,true);assert.equal(state.state.code,'PANEL_PAGE_DISCONNECTED');
+  const save = await worker.send({type:'PANEL_COMMAND',windowId:7,sessionId:'session',action:'saveComment',draftId:'draft',fields:{comment:'Preserve me'}});
+  assert.equal(save.ok,false);assert.equal(save.code,'PANEL_PAGE_DISCONNECTED');assert.match(save.error,/Reconnect/);
+  assert.equal(worker.state.messages.filter(item=>item.action==='saveComment').length,1);
+});
+
+test('explicit recovery restores the existing pending evidence and latest fields without saving twice', async () => {
+  const worker = await harness({initial:{...currentSession(),pendingDraftId:'draft'}});await worker.attach();
+  const draft={id:'draft',reviewId:'review',mode:'audit',evidence:{production:{dataUrl:'data:image/png;base64,YQ=='}}};
+  worker.context.reviews.getDraft=async id=>id==='draft'?structuredClone(draft):null;
+  const result=await worker.send({type:'PANEL_COMMAND',windowId:7,sessionId:'session',action:'recoverPage',draftId:'draft',fields:{comment:'Latest drawer text',state:'Default'},evidenceChoice:'screenshot'});
+  assert.equal(result.ok,true);assert.equal(worker.state.savedDrafts.at(-1).composerFields.comment,'Latest drawer text');
+  assert.equal(worker.state.savedDrafts.at(-1).id,'draft');
+  assert.ok(worker.state.messages.some(item=>item.type==='INITIALIZE'));
+  assert.ok(worker.state.messages.some(item=>item.type==='RECORDING_STOPPED'&&item.draft.id==='draft'));
+  assert.equal(worker.state.messages.some(item=>item.action==='saveComment'||item.type==='ADD_COMMENT'),false);
+  await assert.rejects(worker.send({type:'PANEL_COMMAND',windowId:7,sessionId:'session',action:'recoverPage',draftId:'consumed',fields:{comment:'Never recreate me'}}),/Check Review reports/);
+  assert.equal(worker.state.savedDrafts.length,1);
 });

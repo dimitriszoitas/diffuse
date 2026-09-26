@@ -1,7 +1,8 @@
-import {DEFAULT_SETTINGS, safeSettings, sitePattern, viewportWarning} from './core.mjs';
+import {DEFAULT_SETTINGS, safeSettings, isReviewableUrl, assertPageAccess, viewportWarning} from './core.mjs';
 import * as reviews from './review-store.mjs';
 import {reviewScreens} from './ai-client.mjs';
 import {readAISettings, saveAISettings, clearAIKey, protectAIStorage} from './ai-config.mjs';
+import {createViewportController} from './viewport-controller.mjs';
 
 let session = null;
 let transitioning = false;
@@ -19,10 +20,15 @@ let panelDocking = Promise.resolve();
 let panelDockState = null;
 let diffWindow = null;
 const referenceRequests = new Map();
-const PANEL_ACTIONS = new Set(['selectElement', 'selectArea', 'cancelSelection', 'openAi', 'closeAi', 'setAiFields', 'runAi', 'aiSuggestion', 'acceptAllAi', 'showAllAi', 'setCommentFields', 'evidence', 'recordComment', 'saveComment', 'cancelComment', 'record', 'stopRecording', 'retryCapture', 'settings', 'showPin', 'focusTarget', 'focusSource', 'stop', 'reconnect', 'openReport', 'openSettings', 'openDiff']);
+const viewportController = createViewportController({chromeApi: chrome, assertPageAccess,
+  onOwnershipChanged: async tabs => {if(session){session.viewportDebuggerTabs=tabs;await persist();}},
+  onDetached: async () => {if(session){session.viewportPreset=null;session.viewportDebuggerTabs=[];session.viewportNotice='Viewport control ended. Both pages are back at their native size.';await publish();}}
+});
+const PANEL_ACTIONS = new Set(['selectElement', 'selectArea', 'cancelSelection', 'openAi', 'closeAi', 'setAiFields', 'runAi', 'aiSuggestion', 'acceptAllAi', 'showAllAi', 'setCommentFields', 'evidence', 'recordComment', 'saveComment', 'cancelComment', 'record', 'stopRecording', 'retryCapture', 'settings', 'showPin', 'focusTarget', 'focusSource', 'stop', 'reconnect', 'openReport', 'openSettings', 'openDiff', 'recoverPage']);
 const ready = chrome.storage.session.get('comparison').then(async data => {
   await protectAIStorage();
   session = data.comparison || null;
+  if(session?.viewportPreset||session?.viewportDebuggerTabs?.length){session.viewportPreset=await viewportController.resume(session);session.viewportDebuggerTabs=viewportController.ownedTabIds();session.viewportChanging=false;await publish();}
   // A provider request cannot survive a worker restart; retained suggestions can.
   if (session?.aiRunning) { session.aiRunning = false; await publish(); }
 });
@@ -90,8 +96,33 @@ async function panelRequest(message, sender) {
     return message.type === 'PANEL_STATE' ? {ok: true, session: current, state: {active: false, available: false, message: error}} : {ok: false, code: 'PANEL_TARGET_INACTIVE', error, session: current, state: null};
   }
   if (message.type === 'PANEL_COMMAND' && message.action === 'openDiff') return openDiff(current);
+  if (message.type === 'PANEL_COMMAND' && message.action === 'recoverPage') {
+    if (transitioning || evidenceBusy || recordingStart || current.recording || current.aiRunning) throw new Error('Finish the capture or AI review before reconnecting.');
+    // Recovery restores the existing evidence draft. It never repeats Save.
+    if (message.draftId) {
+      const draft = await reviews.getDraft(message.draftId);
+      if (!draft || current.pendingDraftId !== draft.id || draft.reviewId !== current.reviewId) throw new Error('This draft is no longer open. Check Review reports before creating another comment. Your text remains in this drawer.');
+      if (session !== current) throw new Error('This comparison is no longer active. Refresh the drawer.');
+      draft.composerFields = partialComposerFields(message.fields, draft.composerFields, draft.mode || current.mode);
+      if (['screenshot', 'video'].includes(message.evidenceChoice)) draft.evidenceChoice = message.evidenceChoice;
+      await reviews.putDraft(draft);
+    }
+    if (session !== current) throw new Error('This comparison is no longer active. Refresh the drawer.');
+    await initializeTab('target');
+    if (session !== current) throw new Error('This comparison is no longer active. Refresh the drawer.');
+    await connectTarget();
+    const response = await tabMessage(current.targetTabId, 'PANEL_STATE', {sessionId: current.id});
+    return {...response, session: current};
+  }
   const {target: _target, namespace: _namespace, type: _type, ...payload} = message;
-  const response = await tabMessage(current.targetTabId, message.type, {...payload, sessionId: current.id});
+  let response;
+  try { response = await tabMessage(current.targetTabId, message.type, {...payload, sessionId: current.id}); }
+  catch (error) {
+    if (!/receiving end does not exist|could not establish connection|message port closed|message channel closed/i.test(error.message || '')) throw error;
+    const explanation = 'The page connection was interrupted. Your text is still in this drawer. Reconnect the review, then save again.';
+    if (message.type === 'PANEL_STATE') return {ok: true, session: current, state: {available: false, active: true, code: 'PANEL_PAGE_DISCONNECTED', message: explanation}};
+    return {ok: false, code: 'PANEL_PAGE_DISCONNECTED', error: explanation, session: current};
+  }
   if (message.type === 'PANEL_COMMAND' && message.action === 'stop' && !session && response?.ok) return {ok: true, session: null, state: null};
   if (session !== current) throw new Error('This comparison is no longer active. Refresh the drawer.');
   if (!response?.ok) return {ok: false, error: response?.error || 'The page is reconnecting. Return to it and reopen Diffuse.', session: current, state: null};
@@ -159,6 +190,7 @@ async function stopSession() {
   if (aiJob && old && aiJob.sessionId === old.id) aiJob.controller.abort();
   if (old) await preservePendingRecording(old);
   if (session !== old) return;
+  await viewportController.restore();
   session = null;
   panelDockState = null;
   await persist();
@@ -181,6 +213,7 @@ function captureError(error) {
 
 async function requireActiveProduction(current) {
   const tab = await chrome.tabs.get(current.targetTabId);
+  await assertPageAccess(tab.url);
   const active = await chrome.tabs.query({active: true, windowId: tab.windowId});
   if (active[0]?.id !== current.targetTabId) throw new Error('Keep the production tab active while capturing evidence.');
   return tab;
@@ -204,6 +237,7 @@ async function captureDraft(selection, {pending = true, forAI = false, forRecord
     const prepared = await evidenceStep(tabMessage(current.targetTabId, 'PREPARE_EVIDENCE', {sessionId: current.id}), 'The page did not finish preparing its screenshot. Keep production visible and try again.');
     if (!prepared?.ok || !prepared.context) throw new Error(prepared?.error || 'Could not prepare the production screenshot.');
     const productionContext = prepared.context;
+    if (current.mode !== 'audit') await assertPageAccess((await chrome.tabs.get(current.sourceTabId)).url);
     const referenceContext = current.mode === 'audit' ? null : await tabMessage(current.sourceTabId, 'GET_CONTEXT', {sessionId: current.id});
     if (current.mode !== 'audit' && !referenceContext?.ok) throw new Error('Could not read the prototype state.');
     if (selection?.context?.scroll && (Math.abs(selection.context.scroll.x - productionContext.scroll.x) > 1 || Math.abs(selection.context.scroll.y - productionContext.scroll.y) > 1)) throw new Error('The page moved after selection. Select the element again to keep its screenshot annotation accurate.');
@@ -403,8 +437,7 @@ async function initializeTab(role) {
   if (role === 'target') await refreshComments(current);
   const tabId = role === 'source' ? current.sourceTabId : current.targetTabId;
   const tab = await chrome.tabs.get(tabId);
-  const pattern = sitePattern(tab.url);
-  if (!(await chrome.permissions.contains({origins: [pattern]}))) throw new Error('This page moved to a site that Diffuse cannot access. Open Diffuse on the prototype and start a new comparison.');
+  await assertPageAccess(tab.url, chrome, 'This page moved to a site that Diffuse cannot access. Open Diffuse on this page and start a new review.');
   await chrome.scripting.executeScript({target: {tabId}, files: ['inspector.js', 'content.js']});
   if (session?.id !== current.id) return;
   const response = await tabMessage(tabId, 'INITIALIZE', {role, session: current});
@@ -417,6 +450,10 @@ async function initializeTab(role) {
 
 async function connectTarget() {
   if (!session) return;
+  const current = session;
+  await assertPageAccess((await chrome.tabs.get(current.targetTabId)).url);
+  if (current.mode !== 'audit') await assertPageAccess((await chrome.tabs.get(current.sourceTabId)).url);
+  if (session !== current) return;
   if (session.mode === 'audit') { await setStatus('live'); return; }
   const currentId = session.id;
   const connectionId = crypto.randomUUID();
@@ -432,8 +469,7 @@ async function startSession(message) {
   transitioning = true;
   try {
     const [source, target] = await Promise.all([chrome.tabs.get(message.sourceTabId), chrome.tabs.get(message.targetTabId)]);
-    const origins = [...new Set([sitePattern(source.url), sitePattern(target.url)])];
-    if (!(await chrome.permissions.contains({origins}))) throw new Error('Allow Diffuse to access these two sites before starting.');
+    await Promise.all([source, target].map(tab => assertPageAccess(tab.url, chrome, 'Allow Diffuse to access both pages before starting.')));
     await stopSession();
     const id = crypto.randomUUID();
     session = {id, mode: 'comparison', reviewId: id, comments: [], commentCount: 0, captureReady: false, recording: null, sourceTabId: source.id, targetTabId: target.id, source: {title: source.title, url: source.url}, target: {title: target.title, url: target.url}, status: 'starting', settings: {...DEFAULT_SETTINGS}, startedAt: new Date().toISOString()};
@@ -466,11 +502,11 @@ async function startSession(message) {
 async function startAudit(message) {
   if (transitioning) throw new Error('An audit or comparison is already starting.');
   if (session?.recording) throw new Error('Stop the recording before starting an audit.');
-  if (!Number.isInteger(message.targetTabId)) throw new Error('Choose a web page to audit.');
+  if (!Number.isInteger(message.targetTabId)) throw new Error('Choose a page to review.');
   transitioning = true;
   try {
     const target = await chrome.tabs.get(message.targetTabId);
-    if (!(await chrome.permissions.contains({origins: [sitePattern(target.url)]}))) throw new Error('Allow Diffuse to access this page to start its audit.');
+    await assertPageAccess(target.url, chrome, 'Allow Diffuse to access this page to start its review.');
     await stopSession();
     const id = crypto.randomUUID();
     session = {id, mode: 'audit', reviewId: id, comments: [], commentCount: 0, captureReady: true, recording: null, targetTabId: target.id, target: {title: target.title, url: target.url}, status: 'starting', settings: {...DEFAULT_SETTINGS, hidden: true, linked: false}, startedAt: new Date().toISOString()};
@@ -499,6 +535,34 @@ function assertReferenceReady(current, options) {
   if (reason) throw new Error(reason);
 }
 
+async function setViewportPreset(message, sender) {
+  const current=session;
+  if(!current||message.sessionId!==current.id)throw new Error('This review changed. Choose the viewport again.');
+  const target=await chrome.tabs.get(current.targetTabId);
+  if(isSidePanel(sender))attachedPanel(sender,message.windowId);
+  else if(sender.id!==chrome.runtime.id||sender.tab?.id!==current.targetTabId||sender.frameId!==0)throw new Error('Choose the viewport on the reviewed page or its drawer.');
+  const windowId=isSidePanel(sender)?message.windowId:sender.tab.windowId;
+  const active=await chrome.tabs.query({active:true,windowId});
+  if(target.windowId!==windowId||active[0]?.id!==current.targetTabId)throw new Error('Return to the reviewed page before changing its viewport.');
+  assertReferenceReady(current);
+  transitioning=true;
+  current.viewportChanging=true;
+  try{
+    await publish();
+    current.viewportPreset=await viewportController.apply(current,message.preset??null);
+    current.viewportDebuggerTabs=viewportController.ownedTabIds();
+    current.viewportNotice=current.viewportPreset?'Responsive layout size; browser identity and touch behavior are unchanged.':null;
+    // Read the actual dimensions, including any browser policy constraints.
+    for(const [role,id] of [['target',current.targetTabId],['source',current.sourceTabId]])if(Number.isInteger(id)){
+      const response=await tabMessage(id,'GET_CONTEXT',{sessionId:current.id});
+      if(response?.context?.viewport)current[role==='target'?'targetViewport':'sourceViewport']=response.context.viewport;
+    }
+    if(current.sourceTabId)await mediaMessage('RESIZE_CAPTURE',{sessionId:current.id,viewport:current.sourceViewport});
+    await publish();return{ok:true,session:current};
+  }catch(error){current.viewportPreset=viewportController.preset;current.viewportDebuggerTabs=viewportController.ownedTabIds();await publish().catch(()=>{});throw error;}
+  finally{transitioning=false;current.viewportChanging=false;if(session===current)await publish().catch(()=>{});notifyPanels();}
+}
+
 async function openDiff(current = session) {
   if (!current || session !== current) throw new Error('Start reviewing the current page first.');
   if (diffWindow?.sessionId === current.id) {
@@ -513,7 +577,7 @@ async function diffContext() {
   const current = session;
   if (!current) throw new Error('Start reviewing the current page first.');
   const target = await chrome.tabs.get(current.targetTabId);
-  const tabs = (await chrome.tabs.query({})).filter(tab => tab.id !== current.targetTabId && /^https?:\/\//.test(tab.url || ''))
+  const tabs = (await chrome.tabs.query({})).filter(tab => tab.id !== current.targetTabId && isReviewableUrl(tab.url))
     .sort((a, b) => Number(b.windowId === target.windowId) - Number(a.windowId === target.windowId))
     .map(({id, windowId, title, url}) => ({id, windowId, title, url}));
   if (session !== current) throw new Error('This review changed. Open Diff again.');
@@ -521,11 +585,10 @@ async function diffContext() {
 }
 
 async function referenceSource(current, sourceTabId, expectedUrl) {
-  if (!Number.isInteger(sourceTabId) || sourceTabId === current.targetTabId) throw new Error('Choose a different web page as the reference.');
+  if (!Number.isInteger(sourceTabId) || sourceTabId === current.targetTabId) throw new Error('Choose a different page as the reference.');
   const source = await chrome.tabs.get(sourceTabId);
-  const origin = sitePattern(source.url);
   if (expectedUrl && source.url !== expectedUrl) throw new Error('The selected reference navigated. Choose it again.');
-  if (!(await chrome.permissions.contains({origins: [origin]}))) throw new Error('Allow Diffuse to read the selected reference page before continuing.');
+  await assertPageAccess(source.url, chrome, 'Allow Diffuse to read the selected reference page before continuing.');
   if (session !== current) throw new Error('This review changed. Open Diff again.');
   return source;
 }
@@ -558,6 +621,7 @@ function nextReferenceSession(current, source = null) {
 }
 
 async function recoverReferenceAsAudit(current, reason = '') {
+  if(current.sourceTabId)await viewportController.releaseTab(current.sourceTabId);
   const next = nextReferenceSession(current);
   session = next; panelDockState = null;
   await persist();
@@ -590,6 +654,7 @@ async function attachReference(message) {
     next = nextReferenceSession(current, source);
     next.referenceHandle = prepared.expectedHandle;
     next.sourceViewport = prepared.viewport;
+    if(current.viewportPreset){await viewportController.apply(next,current.viewportPreset);next.viewportDebuggerTabs=viewportController.ownedTabIds();}
     const result = await mediaMessage('COMMIT_REFERENCE', {sessionId: current.id, requestId: message.requestId, newSessionId: next.id});
     committed = true;
     if (session !== current) throw new Error('This review changed while attaching its reference.');
@@ -598,11 +663,13 @@ async function attachReference(message) {
     await persist();
     if (current.sourceTabId) await softTabMessage(current.sourceTabId, 'STOP', {sessionId: current.id});
     await initializeTab('source');
+    if(next.viewportPreset)await mediaMessage('RESIZE_CAPTURE',{sessionId:next.id,viewport:next.sourceViewport});
     await initializeTab('target');
     await connectTarget();
     await focusTab(next.targetTabId);
     return {ok: true, session: next};
   } catch (error) {
+    if(!committed&&current.viewportPreset)await viewportController.apply(current,current.viewportPreset).catch(()=>{});
     if (committed && (session === current || session === next)) await recoverReferenceAsAudit(next || current, 'The reference could not connect. Continue reviewing this page or choose another reference.');
     throw error;
   } finally {
@@ -714,7 +781,15 @@ async function acceptSuggestion(message) {
     assertSuggestionSession(current, message.batchId);
     // If a worker restarted after the atomic comment save, do not add the same finding twice.
     if (!existing.comments.some(comment => comment.ai?.suggestionId === suggestion.id)) {
-      const selection = selectionFromSuggestion(suggestion, batch.context.production);
+      let selection = selectionFromSuggestion(suggestion, batch.context.production);
+      // A saved AI finding should follow its actual page element when the
+      // screenshot's page context is still current. Captured evidence is kept
+      // intact when the tab moved or the content script is unavailable.
+      try {
+        const anchored = await tabMessage(current.targetTabId, 'ANCHOR_SELECTION', {sessionId: current.id, selection});
+        if (anchored?.selection?.anchor) selection = {...selection, anchor: anchored.selection.anchor};
+      } catch {}
+      assertSuggestionSession(current, message.batchId);
       const production = await mediaMessage('ANNOTATE_EVIDENCE', {sessionId: current.id, dataUrl: batch.evidence.production.dataUrl, capturedAt: batch.evidence.production.capturedAt, selection, viewport: batch.context.production.viewport});
       assertSuggestionSession(current, message.batchId);
       let prototype = batch.evidence.prototype;
@@ -839,6 +914,7 @@ async function handle(message, sender) {
   }
   if (message.type === 'OPEN_DIFF' && (isPopup || (role === 'target' && message.sessionId === session.id))) return openDiff();
   if (message.type === 'PANEL_STATE' || message.type === 'PANEL_COMMAND') return panelRequest(message, sender);
+  if (message.type === 'VIEWPORT_PRESET') return setViewportPreset(message,sender);
   if (message.type === 'OPEN_AI_SETTINGS' && (isPopup || isPanel || isReport || role === 'target')) { await chrome.tabs.create({url: chrome.runtime.getURL('ai-settings.html')}); return {ok: true}; }
   if (message.type === 'GET_AI_CONFIG' && (isAISettings || isPopup || isPanel || role === 'target')) return {ok: true, config: await readAISettings()};
   if (isAISettings && message.type === 'SAVE_AI_CONFIG') return {ok: true, config: await saveAISettings(message)};
@@ -1104,7 +1180,7 @@ chrome.tabs.onUpdated.addListener((tabId, change) => {
       session[role].url = change.url;
       await publish();
     }
-  })().catch(error => setStatus('error', error.message));
+  })().catch(async error => {if(viewportController.ownedTabIds().includes(tabId)){await viewportController.restore();if(session){session.viewportPreset=null;session.viewportDebuggerTabs=[];}}await setStatus('error', error.message);});
 });
 
 chrome.tabs.onRemoved.addListener(tabId => {
@@ -1117,5 +1193,7 @@ chrome.tabs.onRemoved.addListener(tabId => {
     }
   }).catch(() => {});
 });
+
+chrome.debugger?.onDetach?.addListener((source,reason)=>{ready.then(()=>viewportController.externalDetach(source,reason)).catch(()=>{});});
 
 chrome.runtime.onInstalled.addListener(() => { chrome.storage.session.remove('comparison'); reviews.removeExpiredDrafts().catch(() => {}); });

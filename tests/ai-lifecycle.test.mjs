@@ -1,3 +1,5 @@
+import {assertPageAccess as coreAssertPageAccess} from '../extension/core.mjs';
+import {createViewportController} from '../extension/viewport-controller.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -47,7 +49,7 @@ async function harness({initial = null, settings} = {}) {
     },
     permissions: {contains: async () => true},
   };
-  const context = vm.createContext({
+  const context = vm.createContext({createViewportController, assertPageAccess:(url,api=chrome,message)=>coreAssertPageAccess(url,api,message),
     chrome, crypto: webcrypto, AbortController,
     DEFAULT_SETTINGS: {}, viewportWarning: () => '',
     reviews: {},

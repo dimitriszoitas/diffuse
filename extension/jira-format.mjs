@@ -1,5 +1,6 @@
 import {commentDisplayTitle} from './review-store.mjs';
 import {CATEGORY_LABELS, commentIsAudit, evidenceImages, evidenceVideo, fileStem, safePageUrl} from './report-format.mjs';
+import {commentViewportKey, viewportLabel} from './viewport-profile.mjs';
 
 const SECTION_FIELDS = Object.freeze([
   ['comment', 'Current'], ['expected', 'Requested change'], ['component', 'Component'],
@@ -55,6 +56,7 @@ function capturedUrl(comment, side, fallback) {
 /** Pure Jira fields only: destination, assignee and required-field mapping belong to the caller. */
 export function jiraIssueFields(comment = {}, review = {}, {index = 0} = {}) {
   const content = [];
+  if (commentViewportKey(comment) !== 'unknown') content.push(heading('Viewport'), paragraph(viewportLabel(comment)));
   for (const [field, label] of SECTION_FIELDS) {
     const value = text(comment.fields?.[field]);
     if (value) content.push(heading(label), paragraph(value));

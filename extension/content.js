@@ -13,6 +13,7 @@
   let scrollFrame = null;
   let resizeTimer = null;
   let localWarning = '';
+  let viewportActionBusy = false;
   let abort = null;
   let reconnectTimer = null;
   let frameCallback = null;
@@ -40,6 +41,7 @@
   let openPinId = null;
   let pinItems = [];
   let pinsUrl = '';
+  let pinsViewport = '';
   let aiConfig = {hasKey:false,model:'',threshold:35};
   let aiBatch = null;
   let aiBusy = false;
@@ -73,7 +75,7 @@
   const styles = `
 :host{all:initial!important;position:fixed!important;inset:0!important;display:block!important;z-index:2147483647!important;pointer-events:none!important;color-scheme:dark!important;contain:layout style!important;--ink:#211a35;--panel:#241c35;--raised:#342844;--text:#fcfaff;--muted:#d2c7df;--line:#9381ae;--accent:#c9adff;--coral:#ff9b85;font:400 16px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important}
 :host::backdrop{background:transparent!important;pointer-events:none!important}:host([data-evidence-hidden]){visibility:hidden!important}
-:host([data-docked]) #toolbar,:host([data-docked]) #comment-panel,:host([data-docked]) #ai-panel,:host([data-docked]) #panel-backdrop{display:none!important}
+:host([data-docked]) #comment-panel,:host([data-docked]) #ai-panel,:host([data-docked]) #panel-backdrop{display:none!important}
 *{box-sizing:border-box}[hidden]{display:none!important}button,input,textarea,select,summary{font:inherit}button,summary{cursor:pointer}button,input,textarea,select,summary{scroll-margin:84px 12px 20px}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:3px;box-shadow:0 0 0 2px #211a35}button:disabled{opacity:.55;cursor:default}
 button,summary{min-height:44px;min-width:44px;display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:9px 13px;background:var(--raised);color:var(--text);font-size:16px;line-height:1.4;white-space:normal}button:hover,summary:hover{background:#49365f}input,textarea,select{color:var(--text);background:#171122;border:1px solid var(--line);border-radius:9px;padding:10px 12px;min-height:44px;min-width:0}input::placeholder,textarea::placeholder{color:#bbb0ca;opacity:1}input[type=range]{padding:0;accent-color:var(--accent);border:0;background:transparent;min-width:80px}input[type=checkbox]{accent-color:var(--accent);width:22px;height:22px;min-height:22px;padding:0;margin:0;flex-shrink:0}
 #layer{position:absolute;inset:0;overflow:hidden;pointer-events:none}#reference{position:absolute;top:0;left:0;max-width:none;max-height:none;object-fit:fill;pointer-events:none}#divider{position:absolute;top:0;bottom:0;width:2px;background:var(--accent);box-shadow:0 0 0 1px #211a3580;pointer-events:none}#handle{position:absolute;top:38%;left:-23px;width:48px;height:64px;border:2px solid #fff;border-radius:24px;background:var(--accent);color:var(--ink);font-size:25px;pointer-events:auto;cursor:ew-resize;touch-action:none;box-shadow:0 4px 18px #211a3555}
@@ -85,14 +87,21 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
 #selection-outline{position:fixed;border:2px solid var(--accent);background:#c9adff18;box-shadow:0 0 0 1px #211a35;pointer-events:none;z-index:1}#selection-label{position:absolute;left:-2px;bottom:calc(100% + 6px);max-width:min(400px,90vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:6px 9px;background:var(--accent);color:var(--ink);border-radius:6px;font-size:14px;font-weight:600}#selection-outline[data-region=true]{border-style:dotted;background:#c9adff20}
 #comment-pins{position:absolute;inset:0;pointer-events:none}.comment-pin{position:absolute;transform:translate(-50%,-50%);width:44px;height:44px;min-width:44px;min-height:44px;border:2px solid #fff;border-radius:50% 50% 50% 8px;background:var(--category-color,#c9adff);color:var(--category-ink,#38205d);box-shadow:0 3px 12px #211a3570;padding:0;font-size:16px;font-weight:750;pointer-events:auto}.comment-pin:hover,.comment-pin[aria-expanded=true]{background:var(--category-color,#c9adff);filter:brightness(1.04);outline:2px solid #211a35;outline-offset:2px}
 #saved-comment-bubble{position:absolute;width:380px;max-width:calc(100% - 24px);max-height:calc(100% - 32px);overflow:auto;pointer-events:auto;background:var(--panel);color:var(--text);border:2px solid var(--category-color,#c9adff);border-radius:16px;padding:18px;box-shadow:0 10px 35px #120c2455;font-size:16px;line-height:1.6}#saved-comment-bubble h3{font-size:20px;line-height:1.4;margin:14px 0}#saved-comment-bubble p{white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0}.bubble-top{display:flex;justify-content:space-between;align-items:center;gap:10px}.bubble-meta{font-size:14px;color:var(--muted)}.bubble-actions{display:flex;gap:10px;margin-top:16px}#saved-comment-category{display:inline-block;border-radius:7px;padding:5px 9px;background:var(--category-color,#c9adff);color:var(--category-ink,#38205d);font-weight:650}#saved-comment-highlight{position:absolute;border:2px dashed var(--category-color,#c9adff);background:color-mix(in srgb,var(--category-color,#c9adff) 8%,transparent);pointer-events:none}
-#panel-backdrop{position:absolute;inset:0;background:#120c2428;pointer-events:auto;z-index:15}#comment-panel,#ai-panel{position:absolute;top:16px;right:16px;width:490px;max-width:calc(100% - 32px);max-height:calc(100% - 32px);overflow:auto;overscroll-behavior:contain;scroll-padding-top:88px;pointer-events:auto;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:20px;box-shadow:0 16px 60px #120c2460;font-size:16px;line-height:1.55}#ai-panel{width:530px;border-color:var(--accent)}.composer-header{position:sticky;top:0;display:flex;align-items:center;justify-content:space-between;gap:16px;background:var(--panel);padding:18px 22px;border-bottom:1px solid #756189;z-index:1}.composer-header h2{margin:0;font-size:24px;line-height:1.3;font-weight:700;letter-spacing:-.5px}.composer-close{font-size:28px;width:44px;height:44px;padding:0;flex-shrink:0}.composer-body{padding:20px 22px 24px}.composer-field{display:grid;gap:8px;margin-bottom:20px}.composer-field>span{color:var(--text);font-weight:600}.composer-field small,.composer-note{font-size:14px;line-height:1.6;color:var(--muted)}.composer-field input,.composer-field textarea,.composer-field select{display:block;width:100%;font-size:16px;line-height:1.5;letter-spacing:normal}.composer-field textarea{resize:vertical;min-height:100px}.composer-field select{color-scheme:dark}.composer-row{display:grid;grid-template-columns:1fr 145px;gap:16px}.composer-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:20px}#save-comment{background:var(--accent);color:var(--ink);border-color:var(--accent);font-weight:700}.composer-note{margin:10px 0 0}.composer-error{padding:14px;border:1px solid var(--coral);border-radius:10px;background:#46272f;color:#ffd9cd;font-size:16px;line-height:1.6;margin:14px 0;overflow-wrap:anywhere}.composer-error:empty{display:none}#capture-retry-description{margin:0 0 16px;color:var(--text);line-height:1.6}#selection-summary{font-size:14px;line-height:1.6;color:var(--muted);overflow-wrap:anywhere;margin:0 0 20px}
+#panel-backdrop{position:absolute;inset:0;background:#120c2428;pointer-events:auto;z-index:15}#comment-panel,#ai-panel{position:absolute;top:16px;right:16px;width:490px;max-width:calc(100% - 32px);max-height:calc(100% - 32px);overflow:auto;overscroll-behavior:contain;scroll-padding-top:88px;pointer-events:auto;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:20px;box-shadow:0 16px 60px #120c2460;font-size:16px;line-height:1.55}#ai-panel{width:530px;border-color:var(--accent)}.composer-header{position:sticky;top:0;display:flex;align-items:center;justify-content:space-between;gap:16px;background:var(--panel);padding:18px 22px;border-bottom:1px solid #756189;z-index:1}.composer-header h2{margin:0;font-size:24px;line-height:1.3;font-weight:700;letter-spacing:-.5px}.composer-close{font-size:28px;width:44px;height:44px;padding:0;flex-shrink:0}.composer-body{padding:20px 22px 24px}.composer-field{display:grid;gap:8px;margin-bottom:20px}.composer-field>span{color:var(--text);font-weight:600}.composer-field small,.composer-note{font-size:14px;line-height:1.6;color:var(--muted)}.composer-field input,.composer-field textarea,.composer-field select{display:block;width:100%;font-size:16px;line-height:1.5;letter-spacing:normal}.composer-field textarea{resize:vertical;min-height:100px}.composer-field select{color-scheme:dark}.composer-row{display:grid;grid-template-columns:1fr 145px;gap:16px}.composer-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:20px}#comment-panel{display:flex;flex-direction:column;overflow:hidden}#comment-panel .composer-header{position:relative;flex-shrink:0;padding:14px 18px}#comment-panel .composer-header h2{font-size:22px}#comment-panel>.composer-body{min-height:0;overflow:auto;overscroll-behavior:contain;padding:16px 18px;scroll-padding-block:12px}#comment-panel .composer-field{margin-bottom:16px}.composer-footer{flex-shrink:0;padding:12px 18px;background:var(--panel);border-top:1px solid var(--line)}.composer-footer .composer-actions{margin:0}.composer-footer .composer-error{margin:0 0 10px;max-height:22vh;overflow:auto;font-size:14px;padding:10px}#comment-panel:has(#comment-form[hidden]) .composer-footer .composer-actions{display:none}#comment-panel:has(#comment-form[hidden]) .composer-footer:not(:has(.composer-error:not(:empty))){display:none}#save-comment{background:var(--accent);color:var(--ink);border-color:var(--accent);font-weight:700}.composer-note{margin:10px 0 0}.composer-error{padding:14px;border:1px solid var(--coral);border-radius:10px;background:#46272f;color:#ffd9cd;font-size:16px;line-height:1.6;margin:14px 0;overflow-wrap:anywhere}.composer-error:empty{display:none}#capture-retry-description{margin:0 0 16px;color:var(--text);line-height:1.6}#selection-summary{font-size:14px;line-height:1.6;color:var(--muted);overflow-wrap:anywhere;margin:0 0 20px}
 .evidence-preview{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}.evidence-preview figure{margin:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#171122}.evidence-preview img{display:block;width:100%;height:110px;object-fit:contain;background:#100c18}.evidence-preview figcaption{padding:8px 10px;color:var(--text);font-size:14px}.evidence-choice{border:0;padding:0;margin:0 0 16px}.evidence-choice legend{font-weight:650;color:var(--text);margin-bottom:10px}.evidence-options{display:flex;gap:8px}.evidence-options button{flex:1}.evidence-options button[aria-pressed=true]{background:var(--accent);color:var(--ink);border-color:var(--accent);font-weight:650}#recording-choice{margin-bottom:18px}#recording-choice-note{margin:0 0 12px}#comment-record{margin-top:10px}#recording-preview{position:static;display:block;width:100%;height:190px;object-fit:contain;background:#100c18;border-radius:10px;pointer-events:auto}#comment-category{border-color:var(--category-color);color:var(--category-color)}#comment-category option{background:#171122;color:var(--text)}
 #ai-suggestions{display:grid;gap:16px;margin-top:20px}.ai-suggestion{border:1px solid #a18cbd;border-radius:14px;padding:18px;background:#30233e}.ai-suggestion h3{font-size:21px;line-height:1.4;margin:12px 0}.ai-suggestion p{margin:10px 0;overflow-wrap:anywhere}.ai-suggestion h4{font-size:14px;line-height:1.5;font-weight:700;color:#dfcaff;margin:0 0 6px}.ai-current{margin-top:16px}.ai-current p,.ai-change p{font-size:16px;line-height:1.7;white-space:pre-line;margin:0}.ai-change{margin-top:16px;padding:16px;border-left:3px solid #ff9b85;border-radius:0 8px 8px 0;background:#ff9b8512}.ai-change h4{color:#ffb7a4}.ai-suggestion-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}.ai-suggestion-meta{font-size:14px;line-height:1.6;color:#dfcaff}.ai-suggestion [data-action=accept]{border-color:var(--accent);color:var(--accent);font-weight:650}#ai-region-preview{position:absolute;border:3px dashed var(--accent);background:#c9adff18;pointer-events:none}#ai-region-label{position:absolute;left:0;top:0;padding:5px 9px;background:#6941c6;color:#fff;font-size:14px;font-weight:600}.ai-disclosure{padding:14px;background:#30243f;border:1px solid #9682ac;border-radius:10px;color:#e6d8fa;font-size:14px;line-height:1.6}.ai-empty{color:var(--muted);font-size:16px;line-height:1.6}.threshold-ends{display:flex;justify-content:space-between;gap:14px}.threshold-ends small{font-size:14px;color:#dfcaff}#ai-results-status{border:1px solid #a18cbd;border-radius:14px;background:#30243f;padding:18px}#ai-results-status h3{font-size:20px;line-height:1.4;color:var(--text);margin:0 0 10px}#ai-results-status p{margin:0;font-size:16px;line-height:1.6;color:#e6d8fa}#ai-show-all,#ai-accept-all{margin-top:14px;width:100%;font-size:16px;font-weight:700}#ai-show-all{background:#c9adff;color:#211a35;border-color:#c9adff}#ai-accept-all{background:#ff9b85;color:#211a35;border-color:#ff9b85}#ai-results-status .ai-filter-note{font-size:14px;margin-top:10px;color:var(--muted)}.ai-run-details{margin-top:8px}.ai-run-details summary{font-size:16px;white-space:normal}.ai-run-details p{margin:14px 0}
 #comment-pins{z-index:2}#saved-comment-highlight,#ai-region-preview{z-index:3}#toolbar{z-index:10}#saved-comment-bubble,#comment-panel,#ai-panel{z-index:20}#picker-tip,#capture-progress{z-index:30}#picker-tip,#capture-progress{position:absolute;top:16px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:12px;flex-wrap:wrap;width:max-content;max-width:calc(100% - 32px);max-height:calc(100% - 32px);overflow:auto;padding:14px 18px;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--text);font-size:16px;line-height:1.5;box-shadow:0 8px 30px #120c2455}#picker-tip{pointer-events:auto}#picker-tip>span{flex:1;min-width:160px}#capture-progress{pointer-events:none}#area-coordinates{flex-basis:100%}#area-coordinates summary{width:100%;justify-content:space-between}#area-form{padding-top:14px}.area-fields{display:grid;grid-template-columns:repeat(4,minmax(60px,1fr));gap:10px;margin-bottom:14px}.area-fields label{display:grid;gap:6px;font-size:14px}.area-fields input{width:100%;font-size:16px}#area-error{color:#ffd9cd;font-size:14px}#area-error:empty{display:none}
 @media(max-width:1100px){#toolbar{width:calc(100% - 32px)}.brand{margin-right:auto}.review-bar .composer-note{flex-basis:100%}.bar{gap:10px}.separator{display:none}}
 @media(max-width:650px){#toolbar{bottom:8px;max-height:42vh;overflow:auto;width:calc(100% - 16px);max-width:none;border-radius:14px}.bar{padding:10px;gap:8px}.bar button,.bar summary{font-size:16px}.control{flex-wrap:wrap}.alignment{position:fixed;left:10px;right:10px;bottom:10px;top:auto;width:auto;max-height:75vh;overflow:auto;z-index:40}#comment-panel,#ai-panel{top:8px;right:8px;width:calc(100% - 16px);max-width:none;max-height:calc(100% - 16px);border-radius:14px}.composer-header{padding:14px}.composer-body{padding:16px}.composer-row{grid-template-columns:1fr}.evidence-options{flex-wrap:wrap}.evidence-options button{min-width:100px}.area-fields{grid-template-columns:1fr 1fr}.composer-header h2{font-size:22px}#saved-comment-bubble{width:calc(100% - 24px)}.edge-label{font-size:14px}}
+:host([data-docked]) #toolbar{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px;padding:8px;width:max-content;max-width:calc(100% - 16px);border-radius:14px}
+:host([data-docked]) #toolbar>.bar{display:contents}
+:host([data-docked]) .comparison-bar>:not(#diff),:host([data-docked]) #recording-note{display:none!important}
+:host([data-docked]) #toolbar button{padding:9px 12px}
+:host([data-docked]) #warning,:host([data-docked]) #diff-hint{flex-basis:100%;margin:0;padding:8px;font-size:14px}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 @media(forced-colors:active){button,input,select,textarea,summary,#toolbar,#comment-panel,#ai-panel,#saved-comment-bubble{border-color:ButtonText}.comment-pin,#handle{forced-color-adjust:none}.mark{forced-color-adjust:none}button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid Highlight}}
+.viewport-bar{border-top:1px solid var(--line);gap:8px;padding:8px 12px}.viewport-segments{display:flex;gap:2px;border:1px solid var(--line);border-radius:10px;padding:2px}.viewport-segments button{font-size:14px;min-height:44px;padding:5px 9px;border:1px solid transparent;background:transparent}.viewport-segments button[aria-pressed=true]{background:var(--accent);color:var(--ink)}.viewport-bar .composer-note{font-size:14px;margin:0}:host([data-docked]) .viewport-bar{display:none!important}
+@media(max-width:650px){#toolbar .bar{padding:7px 9px;gap:6px}#toolbar .bar button,#toolbar .bar summary{font-size:14px;padding:5px 9px;min-height:44px}#toolbar .brand{font-size:18px;gap:8px}#toolbar #status,#toolbar #recording-note{display:none}#toolbar .viewport-bar{gap:5px}#toolbar .viewport-segments{gap:0}#toolbar #viewport-caption{flex-basis:100%}}
   `;
 
   function makeOverlay() {
@@ -103,13 +112,14 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
       <div id="layer" aria-hidden="true"><video id="reference" autoplay muted playsinline></video></div>
       <div id="divider"><span class="edge-label production">Production</span><span class="edge-label prototype">Prototype</span><button id="handle" type="button" role="slider" aria-label="Prototype reveal" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">↔</button></div>
       <div id="toolbar" role="region" aria-label="Diffuse live comparison">
-        <div class="bar"><span class="brand"><span class="mark" aria-hidden="true"></span>Diffuse</span><span id="status" role="status">Preparing review</span><button id="diff" type="button" aria-describedby="diff-hint">Diff</button><span class="separator"></span>
+        <div class="bar comparison-bar"><span class="brand"><span class="mark" aria-hidden="true"></span>Diffuse</span><span id="status" role="status">Preparing review</span><button id="diff" type="button" aria-describedby="diff-hint">Diff</button><span class="separator"></span>
         <label class="control">Opacity <input id="opacity" type="range" min="0" max="100" value="55"><output id="opacity-value">55%</output></label>
         <label class="control"><input id="linked" type="checkbox" checked>Link scroll</label>
         <button id="hide" type="button" aria-pressed="false">Hide reference</button>
         <details id="align"><summary>Adjust</summary><div class="alignment"><label class="reveal-field">Reveal position <input id="reveal" type="range" min="0" max="100" value="50"><output id="reveal-value">50%</output></label><label>Horizontal <input id="offset-x" type="number" min="-3000" max="3000" value="0" step="1"></label><label>Vertical <input id="offset-y" type="number" min="-3000" max="3000" value="0" step="1"></label><button id="reset" type="button">Reset alignment</button><small>Click the slider or use arrow keys to adjust the reveal without dragging.</small></div></details>
         <button id="source" type="button">Reference ↗</button><button id="reconnect" type="button" hidden>Reconnect</button><button id="dock-sidebar" type="button">Dock in sidebar</button><button id="stop" type="button" aria-label="Stop review">Stop</button></div>
         <div class="bar review-bar"><button id="comment" type="button" aria-pressed="false">Comment</button><button id="area-comment" type="button" aria-pressed="false" title="Select an area, or hold C and drag on the page">Area · C</button><button id="review" type="button">Review (0)</button><button id="record" type="button" title="Record this page as shown. No audio. Up to 30 seconds.">Record comparison</button><button id="ai-review" type="button">AI review</button><span class="composer-note" id="recording-note">Screenshots with every comment · video optional</span></div>
+        <div id="viewport-controls" class="bar viewport-bar"><div class="viewport-segments" role="group" aria-label="Change responsive viewport"><button type="button" data-preset="desktop" aria-pressed="false" title="Desktop · 1440 × 900">Desktop</button><button type="button" data-preset="tablet" aria-pressed="false" title="Laptop / tablet · 1024 × 768">Laptop / tablet</button><button type="button" data-preset="phone" aria-pressed="false" title="Phone · 390 × 844">Phone</button></div><button id="viewport-native" type="button" aria-label="Restore window viewport" title="Use the window’s native size" hidden>Reset</button><span id="viewport-caption" class="composer-note" role="status"></span></div>
         <div id="warning" role="status"></div><div id="diff-hint" class="composer-note" style="padding:0 16px 12px" hidden></div>
       </div>
       <div id="selection-outline" hidden aria-hidden="true"><span id="selection-label"></span></div>
@@ -137,15 +147,15 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
             <div class="composer-row"><label class="composer-field"><span>State</span><input id="comment-state" type="text" required maxlength="160" value="Current state"></label><label class="composer-field"><span>Severity</span><select id="comment-severity"><option value="minor">Minor</option><option value="major">Major</option><option value="critical">Critical</option></select></label></div>
             <label class="composer-field"><span>Steps to reproduce <small>(optional)</small></span><textarea id="comment-steps" maxlength="6000" placeholder="How did you reach this state?"></textarea></label>
             <p class="composer-note" id="evidence-note"></p><p class="composer-note">State names describe this capture. Other states have not been checked.</p>
-            <div class="composer-actions"><button id="cancel-comment" type="button">Cancel</button><button id="save-comment" type="submit">Save comment</button></div>
           </form>
-          <div id="comment-error" class="composer-error" role="alert"></div>
         </div>
+        <div class="composer-footer"><div id="comment-error" class="composer-error" role="alert"></div><div class="composer-actions"><button id="cancel-comment" type="button">Cancel</button><button id="save-comment" type="submit" form="comment-form">Save comment</button></div></div>
       </section>`;
     document.documentElement.append(host);
     liftAboveDialogs();
     video = el('reference');
     if(video)video.muted = true;
+    for(const button of el('viewport-controls').querySelectorAll('button'))button.addEventListener('click',()=>changeViewport(button.dataset.preset||null));
     el('opacity').addEventListener('input', event => updateSettings({opacity: Number(event.target.value) / 100}));
     el('reveal').addEventListener('input',event=>updateSettings({reveal:Number(event.target.value)}));
     el('linked').addEventListener('change', event => {
@@ -283,6 +293,7 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
     if(!root)return;
     const open=!docked&&['comment-panel','ai-panel'].some(id=>!el(id).hidden);
     el('panel-backdrop').hidden=!open;
+    el('toolbar').setAttribute('aria-label',docked?'Diffuse quick actions. Edit comments and AI reviews in the sidebar.':'Diffuse review');
     el('toolbar').inert=open;
     el('saved-comment-bubble').inert=open;
     for(const id of ['comment-panel','ai-panel'])el(id).setAttribute('aria-modal',String(!docked&&!el(id).hidden));
@@ -301,12 +312,41 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
       &&(!Number.isFinite(captured.visualScale)||Math.abs(captured.visualScale-(visualViewport?.scale||1))<0.01));
   }
 
+  function viewportGroup(width) { return !Number.isFinite(width)||width<=0?'unknown':width>=1280?'desktop':width>=768?'tablet':'phone'; }
+  function currentViewportGroup() { return session?.viewportPreset || viewportGroup(innerWidth); }
+  function commentViewportGroup(comment) {
+    const context=comment.context?.production||comment.selection?.context;
+    const key=context?.viewportProfile?.key;
+    return ['desktop','tablet','phone'].includes(key)?key:viewportGroup(context?.viewport?.width);
+  }
+  function commentInCurrentViewport(comment) { const key=commentViewportGroup(comment);return key==='unknown'||key===currentViewportGroup(); }
+
   function currentContext() {
-    return globalThis.DiffuseInspector?.context() || {
+    const context = globalThis.DiffuseInspector?.context() || {
       url: location.href, title: document.title, capturedAt: new Date().toISOString(),
       viewport: viewport(), scroll: {x: scrollX, y: scrollY}, language: document.documentElement.lang || navigator.language,
       browser: {userAgent: navigator.userAgent, platform: navigator.platform},
     };
+    return {...context,viewportProfile:{key:currentViewportGroup(),mode:session?.viewportPreset?'preset':'window'}};
+  }
+
+  async function changeViewport(preset) {
+    if(viewportActionBusy)return;
+    const reason=diffDisabledReason();
+    if(reason){localWarning=reason;paint();return;}
+    viewportActionBusy=true;localWarning='';paint();
+    try { requireSuccess(await send('VIEWPORT_PRESET',{preset})); }
+    catch(error){localWarning=error.message;}
+    finally{viewportActionBusy=false;paint();}
+  }
+
+  function paintViewport() {
+    if(!root||!el('viewport-controls'))return;
+    const key=currentViewportGroup(),busy=viewportActionBusy||session?.viewportChanging||Boolean(diffDisabledReason());
+    for(const button of el('viewport-controls').querySelectorAll('button')){button.disabled=Boolean(busy);if(button.dataset.preset)button.setAttribute('aria-pressed',String(button.dataset.preset===key));}
+    el('viewport-native').hidden=!session?.viewportPreset;
+    const count=(session?.comments||[]).filter(commentInCurrentViewport).length;
+    el('viewport-caption').textContent=viewportActionBusy?'Changing viewport…':`${innerWidth} × ${innerHeight} · ${count} comment${count===1?'':'s'} in this view`;
   }
 
   function panelState(message={}) {
@@ -516,26 +556,20 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
 
   function commentRect(comment) {
     const selection=comment.selection;
-    if(!selection){const scroll=comment.context?.production?.scroll||{x:0,y:0};return{x:scroll.x+24-scrollX,y:scroll.y+24-scrollY,width:1,height:1};}
-    if(selection.kind!=='region'&&selection.selector){
-      const target=globalThis.DiffuseInspector?.resolveSelector(selection.selector);
-      if(target?.isConnected){const rect=target.getBoundingClientRect();if(rect.width||rect.height)return{x:rect.x,y:rect.y,width:rect.width,height:rect.height};}
-    }
-    if(!viewportMatches(selection.context?.viewport||comment.context?.production?.viewport))return null;
-    const rect=selection.rect?.document;
-    if(rect&&Number.isFinite(rect.x)&&Number.isFinite(rect.y))return{x:rect.x-scrollX,y:rect.y-scrollY,width:rect.width,height:rect.height};
-    return null;
+    if(!selection){const scroll=comment.context?.production?.scroll||{x:0,y:0};const rect={x:scroll.x+24-scrollX,y:scroll.y+24-scrollY,width:1,height:1};return{...rect,visible:rect};}
+    return globalThis.DiffuseInspector?.resolveSelection(selection) || null;
   }
 
   function renderPins() {
     if(!root)return;
-    pinsUrl=location.href;
-    const comments=(session?.comments||[]).filter(comment=>(comment.context?.production?.url||comment.selection?.context?.url)===location.href);
+    pinsUrl=location.href;pinsViewport=currentViewportGroup();
+    const comments=(session?.comments||[]).filter(comment=>commentInCurrentViewport(comment)&&(comment.context?.production?.url||comment.selection?.context?.url)===location.href);
     const existing=new Map([...el('comment-pins').children].map(button=>[button.dataset.commentId,button]));
     pinItems=comments.map((comment,index)=>{
+      const number=(session.comments||[]).findIndex(item=>item.id===comment.id)+1;
       let button=existing.get(comment.id);existing.delete(comment.id);
       if(!button){button=document.createElement('button');button.type='button';button.className='comment-pin';button.dataset.commentId=comment.id;button.addEventListener('click',()=>openPin(comment.id));el('comment-pins').append(button);}
-      colorCategory(button,comment.fields?.category);button.textContent=String(index+1);button.title=`${categoryLabel(comment.fields?.category)}: ${commentTitle(comment.fields)}`;button.setAttribute('aria-label',`Comment ${index+1}, ${categoryLabel(comment.fields?.category)}: ${commentTitle(comment.fields)}`);button.setAttribute('aria-expanded',String(openPinId===comment.id));button.setAttribute('aria-controls','saved-comment-bubble');
+      colorCategory(button,comment.fields?.category);button.textContent=String(number);button.title=`${categoryLabel(comment.fields?.category)}: ${commentTitle(comment.fields)}`;button.setAttribute('aria-label',`Comment ${number}, ${categoryLabel(comment.fields?.category)}: ${commentTitle(comment.fields)}`);button.setAttribute('aria-expanded',String(openPinId===comment.id));button.setAttribute('aria-controls','saved-comment-bubble');
       return{comment,button};
     });
     for(const button of existing.values())button.remove();
@@ -545,17 +579,25 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
 
   function updatePinPositions() {
     if(!root)return;
-    if(pinsUrl!==location.href){renderPins();return;}
+    if(pinsUrl!==location.href||pinsViewport!==currentViewportGroup()){renderPins();return;}
     for(const item of pinItems){
       const rect=commentRect(item.comment);item.rect=rect;
-      item.button.hidden=!rect||rect.x+rect.width<0||rect.y+rect.height<0||rect.x>innerWidth||rect.y>innerHeight||picking||areaArmed||Boolean(areaDrag);
-      if(rect){item.button.style.left=`${Math.max(22,Math.min(innerWidth-22,rect.x+Math.min(rect.width,12)))}px`;item.button.style.top=`${Math.max(22,Math.min(innerHeight-22,rect.y+Math.min(rect.height,12)))}px`;}
-      if(item.comment.id===openPinId&&rect){
-        el('saved-comment-bubble').hidden=false;el('saved-comment-highlight').hidden=false;
-        const bubble=el('saved-comment-bubble');bubble.style.left=`${Math.max(12,Math.min(innerWidth-bubble.offsetWidth-12,rect.x+35))}px`;bubble.style.top=`${Math.max(12,Math.min(innerHeight-bubble.offsetHeight-12,rect.y+15))}px`;
-        Object.assign(el('saved-comment-highlight').style,{left:`${rect.x}px`,top:`${rect.y}px`,width:`${rect.width}px`,height:`${rect.height}px`});
+      const point=rect?{x:rect.x+Math.min(rect.width,12),y:rect.y+Math.min(rect.height,12)}:null;
+      const visible=rect?.visible;
+      // The pin belongs to one point on the page. Do not clamp it to the
+      // viewport edge when that point scrolls out of its container.
+      const inView=point&&visible&&point.x>=Math.max(0,visible.x)&&point.y>=Math.max(0,visible.y)
+        &&point.x<=Math.min(innerWidth,visible.x+visible.width)&&point.y<=Math.min(innerHeight,visible.y+visible.height);
+      item.button.hidden=!inView||picking||areaArmed||Boolean(areaDrag);
+      if(point){item.button.style.left=`${point.x}px`;item.button.style.top=`${point.y}px`;}
+      if(item.comment.id===openPinId){
+        const show=!item.button.hidden;
+        el('saved-comment-bubble').hidden=!show;el('saved-comment-highlight').hidden=!show;
+        if(show){
+          const bubble=el('saved-comment-bubble');bubble.style.left=`${Math.max(12,Math.min(innerWidth-bubble.offsetWidth-12,point.x+23))}px`;bubble.style.top=`${Math.max(12,Math.min(innerHeight-bubble.offsetHeight-12,point.y+3))}px`;
+          Object.assign(el('saved-comment-highlight').style,{left:`${visible.x}px`,top:`${visible.y}px`,width:`${visible.width}px`,height:`${visible.height}px`});
+        }
       }
-      if(item.comment.id===openPinId&&!rect){el('saved-comment-bubble').hidden=true;el('saved-comment-highlight').hidden=true;}
     }
   }
 
@@ -981,7 +1023,7 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
       if (typeof fields[key] === 'string') el(`comment-${id}`).value = fields[key];
     }
     colorCategory(el('comment-category'),el('comment-category').value);
-    evidenceChoice = draft.evidence?.video || draft.evidenceChoice==='video' ? 'recording' : sameDraft ? evidenceChoice : 'screenshot';
+    evidenceChoice = draft.evidenceChoice==='screenshot' ? 'screenshot' : draft.evidence?.video || draft.evidenceChoice==='video' ? 'recording' : sameDraft ? evidenceChoice : 'screenshot';
     el('component-hint').textContent = selection?.component?.source
       ? `Inferred from ${selection.component.source}. Edit this to match your team's component name.`
       : 'Name the component or page this recording describes.';
@@ -1112,6 +1154,7 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
   }
 
   function paintReviewControls() {
+    if(root&&session)paintViewport();
     if (!root) return;
     const diffReason=diffDisabledReason();
     el('diff').disabled=Boolean(diffReason);
@@ -1292,7 +1335,7 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
   function cleanup() {
     stopPicking(false);
     clearInterval(pinsTimer);pinsTimer=null;
-    areaArmed=false;areaDrag=null;cHeld=false;ignoreNextAreaClick=false;openPinId=null;pinItems=[];pinsUrl='';
+    areaArmed=false;areaDrag=null;cHeld=false;ignoreNextAreaClick=false;openPinId=null;pinItems=[];pinsUrl='';pinsViewport='';
     aiBatch=null;aiBusy=false;aiOperationBusy=false;aiBulkAccepting=false;aiThresholdOverride=null;aiSavedThreshold=null;aiPreviewContext=null;
     clearInterval(recordingTimer); recordingTimer = null;
     recording = null; recordingBusy = false; commentSaving = false; captureBusy = false;
@@ -1368,6 +1411,17 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
     if(message.type==='PANEL_STATE'&&role==='target')return{ok:true,state:panelState(message)};
     if(message.type==='PANEL_COMMAND'&&role==='target')return panelCommand(message);
     if (message.type === 'GET_CONTEXT') return {ok: true, context: currentContext()};
+    if (message.type === 'ANCHOR_SELECTION' && role === 'target') {
+      const selection=message.selection, context=selection?.context, rect=selection?.rect?.viewport;
+      // AI coordinates refer to the original screenshots. Attach a DOM anchor
+      // only while the page is still at that captured URL, size and scroll.
+      if(selection?.kind!=='region'||!rect||context?.url!==location.href||!viewportMatches(context.viewport)
+        ||Math.abs((context.scroll?.x||0)-scrollX)>1||Math.abs((context.scroll?.y||0)-scrollY)>1)return{ok:true,selection};
+      const recordedNested=context.nestedScroll||[], currentNested=globalThis.DiffuseInspector.nestedScrollSnapshot();
+      if(recordedNested.length!==currentNested.length||recordedNested.some(saved=>!currentNested.some(now=>now.selector===saved.selector&&Math.abs(now.x-saved.x)<=1&&Math.abs(now.y-saved.y)<=1)))return{ok:true,selection};
+      const observed=globalThis.DiffuseInspector.region(rect.x,rect.y,rect.width,rect.height);
+      return{ok:true,selection:{...selection,...(observed.anchor?{anchor:observed.anchor}:{})}};
+    }
     if (message.type === 'REFRESH_SELECTION' && role === 'target') {
       const element = globalThis.DiffuseInspector.resolveSelector(message.selector);
       return {ok: true, selection: element ? globalThis.DiffuseInspector.inspect(element) : null};

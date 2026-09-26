@@ -1,10 +1,10 @@
 # Diffuse — live design comparison and page audits
 
-**0.7.0 adds Jira handoff for individual or selected review observations.** Preview the destination, ticket text and evidence before explicitly creating tickets. The hosted service is configured; a real account grant and ticket creation still need end-to-end verification. The current Atlassian app is private to its owner, and the service permits the existing approved extension installation.
+**0.7.1 makes the interface more compact, supports local HTML files, and keeps a page toolbar visible beside the drawer.** Jira handoff supports individual or selected review observations: preview the destination, ticket text and evidence before explicitly creating tickets. The hosted service is deployed; a real account grant and ticket creation still need end-to-end verification. The current Atlassian app is private to its owner, and the service permits the existing approved extension installation.
 
-Diffuse includes one review workflow with an optional live Diff and native Chrome side drawer. Open it from the popup’s top-right drawer icon or the page toolbar’s **Dock in sidebar** button. The webpage resizes beside Diffuse, while comparison controls, comment drafts, recordings and AI review remain available in the drawer. Closing the drawer restores floating controls and preserves the unfinished comment. Chrome chooses the drawer side and owns its resize handle.
+Diffuse includes one review workflow with an optional live Diff and native Chrome side drawer. Open it from the popup’s top-right drawer icon or the page toolbar’s **Dock in sidebar** button. The webpage resizes beside Diffuse; a compact toolbar stays on the page while the drawer holds comment drafts and review panels. Closing the drawer restores the full floating controls and preserves the unfinished comment. Chrome chooses the drawer side and owns its resize handle.
 
-Keep both comparison pages in one Chrome window. Background tabs may retain their old viewport until activated, so visit the prototype once and return after changing the drawer width if the viewport warning appears. Native drawer pixels are excluded from screenshots and recordings. Region pins and AI highlights from a different captured viewport are suppressed rather than guessed; selector-backed pins can still resolve their element. The existing Chrome toolbar gesture is still required to grant capture on each reviewed tab. Selecting a new tab from a persistent drawer does not itself grant capture access.
+Keep both comparison pages in one Chrome window. Background tabs may retain their old viewport until activated, so visit the prototype once and return after changing the drawer width if the viewport warning appears. Native drawer pixels are excluded from screenshots and recordings. New comment pins follow their captured element or area anchor through scrolling and responsive layout changes. Pins leave the screen with their target instead of sticking to the viewport edge. Older area captures without anchors retain their recorded document position; an original screenshot remains available when a target cannot be located. AI preview highlights remain tied to their captured viewport. The existing Chrome toolbar gesture is still required to grant capture on each reviewed tab. Selecting a new tab from a persistent drawer does not itself grant capture access.
 
 Diffuse layers a **continuously running prototype** over a production page in Chrome. Drag a reveal divider, change opacity, and compare while the prototype keeps rendering. The source is a live tab video stream, including its animations and changing state.
 
@@ -21,6 +21,10 @@ The extension loads directly from its files; no build step is needed. After chan
 
 **Upgrading an existing installation:** replace the extension files in the same installed folder, then choose **Reload** on the existing extension card. Do not remove and reinstall the extension or load it from a different folder path: saved reviews belong to its extension ID in this Chrome profile. Keep that installation path unchanged to preserve access to them. Download an HTML report when you want a portable copy of a review.
 
+## Review a local HTML file
+
+For a page opened directly from your computer (`file:///…/page.html`), open `chrome://extensions`, choose Diffuse’s **Details**, and enable **Allow access to file URLs**. Return to the HTML page, reopen Diffuse and start the review. Diffuse also offers a settings shortcut when file access is off. Chrome requires this separate setting for local files; the extension cannot enable it for you. Local files can also be selected as live references. Localhost development servers continue to work with normal per-site permission.
+
 ## Start a review, then add Diff when needed
 
 Start on the page being reviewed: click the Chrome extension icon, choose **Start review**, and allow access to that page. The bottom toolbar gives you comments, region selection, recording, AI review and reports. There is no upfront audit/comparison choice.
@@ -35,6 +39,14 @@ Use **Dock in sidebar**, or the popup’s top-right drawer icon, for a native Ch
 
 Page clicks operate the reviewed page. Switch to the reference to interact with it. Scroll linking does not synchronize menus, form inputs or application state.
 
+## Responsive viewport views
+
+Use **Desktop (1440 × 900)**, **Laptop / tablet (1024 × 768)**, or **Phone (390 × 844)** in the page toolbar or drawer. These change real CSS layout dimensions and media queries on the reviewed page and its connected reference. They do not emulate a device operating system, mobile user agent or touch input. **Reset / Use window size** restores normal sizing; ending the review releases viewport control too.
+
+Chrome requires the extension's **debugger** permission for these controls and shows a debugging notice while a preset is active. Close DevTools on the review tabs before using a preset; Diffuse does not take over another debugger. A pending comment, capture, recording or AI operation must finish before switching.
+
+Every captured comment keeps its viewport view and exact dimensions. Pins and drawer comments show the current view; report filters let you see all views or one at a time. Jira descriptions and exports include the captured viewport. Older comments are grouped using their recorded width (1280px and above: desktop; 768–1279px: laptop/tablet; below 768px: phone); comments without dimensions remain accessible in every live view and under Unspecified viewport in reports.
+
 ## Comment with screenshot evidence
 
 Starting from the reviewed page’s actual Chrome toolbar icon grants that page’s initial capture access. A persistent drawer on a newly selected tab does not grant access by itself. If needed, click Diffuse in Chrome’s toolbar on the reviewed page and choose **Enable capture & return**; a pending capture retries without discarding its draft.
@@ -43,7 +55,9 @@ Starting from the reviewed page’s actual Chrome toolbar icon grants that page�
 2. Click **Comment** and move over production to highlight an element. Click to select it; this selection click is intercepted rather than activating the page control. Press Escape to cancel.
 3. Diffuse hides its interface briefly and captures the reviewed page, plus the reference when connected, **before** opening the comment form. The selected element receives a marked screenshot and a contextual crop alongside the original screenshot.
 4. Write an **Actual / comment** description. **Title and expected result are optional**; a blank title displays a short excerpt from your observation. Add reproduction steps when useful.
-5. Under **Attach evidence**, keep **Screenshot** or choose **Short recording**. Check the component name, name the state, choose a category and severity, and save.
+5. **Save comment** stays visible at the bottom while the fields scroll. Under **Attach evidence**, keep **Screenshot** or choose **Short recording**. Check the component name, name the state, choose a category and severity, and save.
+
+If a page reload interrupts the drawer connection, **Reconnect review** restores the pending evidence and your typed fields. Save again after reconnection; recovery never silently submits a comment.
 
 For a region instead of an element, click **Area · C** and drag, or hold **C** while dragging with the left mouse button. A dotted rectangle shows the selected area. Region comments attach its bounds without claiming a component identity. Audit mode uses the same flow with one page screenshot.
 
@@ -51,7 +65,9 @@ Categories use visible labels and consistent colors in the composer, pins, repor
 
 Each comment keeps its captured evidence, URLs, viewport and alignment information, and available element details. Production evidence is a PNG browser screenshot; prototype evidence is a frame from the live capture. Both have timestamps, and the capture timing difference is recorded. Moving or changing the live pages later does not move the saved screenshot annotation.
 
-Saved comments also appear as numbered, Figma-like **pins on the current page**. Click a pin to open its comment bubble, then **Open in review** for the full evidence. Pins are shown only on their captured URL. An element pin follows its selector when it still resolves, including supported open shadow roots; otherwise it uses the recorded document position only when the captured viewport still matches. Region pins use document coordinates and follow page scrolling while the captured viewport matches. A page-level recording receives a pin near its captured viewport origin. Live pins help navigation; the original screenshot remains the authoritative location when a page layout changes.
+Saved comments also appear as numbered **pins on the current page and viewport view**. New element and area comments retain a DOM anchor and relative bounds, including nested scrolling. Pins follow that content through scrolling and layout changes; if the target leaves the visible area, its pin and open bubble leave with it. Fixed and sticky elements keep their actual positions. A missing or replaced target does not receive a guessed pin. Earlier area captures cannot gain a historical DOM anchor retroactively; their original screenshots remain the reliable reference.
+
+Comments have stable numbers across viewport filters. Click a pin to open its comment bubble and **Open in review** for its evidence. The original screenshot and annotation never change when the live page does.
 
 Component suggestions come from observed `data-component`, `data-testid`, role, or tag information and are editable. Diffuse does not inspect React/Vue internals or prove that a DOM element maps to a particular source component. Element details include its selector and breadcrumb, bounds, computed typography/color/spacing/layout, observed ARIA and control states, and scroll containers. The inspector does not read form values or passwords. Screenshots still show whatever is visibly on the page.
 
@@ -154,7 +170,7 @@ Chrome can retain previously granted site permissions. Manage or revoke them in 
 - **Nested scrolling needs a reliable match.** A shared `data-diffuse-scroll` label is the strongest option. Cross-origin frames, closed shadow roots, canvas-based interfaces, and unrelated app structures may not expose comparable scroll targets. Their visuals may still appear in the captured video.
 - **Application states are independent.** There is no automatic click replay, form synchronization, or semantic state matching in this milestone. Bring each app into the intended state separately.
 - **Native dialogs are supported.** The overlay and toolbar remain usable over ordinary HTML modal dialogs. Dialogs inside closed shadow roots and custom application focus traps have not been validated.
-- **Web pages only.** Browser settings pages, new-tab pages, protected browser surfaces, and local `file:` URLs are outside this build’s supported setup. Serve local prototypes through an HTTP development server.
+- **Page access.** HTTP/HTTPS, localhost and local HTML files are supported. Local files require Chrome’s **Allow access to file URLs** setting. Browser settings pages, new-tab pages and protected browser surfaces cannot be reviewed.
 - **Live capture uses resources.** Frame timing and visual quality depend on Chrome, the page, and the machine. This build does not promise a fixed frame rate, pixel-perfect video compression, or zero latency.
 - **Evidence is a viewport checkpoint.** Screenshot evidence captures the visible viewport, not an automatically stitched full page. The prototype image comes from the live stream, so its quality depends on that capture. The two images are timestamped but are not an atomic, simultaneous capture; moving content can differ between them.
 - **Element details are observed context.** DOM labels, selectors, styles, and ARIA states help describe what was captured. They do not provide framework source attribution, automatic component matching, or exhaustive state coverage. Cross-origin frame contents and closed shadow-root internals cannot be inspected by the page picker.

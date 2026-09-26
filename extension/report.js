@@ -4,6 +4,7 @@ import {
 } from './report-format.mjs';
 import {getReview, listReviews} from './review-store.mjs';
 import {createJiraExporter} from './jira-export.mjs';
+import {VIEWPORT_LABELS} from './viewport-profile.mjs';
 
 const ui = Object.fromEntries([...document.querySelectorAll('[id]')].map((element) => [element.id, element]));
 const reportStyles = document.createElement('style');
@@ -246,28 +247,43 @@ function renderReview() {
   const cards = [...ui['report-content'].querySelectorAll('.comment-card')];
   const categoryLinks = [...ui['report-content'].querySelectorAll('[data-category-filter]')];
   const filterStatus = ui['report-content'].querySelector('.filter-status');
-  categoryLinks.forEach((link) => {
+  const viewportFilters = document.createElement('nav');
+  viewportFilters.className = 'review-categories viewport-filters';
+  viewportFilters.setAttribute('aria-label', 'Filter observations by viewport');
+  const viewportKeys = ['all', ...Object.keys(VIEWPORT_LABELS).filter(key => cards.some(card => card.dataset.viewport === key))];
+  let activeCategory = 'all', activeViewport = 'all';
+  const applyFilters = () => {
+    let count = 0;
+    cards.forEach(card => {
+      card.hidden = (activeCategory !== 'all' && card.dataset.category !== activeCategory) || (activeViewport !== 'all' && card.dataset.viewport !== activeViewport);
+      if (!card.hidden) count++;
+    });
+    for (const item of categoryLinks) {
+      const active = item.dataset.categoryFilter === activeCategory;
+      item.classList.toggle('active', active); item.setAttribute('aria-pressed', String(active));
+    }
+    for (const item of viewportFilters.querySelectorAll('button')) {
+      const active = item.dataset.viewportFilter === activeViewport;
+      item.classList.toggle('active', active); item.setAttribute('aria-pressed', String(active));
+    }
+    filterStatus.textContent = activeCategory === 'all' && activeViewport === 'all' ? `Showing all ${count} observations.` : `Showing ${count} of ${cards.length} observations${activeViewport === 'all' ? '' : ` in ${VIEWPORT_LABELS[activeViewport]}`}${activeCategory === 'all' ? '' : ` · ${categoryLabel(activeCategory)}`}. Exports include the full review.`;
+    filterStatus.hidden = false;
+  };
+  for (const key of viewportKeys) {
+    const item = document.createElement('button'); item.type = 'button'; item.className = `category-nav${key === 'all' ? ' active' : ''}`;
+    item.dataset.viewportFilter = key; item.setAttribute('aria-pressed', String(key === 'all'));
+    const count = key === 'all' ? cards.length : cards.filter(card => card.dataset.viewport === key).length;
+    item.textContent = `${key === 'all' ? 'All viewports' : VIEWPORT_LABELS[key]} · ${count}`;
+    item.addEventListener('click', () => { activeViewport = key; applyFilters(); });
+    viewportFilters.append(item);
+  }
+  if (cards.length) ui['report-content'].querySelector('.report-heading').append(viewportFilters);
+  categoryLinks.forEach(link => {
     link.setAttribute('role', 'button');
     link.setAttribute('aria-pressed', String(link.dataset.categoryFilter === 'all'));
-    const applyFilter = () => {
-      const filter = link.dataset.categoryFilter;
-      let count = 0;
-      cards.forEach((card) => {
-        card.hidden = filter !== 'all' && card.dataset.category !== filter;
-        if (!card.hidden) count++;
-      });
-      categoryLinks.forEach((item) => {
-        const active = item === link;
-        item.classList.toggle('active', active);
-        item.setAttribute('aria-pressed', String(active));
-      });
-      filterStatus.textContent = filter === 'all' ? `Showing all ${count} observations.` : `Showing ${count} ${categoryLabel(filter).toLowerCase()} observation${count === 1 ? '' : 's'} of ${cards.length}. Exports include the full review.`;
-      filterStatus.hidden = false;
-    };
-    link.addEventListener('click', (event) => { event.preventDefault(); applyFilter(); });
-    link.addEventListener('keydown', (event) => {
-      if (event.key === ' ') { event.preventDefault(); applyFilter(); }
-    });
+    const select = () => { activeCategory = link.dataset.categoryFilter; applyFilters(); };
+    link.addEventListener('click', event => { event.preventDefault(); select(); });
+    link.addEventListener('keydown', event => { if (event.key === ' ') { event.preventDefault(); select(); } });
   });
   cards.forEach((card, index) => {
     const comment = review.comments[index];

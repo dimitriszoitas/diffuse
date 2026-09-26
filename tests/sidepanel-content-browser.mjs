@@ -1,7 +1,7 @@
 // Controller-only regression fixture. Uses a fresh Chromium process and a local
 // runtime stub; no installed extension, user profile, API key, or network call.
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
+import {mkdir,readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {resolve} from 'node:path';
 const require=createRequire(import.meta.url);
@@ -54,17 +54,42 @@ try {
   assert.equal(await overlay.locator('#reference').count(),1);
   pass('Review starts without a reference; Diff opens its picker and an attached reference appears without resetting the controller');
   await deliver({type:'DOCK_STATE',docked:true});
-  assert.equal(await overlay.locator('#toolbar').isVisible(),false);
+  assert.equal(await overlay.locator('#toolbar').isVisible(),true);
+  assert.match(await overlay.locator('#toolbar').getAttribute('aria-label'),/quick actions.*sidebar/);
+  for(const id of ['comment','area-comment','diff','review','record','ai-review'])assert.equal(await overlay.locator(`#${id}`).isVisible(),true,id);
+  for(const id of ['dock-sidebar','stop','opacity','hide','status','recording-note'])assert.equal(await overlay.locator(`#${id}`).isVisible(),false,id);
   assert.equal(await overlay.locator('#divider').isVisible(),true);
   assert.equal(await overlay.locator('#toolbar').evaluate(node=>node.inert),false);
-  pass('Docking hides floating controls while preserving the live reveal and page interaction');
+  await overlay.locator('#diff').click();
+  assert.equal(await page.evaluate(()=>window.calls.filter(item=>item.type==='OPEN_DIFF').length),3);
+  await overlay.locator('#review').click();
+  assert.equal(await page.evaluate(()=>window.calls.filter(item=>item.type==='OPEN_REPORT').length),1);
+  pass('Docking retains working quick actions and live reveal while moving detailed controls into the sidebar');
 
-  await command('selectElement');await page.locator('#target').click();
+  await deliver({type:'PREPARE_EVIDENCE'});
+  assert.equal(await overlay.locator('#toolbar').isVisible(),false);
+  await deliver({type:'RESTORE_EVIDENCE'});
+  assert.equal(await overlay.locator('#toolbar').isVisible(),true);
+  await page.setViewportSize({width:390,height:844});
+  const narrow=await overlay.locator('#toolbar').evaluate(node=>{
+    const box=node.getBoundingClientRect();
+    return{left:box.left,right:box.right,overflow:node.scrollWidth-node.clientWidth,buttons:[...node.querySelectorAll('button')].filter(button=>button.getClientRects().length).map(button=>{const rect=button.getBoundingClientRect();return{id:button.id,width:rect.width,height:rect.height,left:rect.left,right:rect.right};})};
+  });
+  assert.ok(narrow.left>=0&&narrow.right<=390);
+  assert.equal(narrow.overflow,0);
+  for(const button of narrow.buttons){assert.ok(button.width>=44&&button.height>=44,button.id);assert.ok(button.left>=0&&button.right<=390,button.id);}
+  const evidence=resolve(project,'artifacts/sidepanel-content');await mkdir(evidence,{recursive:true});
+  await page.screenshot({path:resolve(evidence,'docked-quick-actions-narrow.png')});
+  await page.setViewportSize({width:1280,height:900});
+  await page.screenshot({path:resolve(evidence,'docked-quick-actions.png')});
+  pass('Quick actions wrap at 390px with 44px targets and disappear during clean evidence capture');
+
+  await overlay.locator('#comment').click();await page.locator('#target').click();
   await page.waitForFunction(()=>window.calls.some(item=>item.type==='CAPTURE_COMMENT'));
   let snapshot=await state();assert.equal(snapshot.view,'comment');assert.ok(snapshot.comment.evidence.production.dataUrl);
   assert.equal(await overlay.locator('#diff').isEnabled(),false);assert.match(snapshot.diffDisabledReason,/Save or cancel/);
   assert.equal((await command('openDiff')).ok,false);
-  assert.equal(await page.evaluate(()=>window.calls.filter(item=>item.type==='OPEN_DIFF').length),2);
+  assert.equal(await page.evaluate(()=>window.calls.filter(item=>item.type==='OPEN_DIFF').length),3);
   assert.equal(await overlay.locator('#comment-panel').isVisible(),false);
   assert.equal(await overlay.locator('#panel-backdrop').isVisible(),false);
   const known={knownDraftId:snapshot.comment.id,knownEvidenceKey:snapshot.comment.evidenceKey};
@@ -83,8 +108,15 @@ try {
   assert.equal((await state()).comment.fields.comment,fields.comment);
   await deliver({type:'DOCK_STATE',docked:false});
   assert.equal(await overlay.locator('#comment-panel').isVisible(),true);
+  assert.equal(await overlay.locator('#dock-sidebar').isVisible(),true);
+  assert.equal(await overlay.locator('#toolbar').evaluate(node=>node.inert),true);
   assert.equal(await overlay.locator('#comment-actual').inputValue(),fields.comment);
   assert.equal(await overlay.locator('#comment-panel').getAttribute('aria-modal'),'true');
+  for(const end of [false,true]){
+    await overlay.locator('#comment-panel>.composer-body').evaluate((node,end)=>node.scrollTop=end?node.scrollHeight:0,end);
+    const bounds=await overlay.locator('#save-comment').boundingBox();assert.ok(bounds.y>=0&&bounds.y+bounds.height<=900&&bounds.height>=44);
+  }
+  assert.equal(await overlay.locator('#save-comment').evaluate(button=>button.form.id),'comment-form');
   await deliver({type:'DOCK_STATE',docked:true});
   assert.equal(await overlay.locator('#comment-panel').getAttribute('aria-modal'),'false');
   await command('setCommentFields',{editorId:'panel-editor',fieldRevision:4,fields:{...fields,comment:'Latest keystroke reaches Save'}});
@@ -93,7 +125,7 @@ try {
   assert.equal(await page.evaluate(()=>window.calls.findLast(item=>item.type==='ADD_COMMENT').fields.comment),'Latest keystroke reaches Save');
   pass('Edits retain whitespace through drawer close; reordered updates and stale save payload cannot overwrite newer fields');
 
-  await command('selectArea');assert.equal((await state()).areaArmed,true);
+  await overlay.locator('#area-comment').click();assert.equal((await state()).areaArmed,true);
   await page.setViewportSize({width:1000,height:900});await page.waitForTimeout(80);
   assert.equal((await state()).areaArmed,false);assert.match((await state()).warning,/resized/);
   pass('Resizing cancels an armed area instead of capturing stale coordinates');
@@ -110,6 +142,7 @@ try {
   await command('evidence',{choice:'recording'});
   await command('recordComment',{fields:{...fields,comment:'Recording keeps the draft'}});
   snapshot=await state();assert.equal(snapshot.view,'controls');assert.equal(snapshot.recording.id,'recording-1');assert.equal(snapshot.comment.fields.comment,'Recording keeps the draft');
+  assert.equal(await overlay.locator('#record').isVisible(),true);assert.equal(await overlay.locator('#record').isEnabled(),true);assert.match(await overlay.locator('#record').textContent(),/Stop recording/);
   const previousKey=snapshot.comment.evidenceKey;
   await page.evaluate(async()=>{window.draft.evidence.video={dataUrl:'data:video/webm;base64,AA==',recordingId:'recording-1'};await window.deliver({type:'RECORDING_STOPPED',draft:window.draft});});
   snapshot=await state({knownDraftId:snapshot.comment.id,knownEvidenceKey:previousKey});
@@ -118,7 +151,9 @@ try {
   await command('cancelComment');
   pass('Recording preserves draft fields and refreshes media when the same draft gains a clip');
 
-  await command('openAi');await command('setAiFields',{instructions:'Check copy only',threshold:18});
+  await overlay.locator('#ai-review').click();await command('setAiFields',{instructions:'Check copy only',threshold:18});
+  assert.equal(await overlay.locator('#ai-panel').isVisible(),false);assert.equal(await overlay.locator('#panel-backdrop').isVisible(),false);
+  assert.equal(await overlay.locator('#toolbar').evaluate(node=>node.inert),false);
   snapshot=await state();assert.equal(snapshot.view,'ai');assert.equal(snapshot.ai.instructions,'Check copy only');assert.equal(snapshot.ai.threshold,18);assert.equal(snapshot.ai.config.apiKey,undefined);
   await command('runAi',{instructions:'Use the latest input',threshold:21});
   assert.deepEqual(await page.evaluate(()=>{const call=window.calls.findLast(item=>item.type==='RUN_AI_REVIEW');return{instructions:call.instructions,threshold:call.threshold};}),{instructions:'Use the latest input',threshold:21});

@@ -1,4 +1,4 @@
-# Try Diffuse 0.7.0
+# Try Diffuse 0.7.1
 
 Compare a live prototype over production or audit one page. Leave pinned comments on elements or areas, record a short silent interaction, and copy the review for your engineering team. Claude can suggest findings when you connect your own Anthropic API key.
 
@@ -6,7 +6,7 @@ Compare a live prototype over production or audit one page. Leave pinned comment
 
 For a first installation:
 
-1. Unzip **Diffuse-0.7.0.zip**. Keep the resulting **Diffuse** folder somewhere permanent.
+1. Unzip **Diffuse-0.7.1.zip**. Keep the resulting **Diffuse** folder somewhere permanent.
 2. In your normal Chrome browser, open `chrome://extensions`.
 3. Turn on **Developer mode**, then click **Load unpacked** and choose that **Diffuse** folder.
 4. Pin **Diffuse — Live design comparison** using Chrome’s extensions menu.
@@ -37,13 +37,23 @@ The live reference includes animation and interactions. Click **Prototype ↗** 
 
 After opening/resizing a drawer or window, visit the reference once and return if Diffuse warns that viewport sizes differ. Chrome can keep an inactive tab at its old size. Match viewport and zoom before judging alignment.
 
+## Review local HTML files
+
+Open `chrome://extensions` → Diffuse → **Details**, then enable **Allow access to file URLs**. Return to your local HTML page and reopen Diffuse to start reviewing. The popup and drawer show a settings shortcut when access is off. You can use a local file as the reviewed page or select it as a live Diff reference. A `localhost` page uses the ordinary site-access flow instead.
+
 ## Use the side drawer
 
-Click the split-window icon at the top right of the extension popup, or **Dock in sidebar** in the floating toolbar. Chrome gives Diffuse its own resizable space beside the page. The same Diff, comment, recording and AI controls remain available; selection outlines and pins stay on the page.
+Click the split-window icon at the top right of the extension popup, or **Dock in sidebar** in the floating toolbar. Chrome gives Diffuse its own resizable space beside the page. A compact bottom toolbar keeps the main review actions on the page while comment and AI panels live in the drawer. Selection outlines and pins stay on the page.
 
 Drag Chrome’s divider to resize the drawer. Close it using Chrome’s **×** above it to restore the page width and floating controls. Closing keeps the active review and unfinished comment. **Stop** ends the review instead. Chrome controls which side the drawer uses.
 
 On an unrelated tab, the drawer offers **Return to page**. Native drawer pixels are excluded from evidence. Existing area pins and AI highlights are hidden at a different viewport size rather than pointing at the wrong content; captured evidence remains unchanged.
+
+## Check desktop, tablet and phone layouts
+
+The **Viewport** segments in the toolbar and drawer switch between Desktop (1440 × 900), Laptop / tablet (1024 × 768) and Phone (390 × 844). Comments stay with the view where they were captured. Use the report's viewport filter to see one view or all of them; Jira tickets retain the viewport label and dimensions.
+
+Chrome asks for the updated extension's debugging permission and shows a notice while viewport control is active. Close DevTools on those tabs before switching. **Reset / Use window size** restores the normal layout. Save or cancel an open comment and finish recording or AI work before switching views.
 
 ## Add a comment
 
@@ -54,7 +64,9 @@ Starting a review from the real Chrome toolbar grants capture for that page. If 
 3. Under **Attach evidence**, keep **Screenshot** or choose **Short recording**. Your written text and selected element or region stay attached when recording.
 4. Check the component name, label the state, choose a category and severity, and save. Categories have visible labels and distinct colors: **Design mismatch — purple**, **UX issue — amber**, and **Copy change — blue**. Comparison defaults to Design mismatch; audit defaults to UX issue.
 
-Saved comments appear as numbered pins. Click one to open its comment bubble, or choose **Open in review** for full evidence. Pins appear only on their captured URL, follow the selected element when it can still be found, and otherwise use captured document coordinates only when the viewport still matches. The original screenshots keep the recorded location even if the live layout changes.
+Save comment stays visible at the bottom of the editor while its fields scroll. If the page disconnects, use **Reconnect review** to recover the pending evidence and your text, then save.
+
+Saved comments appear as numbered pins for the current viewport. New pins follow their selected element or area through scrolling and resizing; they do not float at the screen edge after the target leaves view. Click one to open its comment bubble, or choose **Open in review** for full evidence. Pins appear only on their captured URL, follow the selected element when it can still be found, and otherwise use captured document coordinates only when the viewport still matches. The original screenshots keep the recorded location even if the live layout changes.
 
 Component names come from available page labels such as `data-component`, `data-testid`, role, or tag and can be edited. They are not detected framework source components. **Current state** is an editable label for this capture, not a claim that other states were tested. The inspector records observed layout and state details without reading form values or passwords.
 

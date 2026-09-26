@@ -1,8 +1,10 @@
+import {createViewportController} from '../extension/viewport-controller.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
 import {webcrypto} from 'node:crypto';
+import {assertPageAccess, isReviewableUrl} from '../extension/core.mjs';
 
 const backgroundSource = await readFile(new URL('../extension/background.js', import.meta.url), 'utf8');
 const offscreenSource = await readFile(new URL('../extension/offscreen.js', import.meta.url), 'utf8');
@@ -66,9 +68,10 @@ async function backgroundHarness(options = {}) {
     scripting: {executeScript: async () => {}},
     tabCapture: {getMediaStreamId: async input => options.streamId ? options.streamId(input) : 'target-stream'},
   };
-  const context = vm.createContext({
+  const context = vm.createContext({createViewportController,
     chrome, reviews, crypto: webcrypto, protectAIStorage: async () => {},
-    DEFAULT_SETTINGS: {}, sitePattern: () => 'https://example.test/*', viewportWarning: () => null,
+    DEFAULT_SETTINGS: {}, isReviewableUrl, viewportWarning: () => null,
+    assertPageAccess: (url, chromeApi = chrome, message) => assertPageAccess(url, chromeApi, message),
     setTimeout: () => 1, clearTimeout() {},
   });
   vm.runInContext(backgroundSource.replace(/^import .*\n/gm, '') + `

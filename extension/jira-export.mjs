@@ -479,7 +479,7 @@ export function createJiraExporter({onError = () => {}, clientFactory, storage =
     });
     function update() {
       const hiddenSelected = cards.filter((card, index) => card.hidden && selected.has(review.comments[index].id)).length;
-      count.textContent = `${selected.size} selected${hiddenSelected ? ` · ${hiddenSelected} hidden by the category filter` : ''}`;
+      count.textContent = `${selected.size} selected${hiddenSelected ? ` · ${hiddenSelected} hidden by the current filters` : ''}`;
       send.disabled = !selected.size;clear.disabled = !selected.size;selectVisible.disabled = cards.every(card => card.hidden || selected.has(review.comments[cards.indexOf(card)].id));
       checkboxes.forEach((input, index) => { input.checked = selected.has(review.comments[index].id); });
     }

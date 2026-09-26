@@ -6,7 +6,7 @@
   const fields = ['title','comment','expected','component','state','steps','severity','category'];
   let panelWindowId, port, attached = false, state = null, refreshRunning = false, refreshAgain = false;
   let draftId = null, evidenceKey = null, evidence = null, commentsKey = '', aiKey = '';
-  let pendingAction = null, commandError = '', stopped = false;
+  let pendingAction = null, commandError = '', stopped = false, connectionLost = false;
   let referenceToggle = null;
   let fieldVersion = 0, acknowledgedVersion = 0;
   let lastSessionId = null;
@@ -22,26 +22,40 @@
   function draftFields() { return {draftId,fields:values(),editorId,fieldRevision:fieldVersion}; }
   function clearDraft() { draftId=null;evidenceKey=null;evidence=null;fieldVersion=0;acknowledgedVersion=0; }
 
+  async function panelRequest(type, payload) {
+    const result = await chrome.runtime.sendMessage({namespace:'diffuse', target:'worker', type, ...payload});
+    if (!result?.ok) throw Object.assign(new Error(result?.error || 'Diffuse did not respond. Reopen the drawer and try again.'), {code:result?.code});
+    return result;
+  }
+  function describeConnectionError(error) {
+    if (error.code === 'PANEL_PAGE_DISCONNECTED' || /receiving end does not exist|could not establish connection|message port closed|message channel closed/i.test(error.message || '')) {
+      connectionLost = true;
+      return 'The page connection was interrupted. Your text is still in this drawer. Reconnect the review, then save again.';
+    }
+    return error.message;
+  }
   async function command(action,data={},quiet=false) {
     if (!session?.id || !Number.isInteger(panelWindowId)) return;
     const requestSession=session.id;
     if (!quiet) { pendingAction=action;commandError='';paint(); }
     try {
-      const result=await sendMessage('PANEL_COMMAND',{windowId:panelWindowId,sessionId:requestSession,action,...data});
+      const result=await panelRequest('PANEL_COMMAND',{windowId:panelWindowId,sessionId:requestSession,action,...data});
       if (requestSession===session?.id && result.session !== undefined) session=result.session;
+      if (action==='recoverPage') {connectionLost=false;commandError='';}
       return result;
     } catch(error) {
-      if(requestSession===session?.id){commandError=error.message;notice('feedback',commandError);}
+      if(requestSession===session?.id){commandError=describeConnectionError(error);notice('feedback',commandError);if(draftId)notice('panel-comment-error',commandError);}
       throw error;
     } finally {
       if (!quiet && pendingAction===action) pendingAction=null;
-      refresh();
+      paint();refresh();
     }
   }
   const act=(action,data) => command(action,data).catch(()=>{});
   function syncFields() {
     if(!draftId)return;
     const version=++fieldVersion;
+    if(connectionLost)return;
     command('setCommentFields',draftFields(),true).then(result=>{if(result)acknowledgedVersion=Math.max(acknowledgedVersion,version);}).catch(()=>{});
   }
   function connect() {
@@ -58,18 +72,22 @@
     if(refreshRunning){refreshAgain=true;return;}
     refreshRunning=true;
     try {
-      const result=await sendMessage('PANEL_STATE',{windowId:panelWindowId,knownDraftId:draftId,knownEvidenceKey:evidenceKey});
+      const result=await panelRequest('PANEL_STATE',{windowId:panelWindowId,knownDraftId:draftId,knownEvidenceKey:evidenceKey});
       const nextSession=result.session || null;
-      if(nextSession?.id!==lastSessionId){clearDraft();commentsKey='';aiKey='';state=null;lastSessionId=nextSession?.id||null;}
+      if(nextSession?.id!==lastSessionId){clearDraft();commentsKey='';aiKey='';state=null;connectionLost=false;commandError='';lastSessionId=nextSession?.id||null;}
       session=nextSession;
-      state=result.state || null;
+      if(result.state?.code==='PANEL_PAGE_DISCONNECTED') {
+        connectionLost=true;commandError=result.state.message;
+        // A failed connection must not replace the locally edited draft with an empty view.
+        if(!draftId||!state?.comment)state=result.state;
+      } else if(!connectionLost||!draftId){state=result.state || null;if(connectionLost){connectionLost=false;commandError='';}}
       if(referenceToggle&&(nextSession?.id!==referenceToggle.sessionId
         ||(referenceToggle.commandDone&&Boolean(nextSession.settings?.hidden)===referenceToggle.hidden)))referenceToggle=null;
       if(state?.comment?.evidenceIncluded){evidence=state.comment.evidence||null;evidenceKey=state.comment.evidenceKey;}
       renderSession();paint();
       if(!commandError)notice('feedback','');
     } catch(error) {
-      notice('feedback',error.message);
+      commandError=describeConnectionError(error);notice('feedback',commandError);if(draftId)notice('panel-comment-error',commandError);paint();
     } finally {
       refreshRunning=false;
       if(refreshAgain){refreshAgain=false;setTimeout(refresh,50);}
@@ -102,26 +120,34 @@
     if(fresh||(!isEditing&&fieldVersion===acknowledgedVersion&&currentRevision))for(const key of fields)$(`panel-field-${key}`).value=comment.fields?.[key]||'';
     text('panel-composer-title',comment.evidenceChoice==='recording'?'Add a recording comment':'Add a comment');
     text('panel-selection',comment.selectionSummary);text('panel-component-hint',comment.componentHint);
-    notice('panel-comment-error',comment.error);
+    notice('panel-comment-error',commandError||comment.error);
+    $('panel-recover-comment').hidden=!connectionLost;
+    $('panel-recover-comment').disabled=Boolean(pendingAction);
     if(fresh||changedEvidence||$('panel-evidence').dataset.choice!==comment.evidenceChoice){
       paintEvidence(comment);$('panel-evidence').dataset.key=String(comment.evidenceKey);$('panel-evidence').dataset.choice=comment.evidenceChoice;
     }
-    const locked=state.commentSaving||state.recordingBusy||Boolean(state.recording)||['saveComment','recordComment'].includes(pendingAction);
+    const locked=state.commentSaving||state.recordingBusy||Boolean(state.recording)||['saveComment','recordComment','recoverPage'].includes(pendingAction);
     for(const control of $('panel-comment-form').elements)control.disabled=locked;
     for(const id of ['panel-cancel-comment','panel-evidence-screenshot','panel-evidence-recording','panel-record-comment'])$(id).disabled=locked;
+    $('panel-save-comment').disabled=locked||connectionLost;
     text('panel-save-comment',locked?'Please wait…':'Save comment');
     if(fresh) $('panel-field-comment').focus({preventScroll:true});
   }
 
   function paintComments() {
-    const comments=session?.comments||[];
-    const key=JSON.stringify(comments.map(item=>[item.id,item.fields]));if(key===commentsKey)return;commentsKey=key;
-    const list=$('panel-comments');list.replaceChildren();list.append(node('h2',`Comments · ${comments.length}`));
-    if(!comments.length){list.append(node('p','Your saved comments will appear here and as pins on the page.','muted'));return;}
+    const group=width=>!Number.isFinite(width)||width<=0?'unknown':width>=1280?'desktop':width>=768?'tablet':'phone';
+    const viewport=session?.viewportPreset||group(session?.targetViewport?.width);
+    const all=session?.comments||[];
+    const comments=all.filter(item=>{const context=item.context?.production||item.selection?.context;const key=context?.viewportProfile?.key||group(context?.viewport?.width);return key==='unknown'||key===viewport;});
+    const key=JSON.stringify([viewport,comments.map(item=>[item.id,item.fields])]);if(key===commentsKey)return;commentsKey=key;
+    const label={desktop:'Desktop',tablet:'Laptop / tablet',phone:'Phone'}[viewport]||'This view';
+    const list=$('panel-comments');list.replaceChildren();list.append(node('h2',`${label} comments · ${comments.length}`));
+    if(all.length>comments.length)list.append(node('p',`${all.length-comments.length} comments are in other viewport views. All remain in Review reports.`,'muted'));
+    if(!comments.length){list.append(node('p','Comments for this view will appear here and as pins on the page.','muted'));return;}
     comments.forEach((item,index)=>{
       const label=item.fields?.title||item.fields?.comment||'Saved comment';
       const entry=button('',()=>act('showPin',{id:item.id}));entry.className='saved-item';entry.dataset.category=item.fields?.category||'design-mismatch';
-      const dot=node('i',undefined,'category-dot');dot.setAttribute('aria-hidden','true');const copy=node('span',`${index+1}. ${label.length>140?`${label.slice(0,137)}…`:label}`);copy.append(node('small',`${category(item.fields?.category)} · ${item.fields?.state||'Current state'}`));entry.append(dot,copy);list.append(entry);
+      const dot=node('i',undefined,'category-dot');dot.setAttribute('aria-hidden','true');const copy=node('span',`${all.indexOf(item)+1}. ${label.length>140?`${label.slice(0,137)}…`:label}`);copy.append(node('small',`${category(item.fields?.category)} · ${item.fields?.state||'Current state'}`));entry.append(dot,copy);list.append(entry);
     });
   }
 
@@ -157,11 +183,15 @@
   }
 
   function paint() {
+    document.body.dataset.composerOpen='false';
     $('dock-workspace').hidden=!session;
+    window.dispatchEvent(new CustomEvent('diffuse-panel-state',{detail:{session,state,busy:Boolean(pendingAction)}}));
     if(!session){clearDraft();return;}
     const hasReference=Number.isInteger(session.sourceTabId);text('panel-mode','REVIEW');text('panel-title',state?.recording?'Recording…':'Your review');text('panel-page',session.target?.title||'Reviewed page');
     const away=!state||state.active===false||state.available===false;
     $('panel-away').hidden=!away;$('panel-live').hidden=away;
+    $('panel-recover-page').hidden=!connectionLost;
+    $('panel-recover-page').disabled=Boolean(pendingAction);
     text('panel-away-message',state?.message||'Return to the reviewed page to continue. Your review stays open while you switch tabs.');
     notice('panel-warning',[session.warning,state?.warning].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join(' · '));
     $('panel-stop').disabled=(Boolean(pendingAction)&&pendingAction!=='runAi')||Boolean(state?.recordingBusy);
@@ -169,7 +199,7 @@
     const view=state.view==='comment'&&!state.comment?'controls':state.view||'controls';
     $('panel-controls').hidden=view!=='controls';$('panel-composer').hidden=view!=='comment';$('panel-ai-view').hidden=view!=='ai';
     if(!state.comment)clearDraft();
-    if(view==='comment'&&state.comment)paintComment(state.comment);
+    if(view==='comment'&&state.comment){document.body.dataset.composerOpen='true';paintComment(state.comment);}
     if(view==='ai')paintAi(state.ai);
     $('panel-comparison-controls').hidden=!hasReference;
     $('panel-diff').disabled=Boolean(state.diffDisabledReason)||Boolean(pendingAction);
@@ -198,6 +228,8 @@
   for(const [id,action]of Object.entries(actions))$(id).addEventListener('click',()=>act(action,action==='cancelComment'?{draftId}:undefined));
   $('panel-record').addEventListener('click',()=>act(state?.recording?'stopRecording':'record'));
   $('panel-record-comment').addEventListener('click',()=>act('recordComment',draftFields()));
+  $('panel-recover-page').addEventListener('click',()=>act('recoverPage'));
+  $('panel-recover-comment').addEventListener('click',()=>act('recoverPage',{...draftFields(),evidenceChoice:state?.comment?.evidenceChoice==='recording'?'video':'screenshot'}));
   $('panel-comment-form').addEventListener('input',syncFields);
   $('panel-comment-form').addEventListener('change',syncFields);
   $('panel-comment-form').addEventListener('submit',event=>{event.preventDefault();if(event.currentTarget.reportValidity())act('saveComment',draftFields());});
@@ -217,7 +249,7 @@
     }).catch(()=>{if(referenceToggle===toggle){referenceToggle=null;paint();}});
   });
   $('panel-reset').addEventListener('click',()=>act('settings',{settings:{offsetX:0,offsetY:0,reveal:50,opacity:.55}}));
-  document.addEventListener('visibilitychange',()=>{port?.postMessage({type:'VISIBILITY',visible:!document.hidden});if(!document.hidden)refresh();});
+  document.addEventListener('visibilitychange',()=>{port?.postMessage({type:'VISIBILITY',visible:!document.hidden});if(!document.hidden){loadTabs().then(renderSession).catch(()=>{});refresh();}});
   window.addEventListener('diffuse-refresh',refresh);
   window.addEventListener('pagehide',()=>{stopped=true;port?.disconnect();});
   chrome.tabs.onActivated.addListener(info=>{if(info.windowId===panelWindowId){loadTabs().then(()=>{renderSession();refresh();}).catch(()=>{});}});

@@ -40,7 +40,9 @@ Every delivery belongs to its authenticated connection. The backend rechecks aut
 
 ## Verification still required
 
-On **2026-09-26**, the authentication, rate-limit and delivery schemas were explicitly applied to the hosted PostgreSQL database. A real-database smoke passed OAuth handoff, concurrent token refresh, required ADF textarea fields, delivery deduplication, chunk storage, concurrent issue/attachment claims, persisted receipts and cleanup. It used fake OAuth/Jira providers and removed its synthetic records; it made no real Atlassian account grant or Jira write. This database check does not establish deployment or end-to-end Jira verification.
+On **2026-09-26**, the authentication, rate-limit and delivery schemas were explicitly applied to the hosted PostgreSQL database. A real-database smoke passed OAuth handoff, concurrent token refresh, required ADF textarea fields, delivery deduplication, chunk storage, concurrent issue/attachment claims, persisted receipts and cleanup. It used fake OAuth/Jira providers and removed its synthetic records; it made no real Atlassian account grant or Jira write.
+
+Production deployment `dpl_GxRTSzghzCtc3HiippqM7vmmV364` passed public health, authenticated delivery-route, rejected foreign-origin and allowlisted OAuth-start checks at the production URL. The returned authorization URL used the registered callback. These checks establish deployed service readiness, not a real account grant or ticket delivery.
 
 Authorize the owner account from the approved installation, verify its sites/projects and required fields, then explicitly create a test issue with screenshot and recording evidence. Confirm the ticket and attachments in Jira. Other-account authorization needs a separate check after app sharing is configured.
 
