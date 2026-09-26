@@ -33,4 +33,6 @@ Confirmed rejections allow an explicit retry. Unknown write outcomes are **needs
 
 From the parent directory, run `npm test` and `npm run check`. Provider and delivery tests use injected responses, including concurrent submissions, ownership checks and uncertain outcomes; they perform no real Jira writes. `GET /health` checks liveness only.
 
+On **2026-09-26**, all three schemas were explicitly applied to the hosted PostgreSQL database. The authorized `node smoke-postgres.mjs` check passed handoff/replay protection, concurrent token refresh, required ADF textarea fields, delivery deduplication, chunk storage, concurrent issue/attachment claims, receipts and synthetic-record cleanup. It used fake OAuth/Jira providers: no real Atlassian grant or Jira write occurred. The script creates temporary database records and deletes only the records it generated; this check does not verify a new deployment.
+
 Complete a real owner-account grant from the approved extension, then explicitly create a test ticket and verify its screenshot and recording in Jira before calling the integration end-to-end verified. See `../docs/jira-integration.md` for the deployment and rollout details.
