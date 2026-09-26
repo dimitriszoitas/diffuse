@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Diffuse side drawer</title>
+    <link rel="stylesheet" href="popup.css" />
+    <link rel="stylesheet" href="sidepanel.css" />
+    <script src="popup.js" defer></script>
+    <script src="sidepanel.js" defer></script>
+  </head>
+  <body data-surface="sidepanel">
+    <main class="popup" id="popup" aria-busy="true">
+      <header class="brand-header">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"><span></span><span></span></span>
+          <span>Diffuse</span>
+        </div>
+        <span class="edition"><span class="signal" aria-hidden="true"></span><span id="edition-label">DESIGN REVIEW</span></span>
+        <button id="open-side-panel" class="icon-button dock-button" type="button" aria-label="Open in side drawer" title="Open in side drawer — resizes the page beside Diffuse"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M15 4v16M7 12h5m-2-2 2 2-2 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </header>
+
+      <section id="loading" class="initial-loading" role="status" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span>
+        Getting your tabs ready…
+      </section>
+
+      <section id="setup" hidden aria-labelledby="setup-title">
+        <div class="intro">
+          <h1 id="setup-title">Review this page</h1>
+          <p>Comment, capture and review without leaving your work.</p>
+        </div>
+        <div class="source-card">
+          <span class="step-label">CURRENT PAGE</span>
+          <div class="source-text"><p class="source-title" id="source-title">Your page</p><p class="source-url" id="source-url"></p></div>
+        </div>
+        <form id="comparison-form">
+          <button class="primary-button" id="start-comparison" type="submit" disabled><span class="button-label">Start review</span><span aria-hidden="true">→</span></button>
+        </form>
+        <p class="field-help">Want to compare? Use <strong>Diff</strong> in the page toolbar to choose a reference tab.</p>
+      </section>
+
+      <section id="session-panel" hidden aria-labelledby="session-title">
+        <div class="intro">
+          <h1 id="session-title">Your review is ready.</h1>
+          <p id="session-subtitle">Use Diff whenever you need a reference.</p>
+        </div>
+        <div class="session-card">
+          <div class="session-status" id="session-status" role="status"><span class="signal" aria-hidden="true"></span><span id="session-status-label">Review ready</span></div>
+          <div class="session-side" id="session-prototype">
+            <span class="session-side-label">PROTOTYPE</span>
+            <p class="session-page-title" id="session-source-title"></p>
+            <p class="source-url" id="session-source-url"></p>
+          </div>
+          <div class="session-divider" id="session-divider" aria-hidden="true"></div>
+          <div class="session-side">
+            <span class="session-side-label" id="session-target-label">PRODUCTION</span>
+            <p class="session-page-title" id="session-target-title"></p>
+            <p class="source-url" id="session-target-url"></p>
+          </div>
+        </div>
+        <p class="session-error" id="session-error" role="alert" hidden></p>
+        <div class="capture-notice" id="capture-notice" hidden>
+          <span class="capture-state" id="capture-state" hidden><span class="signal" aria-hidden="true"></span>Capture ready</span>
+          <p>Clicking Diffuse here allows screenshots and recordings for this tab.</p>
+        </div>
+        <button class="primary-button" id="enable-capture" type="button" hidden>
+          <span class="button-label">Enable capture &amp; return</span>
+          <svg class="button-arrow" width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="primary-button" id="return-to-comparison" type="button">
+          <span class="button-label">Return to review</span>
+          <svg class="button-arrow" width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="secondary-button" id="stop-comparison" type="button">Stop review</button>
+      </section>
+
+      <section id="dock-workspace" hidden aria-label="Review workspace">
+        <header class="workspace-heading"><div><p id="panel-mode" class="eyebrow">REVIEW</p><h1 id="panel-title">Your review</h1></div><button id="panel-stop" type="button">Stop</button></header>
+        <p id="panel-page" class="muted"></p>
+        <p id="panel-warning" class="panel-notice" role="status" hidden></p>
+        <div id="panel-away" class="panel-notice" hidden><p id="panel-away-message">Return to the reviewed page to continue.</p><button id="panel-focus" type="button">Return to page</button></div>
+        <div id="panel-live">
+          <section id="panel-controls" aria-label="Review controls">
+            <div class="button-row"><button id="panel-diff" type="button" aria-describedby="panel-diff-hint">Diff</button></div>
+            <p id="panel-diff-hint" class="muted">Choose a reference tab to compare with this page.</p>
+            <div id="panel-comparison-controls">
+              <label class="panel-field">Reference opacity <output id="panel-opacity-value">55%</output><input id="panel-opacity" type="range" min="0" max="100" value="55"></label>
+              <label class="panel-field">Reveal position <output id="panel-reveal-value">50%</output><input id="panel-reveal" type="range" min="0" max="100" value="50"></label>
+              <div class="control-pair"><label class="checkbox"><input id="panel-linked" type="checkbox" checked> Link scrolling</label><button id="panel-hide" type="button" aria-pressed="false">Hide reference</button></div>
+              <details class="panel-details"><summary>Alignment &amp; pages</summary><div class="control-pair"><label class="panel-field">Horizontal<input id="panel-offset-x" type="number" min="-3000" max="3000" value="0"></label><label class="panel-field">Vertical<input id="panel-offset-y" type="number" min="-3000" max="3000" value="0"></label></div><div class="button-row"><button id="panel-reset" type="button">Reset</button><button id="panel-source" type="button">Open prototype</button><button id="panel-reconnect" type="button">Reconnect</button></div></details>
+            </div>
+            <div class="tool-grid"><button id="panel-comment" type="button">Select element</button><button id="panel-area" type="button">Select area · C</button><button id="panel-record" type="button">Record page</button><button id="panel-ai" type="button">AI review</button></div>
+            <p id="panel-instruction" class="muted">Choose an element, or hold C and drag on the page.</p>
+            <button id="panel-cancel-selection" type="button" hidden>Cancel selection</button>
+            <p id="panel-capture-error" class="feedback" role="alert" hidden></p>
+            <button id="panel-retry" type="button" hidden>Retry capture</button>
+            <section id="panel-comments" aria-label="Saved comments"></section>
+          </section>
+          <section id="panel-composer" hidden aria-labelledby="panel-composer-title">
+            <div class="section-heading"><h2 id="panel-composer-title">Add a comment</h2><button id="panel-cancel-comment" class="close-button" type="button" aria-label="Cancel comment">×</button></div>
+            <p class="muted">Evidence captures the page at the moment you selected it.</p>
+            <fieldset class="evidence-choice"><legend>Attach evidence</legend><div class="button-row"><button id="panel-evidence-screenshot" type="button" aria-pressed="true">Screenshot</button><button id="panel-evidence-recording" type="button" aria-pressed="false">Short recording</button></div></fieldset>
+            <div id="panel-evidence" class="panel-evidence"></div>
+            <div id="panel-recording-choice" hidden><p class="muted">Record up to 30 seconds without audio. Your comment and original screenshot are kept.</p><video id="panel-recording-preview" controls hidden></video><button id="panel-record-comment" type="button">Start recording</button></div>
+            <p id="panel-selection" class="selection-context"></p>
+            <form id="panel-comment-form">
+              <label class="panel-field">Title <span class="optional">(optional)</span><input id="panel-field-title" name="title" maxlength="200" placeholder="Add a short title, if helpful"></label>
+              <label class="panel-field">Comment<textarea id="panel-field-comment" name="comment" required maxlength="6000" placeholder="Describe what needs attention." rows="4"></textarea></label>
+              <label class="panel-field">Expected <span class="optional">(optional)</span><textarea id="panel-field-expected" name="expected" maxlength="6000" placeholder="Describe the intended result." rows="3"></textarea></label>
+              <label class="panel-field">Category<select id="panel-field-category" name="category"><option value="design-mismatch">Design mismatch</option><option value="ux-issue">UX issue</option><option value="copy-change">Copy change</option></select></label>
+              <label class="panel-field">Component<input id="panel-field-component" name="component" maxlength="200"><small id="panel-component-hint"></small></label>
+              <div class="control-pair"><label class="panel-field">State<input id="panel-field-state" name="state" required maxlength="200"></label><label class="panel-field">Severity<select id="panel-field-severity" name="severity"><option value="minor">Minor</option><option value="major">Major</option><option value="critical">Critical</option></select></label></div>
+              <label class="panel-field">Steps to reproduce <span class="optional">(optional)</span><textarea id="panel-field-steps" name="steps" maxlength="6000" rows="3" placeholder="How did you reach this state?"></textarea></label>
+              <p id="panel-comment-error" class="feedback" role="alert" hidden></p>
+              <div class="sticky-save"><button id="panel-save-comment" class="primary-button" type="submit">Save comment</button></div>
+            </form>
+          </section>
+          <section id="panel-ai-view" hidden aria-labelledby="panel-ai-title">
+            <div class="section-heading"><h2 id="panel-ai-title">AI review</h2><button id="panel-close-ai" class="close-button" type="button" aria-label="Close AI review">×</button></div>
+            <p id="panel-ai-mode" class="muted"></p>
+            <label class="panel-field">Instructions <span class="optional">(optional)</span><textarea id="panel-ai-instructions" maxlength="4000" rows="3" placeholder="What should this review focus on?"></textarea></label>
+            <label class="panel-field">Minimum issue size <output id="panel-ai-threshold-value">35/100</output><input id="panel-ai-threshold" type="range" min="0" max="100" value="35" aria-describedby="panel-threshold-help"></label>
+            <p id="panel-threshold-help" class="muted">0 includes small details; 100 shows only the largest issues. Adjusting this filter uses existing results.</p>
+            <p class="panel-notice">Run sends the current screenshot(s) and your instructions to Anthropic using your API key. API charges apply. Suggestions become comments only when you accept them.</p>
+            <p id="panel-ai-config" class="muted"></p>
+            <button id="panel-ai-run" type="button" class="primary-button">Run AI review</button>
+            <p id="panel-ai-error" class="feedback" role="alert" hidden></p>
+            <div id="panel-ai-results"></div>
+          </section>
+        </div>
+      </section>
+
+      <div class="feedback" id="feedback" role="alert" tabindex="-1" hidden></div>
+
+      <div class="reports-access">
+        <button class="report-button" id="review-reports" type="button">
+          <span class="report-button-copy"><span class="button-label">Review reports</span><span class="report-count" id="report-count">Saved on this device</span></span>
+          <svg class="button-arrow" width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="ai-settings-button" id="ai-settings" type="button"><span>AI settings <span aria-hidden="true">↗</span></span><span>Your API key</span></button>
+      </div>
+
+      <p class="drawer-hint">Drag Chrome’s divider to resize this drawer. Close it using × above to return to floating controls.</p>
+      <footer class="footer"><span class="footer-rule" aria-hidden="true"></span>FROM PROTOTYPE TO PRODUCTION<span class="footer-rule" aria-hidden="true"></span></footer>
+    </main>
+  </body>
+</html>

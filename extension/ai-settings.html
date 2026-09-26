@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI settings · Diffuse</title>
+  <link rel="stylesheet" href="ai-settings.css">
+  <script src="ai-settings.js" type="module"></script>
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="report.html"><span class="brand-mark" aria-hidden="true"><i></i><i></i></span>Diffuse</a><span class="edition">AI REVIEW</span></header>
+  <main>
+    <section class="intro"><p class="eyebrow">YOUR EYE. A SECOND PERSPECTIVE.</p><h1>A little help finding the details.</h1><p>Connect your Anthropic API key to review a captured screen with Claude. You choose which suggestions become comments.</p></section>
+    <div class="layout">
+      <form id="ai-settings-form" aria-busy="true">
+        <div class="section-heading"><h2>Claude connection</h2><span class="key-status" id="key-status" role="status">Loading…</span></div>
+        <label for="api-key">Anthropic API key</label>
+        <div class="password-field"><input id="api-key" name="api-key" type="password" autocomplete="off" spellcheck="false" maxlength="512" placeholder="Paste your API key" aria-describedby="key-help"><button id="toggle-key" type="button" aria-label="Show entered API key" aria-controls="api-key" aria-pressed="false">Show</button></div>
+        <p class="help" id="key-help">Your saved key is never displayed. Leave this blank to keep it.</p>
+        <label class="check-row"><input id="remember-key" type="checkbox" aria-labelledby="remember-label" aria-describedby="remember-help"><span><span id="remember-label">Remember my key on this device</span><small id="remember-help">Otherwise it is kept only until Chrome closes. Remembered keys are stored in this Chrome profile, not in a password vault.</small></span></label>
+        <div class="divider"></div>
+        <label for="model">Claude model</label>
+        <input id="model" type="text" spellcheck="false" autocomplete="off" maxlength="120" value="claude-sonnet-5" required aria-describedby="model-help">
+        <p class="help" id="model-help">Use an Anthropic model ID with vision and structured output support. <a href="https://platform.claude.com/docs/en/models/overview" target="_blank" rel="noopener noreferrer">See available models ↗</a></p>
+        <div class="range-heading"><label for="threshold">Minimum issue size</label><output id="threshold-value" for="threshold">35 / 100</output></div>
+        <input id="threshold" type="range" min="0" max="100" step="1" value="35" aria-valuetext="35 out of 100" aria-describedby="threshold-help">
+        <p class="help" id="threshold-help">0 shows all findings. Higher numbers hide smaller differences; 90 shows only the largest issues. This is a display filter, not review accuracy or confidence.</p>
+        <div id="feedback" role="status" aria-live="polite" tabindex="-1" hidden></div>
+        <div class="actions"><button id="save" class="primary" type="submit" disabled>Save settings <span aria-hidden="true">↗</span></button><button id="clear-key" class="text-button" type="button" disabled>Remove key</button></div>
+      </form>
+      <aside>
+        <p class="eyebrow">YOU STAY IN CONTROL</p><h2>Only when you ask.</h2>
+        <div class="note"><span class="number">01</span><div><h3>A captured moment</h3><p>An AI review sends the production screenshot, the prototype screenshot in comparison mode, and your review instructions directly to Anthropic. API usage is billed to your Anthropic account.</p></div></div>
+        <div class="note"><span class="number">02</span><div><h3>Your key stays separate</h3><p>The key is used only by Diffuse’s connection to Anthropic. It is never added to comments, exported reports, or the pages you are reviewing.</p></div></div>
+        <div class="note"><span class="number">03</span><div><h3>Suggestions, then your judgment</h3><p>Claude sees the captured screen. It does not test hidden states or interactions. Review every finding before accepting it.</p></div></div>
+        <a class="console-link" href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener noreferrer">Manage Anthropic API keys <span aria-hidden="true">↗</span></a>
+      </aside>
+    </div>
+    <footer><a href="jira-settings.html">Jira connections</a><span>Diffuse</span></footer>
+  </main>
+</body>
+</html>

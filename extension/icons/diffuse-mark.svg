@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44" fill="none" role="img" aria-labelledby="diffuse-mark-title diffuse-mark-description">
+  <title id="diffuse-mark-title">Diffuse</title>
+  <desc id="diffuse-mark-description">Two overlapping rounded panels in coral and violet, representing a prototype and production in the same view.</desc>
+  <rect x="5" y="4" width="23" height="27" rx="5" fill="#EF785C" transform="rotate(-9 16.5 17.5)"/>
+  <rect x="14" y="11" width="23" height="27" rx="5" fill="#6941C6" stroke="#F7F4FC" stroke-width="2" transform="rotate(5 25.5 24.5)"/>
+</svg>

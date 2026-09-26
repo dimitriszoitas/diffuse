@@ -1,0 +1,61 @@
+:root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 16px; color: #211a35; background: #f7f4fc; color-scheme: light; font-synthesis: none; --ink: #211a35; --muted: #625870; --violet: #6941c6; --line: #8a7b9b; --pale: #eee7fa; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; line-height: 1.6; }
+button, input { font: inherit; }
+button { min-height: 48px; padding: 10px 16px; border: 1px solid var(--line); border-radius: 9px; color: var(--ink); background: #fff; cursor: pointer; }
+button:not(:disabled):hover { background: var(--pale); }
+button:disabled { cursor: default; color: var(--muted); background: #e7e0f1; }
+button:focus-visible, a:focus-visible, input:focus-visible, [tabindex="-1"]:focus-visible { outline: 3px solid var(--violet); outline-offset: 3px; }
+a { color: var(--violet); text-underline-offset: 4px; overflow-wrap: anywhere; }
+.topbar { min-height: 88px; padding: 20px max(24px, calc((100% - 1120px)/2)); border-bottom: 1px solid #ddd4e9; background: #fff; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+.topbar>a { min-height: 44px; display: flex; align-items: center; gap: 10px; }
+.brand { font-size: 26px; letter-spacing: -.9px; font-weight: 700; text-decoration: none; color: var(--ink); }
+.brand-mark { position: relative; display: block; width: 33px; height: 34px; flex: 0 0 33px; }
+.brand-mark i { position: absolute; width: 23px; height: 27px; border-radius: 5px; }
+.brand-mark i:first-child { left: 0; top: 0; background: #ef785c; transform: rotate(-9deg); }
+.brand-mark i:last-child { left: 9px; top: 7px; background: var(--violet); border: 2px solid #fff; transform: rotate(5deg); }
+main { max-width: 1184px; margin: auto; padding: 52px 32px 0; }
+.eyebrow { margin: 0 0 14px; font-size: 16px; font-weight: 650; letter-spacing: .7px; color: var(--violet); }
+.intro h1 { max-width: 820px; font-size: clamp(30px, 3.6vw, 42px); line-height: 1.18; letter-spacing: -1.2px; margin: 0 0 20px; }
+.intro>p:last-child { max-width: 750px; color: var(--muted); font-size: 18px; margin: 0; }
+.layout { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 32px; align-items: start; margin-top: 36px; }
+.connections, aside { padding: 28px; border: 1px solid #c4b5da; border-radius: 18px; min-width: 0; }
+.connections { background: #fff; }
+aside { background: var(--pale); }
+h2 { font-size: 22px; letter-spacing: -.4px; line-height: 1.35; margin: 0; }
+.section-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 24px; }
+.status { background: #f7f4fc; color: var(--muted); padding: 4px 10px; border: 1px solid #c4b5da; border-radius: 8px; }
+.empty-state { color: var(--muted); padding: 24px; border: 1px dashed #8a7b9b; border-radius: 12px; margin: 0 0 24px; }
+.primary { color: #fff; background: var(--violet); border-color: var(--violet); font-weight: 600; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.primary:not(:disabled):hover { background: #5531a8; border-color: #5531a8; }
+.help { margin: 12px 0 0; color: var(--muted); font-size: 16px; overflow-wrap: anywhere; }
+.account { border: 1px solid #c4b5da; border-radius: 12px; margin-bottom: 20px; padding: 20px; min-width: 0; }
+.account h3 { font-size: 20px; line-height: 1.4; margin: 0 0 6px; overflow-wrap: anywhere; }
+.account-identity { margin: 0 0 20px; color: var(--muted); overflow-wrap: anywhere; }
+.site-list { list-style: none; padding: 0; margin: 0; }
+.site-list li { padding: 12px 0; border-top: 1px solid #ddd4e9; }
+.site-list strong, .site-list a { display: block; overflow-wrap: anywhere; }
+.account-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.disconnect { color: #9d3524; border-color: #b35744; }
+.disconnect:not(:disabled):hover { background: #fff0eb; }
+.account-notice { padding: 12px; margin: 16px 0 0; border-radius: 8px; background: #fff0eb; color: #9d3524; }
+.note { display: flex; gap: 14px; align-items: flex-start; margin-top: 26px; }
+.number { flex: 0 0 34px; height: 34px; display: flex; justify-content: center; align-items: center; background: #fff0eb; color: #9d3524; border-radius: 8px; font-weight: 650; }
+.note h3 { font-size: 18px; margin: 0 0 8px; }
+.note p { color: var(--muted); margin: 0; }
+#feedback { padding: 14px 16px; margin-bottom: 24px; border: 1px solid #c4b5da; border-radius: 9px; background: var(--pale); color: #512a9e; overflow-wrap: anywhere; }
+#feedback[data-error="true"] { border-color: #b35744; background: #fff0eb; color: #9d3524; }
+.setup { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 32px; padding-top: 32px; margin-top: 36px; border-top: 1px solid #ddd4e9; }
+.setup p { color: var(--muted); margin-bottom: 0; }
+.installation { min-width: 0; }
+.installation label { display: block; font-weight: 600; margin-bottom: 8px; }
+.copy-field { display: flex; gap: 10px; }
+.copy-field input { min-width: 0; width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; background: #fff; color: var(--ink); }
+.copy-field button { flex: 0 0 auto; }
+footer { margin-top: 48px; border-top: 1px solid #ddd4e9; padding: 24px 0 32px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; color: var(--muted); }
+footer a { min-height: 44px; display: flex; align-items: center; gap: 8px; }
+@media (max-width: 900px) { .layout, .setup { grid-template-columns: 1fr; gap: 24px; } }
+@media (max-width: 480px) { .topbar { padding: 16px 20px; } main { padding: 32px 20px 0; } .connections, aside { padding: 20px; border-radius: 14px; } .intro>p:last-child { font-size: 16px; } .account { padding: 16px; } .copy-field { flex-wrap: wrap; } .copy-field input { flex-basis: 100%; } .primary { width: 100%; } .account-actions { flex-direction: column; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+@media (forced-colors: active) { .brand-mark i { forced-color-adjust: none; } }

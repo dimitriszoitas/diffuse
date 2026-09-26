@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Review notebook — Diffuse</title>
+  <link rel="stylesheet" href="report.css">
+  <link rel="stylesheet" href="jira-export.css">
+  <script src="report.js" type="module"></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="report.html" aria-label="Diffuse review notebook"><span class="brand-mark" aria-hidden="true"><i></i><i></i></span>Diffuse<span class="brand-tag">Review</span></a>
+    <div class="sidebar-intro"><h1>The details.<br>The next steps.</h1><p>Clear observations, with the evidence to act on them.</p></div>
+    <div class="list-heading"><h2>Saved reviews</h2><button id="refresh-reviews" class="small-icon" title="Refresh reviews" aria-label="Refresh reviews">↻</button></div>
+    <nav id="review-list" class="review-list" aria-label="Saved reviews"><p class="sidebar-empty">Loading your reviews…</p></nav>
+    <footer class="sidebar-footer"><span class="local-message"><span class="local-indicator" aria-hidden="true"></span>Saved in this Chrome profile.</span><p>AI analysis is optional. You choose what to send to Anthropic using your own key.</p><button id="ai-settings" class="sidebar-settings" type="button">AI settings ↗</button><a class="sidebar-settings" href="jira-settings.html">Jira settings ↗</a></footer>
+  </aside>
+  <main class="workspace">
+    <header class="workspace-bar"><span class="workspace-breadcrumb">Diffuse <span>/</span> <strong>Review notebook</strong></span><span id="review-count" class="muted">Local evidence</span></header>
+    <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+    <section class="export-toolbar" id="export-toolbar" hidden>
+      <div><h2>Share the full review</h2><p id="handoff-description">Every observation, its evidence, and the next step.</p></div>
+      <div class="export-actions"><button id="copy-report" class="button primary">Copy entire report <span aria-hidden="true">↗</span></button><button id="download-html" class="button">Download HTML</button><button id="download-markdown" class="button subtle">Markdown ↓</button><button id="delete-review" class="button danger-subtle">Delete review</button></div>
+      <details class="export-help"><summary>What is included when I copy or download?</summary><p>All observations are included, even when a category is selected. Pasting images depends on the destination; use <strong>Copy image</strong> if it strips them. HTML keeps embedded screenshots and playable clips. Pasted video is represented by a screenshot and filename.</p></details>
+    </section>
+    <div id="report-content" aria-busy="true"><section class="empty-state"><span class="empty-symbol" aria-hidden="true">◧</span><h2>Getting your notebook ready.</h2><p>Your saved review evidence will appear here.</p></section></div>
+  </main>
+  <dialog id="edit-dialog" aria-labelledby="edit-title">
+    <form id="edit-form">
+      <header class="dialog-header"><div><p class="eyebrow">EDIT OBSERVATION</p><h2 id="edit-title">Make the next step clear.</h2></div><button type="button" class="close-button" id="close-edit" aria-label="Close edit dialog">×</button></header>
+      <div class="edit-category"><label for="edit-category">Category</label><select id="edit-category" name="category" data-category="design-mismatch"><option value="design-mismatch">Design mismatch</option><option value="ux-issue">UX issue</option><option value="copy-change">Copy change</option></select></div>
+      <div class="dialog-fields"><label>Title <span class="optional-label">(optional)</span><input name="title" maxlength="180" placeholder="Uses your observation when left blank"></label><label>Observation<textarea name="comment" rows="3" maxlength="8000" placeholder="Describe what you see." required></textarea></label><label>Requested change <span class="optional-label">(optional)</span><textarea name="expected" rows="2" maxlength="8000" placeholder="Describe the intended appearance or behavior."></textarea></label><div class="field-pair"><label>Component<input name="component" maxlength="240" placeholder="e.g. AccountMenu"></label><label>State<input name="state" maxlength="240" placeholder="e.g. expanded, loading" required></label></div><label>Steps to reproduce<textarea name="steps" rows="3" maxlength="8000" placeholder="How can someone reach this exact state?"></textarea></label><label>Severity<select name="severity"><option value="minor">Minor</option><option value="major">Major</option><option value="critical">Critical</option></select></label><p class="form-note">Original screenshots, recording, and captured engineering context stay attached.</p><p id="edit-error" class="form-error" role="alert" hidden></p></div>
+      <footer class="dialog-footer"><button type="button" class="button" id="cancel-edit">Cancel</button><button type="submit" class="button primary" id="save-comment">Save changes</button></footer>
+    </form>
+  </dialog>
+</body>
+</html>

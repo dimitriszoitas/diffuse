@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Diffuse</title>
+    <link rel="stylesheet" href="popup.css" />
+    <script src="popup.js" defer></script>
+  </head>
+  <body>
+    <main class="popup" id="popup" aria-busy="true">
+      <header class="brand-header">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"><span></span><span></span></span>
+          <span>Diffuse</span>
+        </div>
+        <span class="edition"><span class="signal" aria-hidden="true"></span><span id="edition-label">DESIGN REVIEW</span></span>
+        <button id="open-side-panel" class="icon-button dock-button" type="button" aria-label="Open in side drawer" title="Open in side drawer — resizes the page beside Diffuse"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M15 4v16M7 12h5m-2-2 2 2-2 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </header>
+
+      <section id="loading" class="initial-loading" role="status" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span>
+        Getting your tabs ready…
+      </section>
+
+      <section id="setup" hidden aria-labelledby="setup-title">
+        <div class="intro">
+          <h1 id="setup-title">Review this page</h1>
+          <p>Comment, capture and review without leaving your work.</p>
+        </div>
+        <div class="source-card">
+          <span class="step-label">CURRENT PAGE</span>
+          <div class="source-text"><p class="source-title" id="source-title">Your page</p><p class="source-url" id="source-url"></p></div>
+        </div>
+        <form id="comparison-form">
+          <button class="primary-button" id="start-comparison" type="submit" disabled><span class="button-label">Start review</span><span aria-hidden="true">→</span></button>
+        </form>
+        <p class="field-help">Want to compare? Use <strong>Diff</strong> in the page toolbar to choose a reference tab.</p>
+      </section>
+
+      <section id="session-panel" hidden aria-labelledby="session-title">
+        <div class="intro">
+          <h1 id="session-title">Your review is ready.</h1>
+          <p id="session-subtitle">Use Diff whenever you need a reference.</p>
+        </div>
+        <div class="session-card">
+          <div class="session-status" id="session-status" role="status"><span class="signal" aria-hidden="true"></span><span id="session-status-label">Review ready</span></div>
+          <div class="session-side" id="session-prototype">
+            <span class="session-side-label">PROTOTYPE</span>
+            <p class="session-page-title" id="session-source-title"></p>
+            <p class="source-url" id="session-source-url"></p>
+          </div>
+          <div class="session-divider" id="session-divider" aria-hidden="true"></div>
+          <div class="session-side">
+            <span class="session-side-label" id="session-target-label">PRODUCTION</span>
+            <p class="session-page-title" id="session-target-title"></p>
+            <p class="source-url" id="session-target-url"></p>
+          </div>
+        </div>
+        <p class="session-error" id="session-error" role="alert" hidden></p>
+        <div class="capture-notice" id="capture-notice" hidden>
+          <span class="capture-state" id="capture-state" hidden><span class="signal" aria-hidden="true"></span>Capture ready</span>
+          <p>Clicking Diffuse here allows screenshots and recordings for this tab.</p>
+        </div>
+        <button class="primary-button" id="enable-capture" type="button" hidden>
+          <span class="button-label">Enable capture &amp; return</span>
+          <svg class="button-arrow" width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="primary-button" id="return-to-comparison" type="button">
+          <span class="button-label">Return to review</span>
+          <svg class="button-arrow" width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="secondary-button" id="stop-comparison" type="button">Stop review</button>
+      </section>
+
+      <div class="feedback" id="feedback" role="alert" tabindex="-1" hidden></div>
+
+      <div class="reports-access">
+        <button class="report-button" id="review-reports" type="button">
+          <span class="report-button-copy"><span class="button-label">Review reports</span><span class="report-count" id="report-count">Saved on this device</span></span>
+          <svg class="button-arrow" width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="ai-settings-button" id="ai-settings" type="button"><span>AI settings <span aria-hidden="true">↗</span></span><span>Your API key</span></button>
+      </div>
+
+      <footer class="footer"><span class="footer-rule" aria-hidden="true"></span>FROM PROTOTYPE TO PRODUCTION<span class="footer-rule" aria-hidden="true"></span></footer>
+    </main>
+  </body>
+</html>

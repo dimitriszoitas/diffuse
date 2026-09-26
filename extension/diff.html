@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Diffuse — choose a reference</title><link rel="stylesheet" href="popup.css"><link rel="stylesheet" href="diff.css"><script src="diff.js" defer></script></head>
+<body><main class="popup">
+  <header class="brand-header"><div class="brand"><span class="brand-mark" aria-hidden="true"><span></span><span></span></span><span>Diffuse</span></div><span class="edition">DIFF</span></header>
+  <div class="intro"><h1>Choose a reference</h1><p>Compare another tab with the page you’re reviewing.</p></div>
+  <p id="reviewed-page" class="field-help"></p>
+  <form id="reference-form">
+    <div class="card-heading"><label class="step-label" for="reference-tab">REFERENCE TAB</label><button id="refresh-reference-tabs" class="icon-button" type="button" aria-label="Refresh open tabs">↻</button></div>
+    <select id="reference-tab" required aria-describedby="reference-help"><option value="">Loading open tabs…</option></select>
+    <p id="reference-help" class="field-help">Choose the prototype or page you want to compare with.</p>
+    <p class="capture-help">Chrome will ask you to confirm sharing. Select <strong>the same tab</strong> there. Your review and existing comments stay together.</p>
+    <button id="connect-reference" class="primary-button" type="submit" disabled>Connect reference</button>
+  </form>
+  <p id="diff-feedback" class="feedback" role="alert" tabindex="-1" hidden></p>
+  <div class="diff-actions"><button id="remove-reference" class="secondary-button" type="button" hidden>Remove reference</button><button id="close-diff" class="secondary-button" type="button">Cancel</button></div>
+  <p class="field-help">After connecting, use the toolbar toggle to show or hide the divider.</p>
+</main></body></html>
