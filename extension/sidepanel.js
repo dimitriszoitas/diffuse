@@ -76,7 +76,11 @@
       const nextSession=result.session || null;
       if(nextSession?.id!==lastSessionId){clearDraft();commentsKey='';aiKey='';state=null;connectionLost=false;commandError='';lastSessionId=nextSession?.id||null;}
       session=nextSession;
-      if(result.state?.code==='PANEL_PAGE_DISCONNECTED') {
+      if(result.state?.code==='PANEL_PAGE_STARTING') {
+        // Initial connection is expected to take a moment; retain any existing
+        // draft/error rather than treating this as a reconnect or a Save retry.
+        if(!draftId){state=result.state;connectionLost=false;commandError='';}
+      } else if(result.state?.code==='PANEL_PAGE_DISCONNECTED') {
         connectionLost=true;commandError=result.state.message;
         // A failed connection must not replace the locally edited draft with an empty view.
         if(!draftId||!state?.comment)state=result.state;
@@ -187,14 +191,16 @@
     $('dock-workspace').hidden=!session;
     window.dispatchEvent(new CustomEvent('diffuse-panel-state',{detail:{session,state,busy:Boolean(pendingAction)}}));
     if(!session){clearDraft();return;}
-    const hasReference=Number.isInteger(session.sourceTabId);text('panel-mode','REVIEW');text('panel-title',state?.recording?'Recording…':'Your review');text('panel-page',session.target?.title||'Reviewed page');
+    const starting=state?.code==='PANEL_PAGE_STARTING';
+    const hasReference=Number.isInteger(session.sourceTabId);text('panel-mode','REVIEW');text('panel-title',starting?'Starting review…':state?.recording?'Recording…':'Your review');text('panel-page',session.target?.title||'Reviewed page');
     const away=!state||state.active===false||state.available===false;
     $('panel-away').hidden=!away;$('panel-live').hidden=away;
-    $('panel-recover-page').hidden=!connectionLost;
+    $('panel-focus').hidden=starting;
+    $('panel-recover-page').hidden=starting||!connectionLost;
     $('panel-recover-page').disabled=Boolean(pendingAction);
     text('panel-away-message',state?.message||'Return to the reviewed page to continue. Your review stays open while you switch tabs.');
     notice('panel-warning',[session.warning,state?.warning].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join(' · '));
-    $('panel-stop').disabled=(Boolean(pendingAction)&&pendingAction!=='runAi')||Boolean(state?.recordingBusy);
+    $('panel-stop').disabled=starting||(Boolean(pendingAction)&&pendingAction!=='runAi')||Boolean(state?.recordingBusy);
     if(away)return;
     const view=state.view==='comment'&&!state.comment?'controls':state.view||'controls';
     $('panel-controls').hidden=view!=='controls';$('panel-composer').hidden=view!=='comment';$('panel-ai-view').hidden=view!=='ai';

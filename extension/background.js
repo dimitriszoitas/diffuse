@@ -95,6 +95,13 @@ async function panelRequest(message, sender) {
     const error = target.windowId !== message.windowId ? 'This comparison belongs to another Chrome window. Return to the production page to continue.' : 'Return to the production page to use this drawer.';
     return message.type === 'PANEL_STATE' ? {ok: true, session: current, state: {active: false, available: false, message: error}} : {ok: false, code: 'PANEL_TARGET_INACTIVE', error, session: current, state: null};
   }
+  // A newly opened sidebar can ask for state before its page controller exists.
+  // Only an initializer owned by this worker is pending; a persisted 'starting'
+  // session after a worker restart must still report a real lost connection.
+  if (current.status === 'starting' && transitioning) {
+    const state = {active: true, available: false, code: 'PANEL_PAGE_STARTING', message: 'Starting your review…'};
+    return message.type === 'PANEL_STATE' ? {ok: true, session: current, state} : {ok: false, code: state.code, error: state.message, session: current, state};
+  }
   if (message.type === 'PANEL_COMMAND' && message.action === 'openDiff') return openDiff(current);
   if (message.type === 'PANEL_COMMAND' && message.action === 'recoverPage') {
     if (transitioning || evidenceBusy || recordingStart || current.recording || current.aiRunning) throw new Error('Finish the capture or AI review before reconnecting.');

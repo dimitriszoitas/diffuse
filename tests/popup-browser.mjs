@@ -19,6 +19,14 @@ await cp(process.env.POPUP_EXTENSION||join(project,'extension'),extension,{recur
 const manifest=JSON.parse(await readFile(join(extension,'manifest.json'),'utf8'));
 manifest.host_permissions=[...new Set([...(manifest.host_permissions||[]),'http://127.0.0.1/*'])];
 await writeFile(join(extension,'manifest.json'),JSON.stringify(manifest));
+// Hold only the disposable worker at its cold-start boundary. The real native
+// sidebar must display pending state before any page content script exists.
+const workerFile=join(extension,'background.js');
+const workerSource=await readFile(workerFile,'utf8');
+const auditStartup="await persist();\n    await ensureOffscreen();\n    await mediaMessage('START_AUDIT', {sessionId: id});";
+assert(workerSource.includes(auditStartup),'Audit cold-start fixture location changed');
+await writeFile(workerFile,workerSource.replace(auditStartup,"await persist();\n    await new Promise(resolve=>{globalThis.__releaseAuditStart=resolve;});\n    await ensureOffscreen();\n    await mediaMessage('START_AUDIT', {sessionId: id});"));
+
 const server=http.createServer((req,res)=>{res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});res.end(`<!doctype html><title>${req.url.includes('prototype')?'Forma prototype — Studio overview':'Forma production — Studio overview'}</title><h1>Fictional local popup fixture</h1>`);});
 await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
 const origin=`http://127.0.0.1:${server.address().port}`;
@@ -60,12 +68,20 @@ try{
     for(const id of ['open-side-panel','start-comparison','review-reports','ai-settings']){await evaluate(`(()=>{const e=document.getElementById(${JSON.stringify(id)});e.focus();e.scrollIntoView({block:'center'})})()`);const b=await evaluate(`(()=>{const b=document.getElementById(${JSON.stringify(id)}).getBoundingClientRect();return{x:b.x,right:b.right,top:b.top,bottom:b.bottom,viewportWidth:innerWidth,viewportHeight:innerHeight}})()`);assert(b.x>=-.5&&b.right<=b.viewportWidth+.5,`${id} clips in native popup`);assert(b.top>=-.5&&b.bottom<=b.viewportHeight+.5,`${id} cannot be brought into view in native popup`);}
     await screenshot('footer-100');pass('Primary and secondary actions remain reachable by focus and scrolling within the native popup');
     await click('start-comparison');
-    await until(async()=>{const review=await worker.evaluate(async()=> (await chrome.storage.session.get('comparison')).comparison);return review?.status==='live';},'review starts on the current page');
-    const review=await worker.evaluate(async()=> (await chrome.storage.session.get('comparison')).comparison);
-    assert.equal(review.target.url,production.url());assert.equal(Number.isInteger(review.sourceTabId),false);
     await until(async()=> (await cdp.send('Target.getTargets',{filter:[{exclude:false}]})).targetInfos.some(t=>t.type==='page'&&t.url===`chrome-extension://${id}/sidepanel.html`),'native sidebar opens with review');
     const sidebarTarget=(await cdp.send('Target.getTargets',{filter:[{exclude:false}]})).targetInfos.find(t=>t.type==='page'&&t.url===`chrome-extension://${id}/sidepanel.html`);
     ({sessionId}=await cdp.send('Target.attachToTarget',{targetId:sidebarTarget.targetId,flatten:false}));
+    await until(()=>evaluate(`document.getElementById('panel-away')?.checkVisibility()&&document.getElementById('panel-away-message').textContent==='Starting your review…'`),'native cold-start pending state');
+    assert.equal(await evaluate(`document.getElementById('panel-focus').checkVisibility()`),false);
+    assert.equal(await evaluate(`document.getElementById('panel-recover-page').checkVisibility()`),false);
+    assert.equal(await evaluate(`document.getElementById('feedback').checkVisibility()`),false);
+    assert.equal(await evaluate(`document.getElementById('panel-stop').disabled`),true);
+    await screenshot('cold-start-pending');
+    await worker.evaluate(()=>globalThis.__releaseAuditStart());
+    await until(async()=>{const review=await worker.evaluate(async()=> (await chrome.storage.session.get('comparison')).comparison);return review?.status==='live';},'review starts on the current page');
+    const review=await worker.evaluate(async()=> (await chrome.storage.session.get('comparison')).comparison);
+    assert.equal(review.target.url,production.url());assert.equal(Number.isInteger(review.sourceTabId),false);
+    pass('Native cold start shows Starting your review without a false reconnect error');
     await until(()=>evaluate(`document.getElementById('panel-controls')?.checkVisibility()&&!document.getElementById('panel-diff').disabled`),'native sidebar connected with review controls');
     assert.equal(await evaluate(`document.getElementById('panel-comment').disabled`),false);
     await screenshot('started-review-sidebar');

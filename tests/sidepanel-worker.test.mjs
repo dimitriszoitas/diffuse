@@ -45,7 +45,7 @@ async function harness({initial = currentSession(), waitForStorage = null} = {})
     protectAIStorage: async () => {}, readAISettings: async () => ({hasKey: false}), setTimeout, clearTimeout, setInterval, clearInterval});
   vm.runInContext(source.replace(/^import .*\n/gm, '') + `
     globalThis.api = {ready, handle, captureDraft, initializeTab, publish, syncPanelDocking,
-      setSession(value) {session = value;}, getSession() {return session;},
+      setSession(value) {session = value;}, setTransitioning(value) {transitioning = value;}, getSession() {return session;},
       async flushPanels() {await Promise.all([...panelPorts.values()].map(item => item.queue)); await panelDocking;}
     };`, context, {filename: 'background.js'});
   const connect = (sender = panelSender()) => {
@@ -205,4 +205,31 @@ test('explicit recovery restores the existing pending evidence and latest fields
   assert.equal(worker.state.messages.some(item=>item.action==='saveComment'||item.type==='ADD_COMMENT'),false);
   await assert.rejects(worker.send({type:'PANEL_COMMAND',windowId:7,sessionId:'session',action:'recoverPage',draftId:'consumed',fields:{comment:'Never recreate me'}}),/Check Review reports/);
   assert.equal(worker.state.savedDrafts.length,1);
+});
+
+
+test('initializing review reports pending only after panel and active-tab authorization', async () => {
+  const worker = await harness({initial:{...currentSession(),status:'starting'}});
+  worker.setTransitioning(true);
+  await assert.rejects(worker.send({type:'PANEL_STATE',windowId:7}),/no longer attached/);
+  await worker.attach();worker.state.messages=[];
+  const original=worker.chrome.tabs.sendMessage;
+  worker.chrome.tabs.sendMessage=async()=>{throw new Error('Could not establish connection. Receiving end does not exist.');};
+  const pending=await worker.send({type:'PANEL_STATE',windowId:7});
+  assert.equal(pending.ok,true);assert.equal(pending.state.code,'PANEL_PAGE_STARTING');assert.equal(pending.state.active,true);assert.equal(pending.state.available,false);
+  assert.doesNotMatch(pending.state.message,/interrupted|Reconnect/);
+  const save=await worker.send({type:'PANEL_COMMAND',windowId:7,sessionId:'session',action:'saveComment',fields:{comment:'Keep my draft'}});
+  assert.equal(save.ok,false);assert.equal(save.code,'PANEL_PAGE_STARTING');assert.equal(worker.state.messages.length,0);
+  await assert.rejects(worker.send({type:'PANEL_COMMAND',windowId:7,sessionId:'stale',action:'saveComment'}),/no longer active/);
+  worker.state.active.set(7,1);
+  assert.equal((await worker.send({type:'PANEL_STATE',windowId:7})).state.active,false);
+  worker.state.active.set(7,2);worker.chrome.tabs.sendMessage=original;
+  worker.setSession({...worker.getSession(),status:'live'});worker.setTransitioning(false);
+  assert.equal((await worker.send({type:'PANEL_STATE',windowId:7})).state.code,undefined);
+});
+
+test('stale starting status without a running initializer remains a real disconnection', async () => {
+  const worker = await harness({initial:{...currentSession(),status:'starting'}});await worker.attach();
+  worker.chrome.tabs.sendMessage=async()=>{throw new Error('Could not establish connection. Receiving end does not exist.');};
+  assert.equal((await worker.send({type:'PANEL_STATE',windowId:7})).state.code,'PANEL_PAGE_DISCONNECTED');
 });
