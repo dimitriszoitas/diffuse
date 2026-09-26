@@ -13,6 +13,8 @@
   let connectionId = null;
   let settingsTimer = null;
   let scrollFrame = null;
+  let referenceWheelFrame = null;
+  let pendingReferenceWheel = null;
   let resizeTimer = null;
   let localWarning = '';
   let viewportActionBusy = false;
@@ -53,7 +55,6 @@
   let aiSavedThreshold = null;
   let aiPreviewContext = null;
   let docked = false;
-  const toolbarState = {sessionId: null, minimized: false};
   let panelNotifyTimer = null;
   let draftEvidenceRevision = 0;
   let commentFieldRevisions = new Map();
@@ -127,15 +128,8 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
 .viewport-bar{border-top:1px solid var(--line);gap:8px;padding:8px 12px}.viewport-segments{display:flex;gap:2px;border:1px solid var(--line);border-radius:10px;padding:2px}.viewport-segments button{font-size:14px;min-height:44px;padding:5px 9px;border:1px solid transparent;background:transparent}.viewport-segments button[aria-pressed=true]{background:var(--accent);color:var(--ink)}.viewport-bar .composer-note{font-size:14px;margin:0}:host([data-docked]) .viewport-bar{display:none!important}
 @media(max-width:650px){#toolbar .bar{padding:7px 9px;gap:6px}#toolbar .bar button,#toolbar .bar summary{font-size:14px;padding:5px 9px;min-height:44px}#toolbar .brand{font-size:18px;gap:8px}#toolbar #status,#toolbar #recording-note{display:none}#toolbar .viewport-bar{gap:5px}#toolbar .viewport-segments{gap:0}#toolbar #viewport-caption{flex-basis:100%}}
 
-/* Compact toolbar. The minimum target stays 44px; excess space is removed from the shell. */
-#toolbar{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px;padding:6px 8px;bottom:12px;width:max-content;max-width:min(1120px,calc(100% - 24px));border-radius:14px;font-size:14px;line-height:1.4}
-#toolbar>.comparison-bar{display:contents}#toolbar>.review-bar,#toolbar>.viewport-bar{display:flex;align-items:center;flex-wrap:wrap;gap:4px;padding:0;border:0;margin:0;min-width:0}
-#toolbar button,#toolbar summary{min-width:44px;min-height:44px;font-size:14px;padding:5px 9px;border-radius:8px;gap:6px}#toolbar .brand{font-size:18px;gap:7px;margin:0 5px 0 0;letter-spacing:-.4px}#toolbar .mark{width:23px;height:26px}#toolbar .mark:before,#toolbar .mark:after{width:15px;height:22px}#toolbar .mark:after{left:8px;top:3px}
-#toolbar #status,#toolbar .separator,#toolbar #recording-note{display:none}#toolbar .control{gap:6px;font-size:14px}#toolbar .control input[type=range]{width:70px;min-width:70px}#toolbar .control output{min-width:34px}#toolbar #dock-sidebar{width:44px;padding:0}#toolbar .viewport-segments{gap:0;padding:1px;border-radius:9px}#toolbar .viewport-segments button{padding:5px 8px}#toolbar .alignment .control{display:flex;grid-column:1/-1}#toolbar #viewport-caption{max-width:170px;font-size:14px;line-height:1.3;overflow-wrap:anywhere}#toolbar #warning,#toolbar #diff-hint{flex-basis:100%;padding:6px 8px;margin:0}
-#toolbar-toggle{flex-shrink:0;margin-left:auto;width:44px;padding:0!important;background:transparent}#toolbar-toggle svg{width:20px;height:20px}#toolbar-mini{display:none;align-items:center;gap:8px}#toolbar-mini .brand{margin:0}#minimized-record{color:var(--ink);background:var(--coral);border-color:var(--coral)}
-#toolbar[data-minimized=true]{width:max-content;max-width:calc(100% - 16px);padding:4px 6px 4px 12px;gap:6px;border-radius:14px}#toolbar[data-minimized=true]>.bar,#toolbar[data-minimized=true]>#warning,#toolbar[data-minimized=true]>#diff-hint{display:none!important}#toolbar[data-minimized=true]>#toolbar-mini{display:flex}#toolbar[data-minimized=true]>#toolbar-toggle{margin-left:0;order:0}
-:host([data-docked]) #toolbar{gap:4px;padding:6px;width:max-content;max-width:calc(100% - 16px)}:host([data-docked]) #toolbar>.review-bar{display:contents}:host([data-docked]) #toolbar #toolbar-toggle{margin-left:0}:host([data-docked]) #toolbar[data-minimized=true]{padding-left:12px}
-@media(max-width:650px){#toolbar{bottom:8px;max-height:42vh;overflow:auto;max-width:calc(100% - 16px);width:calc(100% - 16px);gap:4px;padding:5px 6px}#toolbar .brand{margin-right:0}#toolbar>.review-bar,#toolbar>.viewport-bar{justify-content:center;flex:1 1 100%;gap:4px}#toolbar .control{flex-wrap:nowrap}#toolbar .viewport-segments{max-width:100%}#toolbar #viewport-caption{flex-basis:auto;max-width:none;font-size:14px}#toolbar #toolbar-toggle{margin-left:0;order:-1}#toolbar>.comparison-bar>.brand{order:-2}#toolbar>.review-bar button{padding-inline:6px}#toolbar #viewport-caption{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}#toolbar[data-minimized=true]{overflow:visible;flex-wrap:nowrap}#toolbar[data-minimized=true] #toolbar-mini{min-width:0;flex-wrap:wrap}#toolbar[data-minimized=true] #minimized-record{font-size:14px}:host([data-docked]) #toolbar{width:max-content}:host([data-docked]) #toolbar>.review-bar{flex:none}}
+/* Drawer commands share controller fields, but no toolbar is rendered on the page. */
+#toolbar{display:none!important}
 
 :host([data-context-invalidated]) > :not(style):not(#context-reload-notice):not(#comment-panel){display:none!important}
 :host([data-context-invalidated]:not([data-reload-draft])) #comment-panel{display:none!important}
@@ -155,15 +149,15 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
     root.innerHTML = `<style>${styles}</style>
       <div id="layer" aria-hidden="true"><video id="reference" autoplay muted playsinline></video></div>
       <div id="divider"><span class="edge-label production">Production</span><span class="edge-label prototype">Prototype</span><button id="handle" type="button" role="slider" aria-label="Prototype reveal" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">↔</button></div>
-      <div id="toolbar" role="region" aria-label="Diffuse live comparison">
+      <!-- Shared controller values for the side drawer; never shown as page controls. -->
+      <div id="toolbar" hidden inert aria-hidden="true">
         <div class="bar comparison-bar"><span class="brand"><span class="mark" aria-hidden="true"></span>Diffuse</span><span id="status" role="status">Preparing review</span><button id="diff" type="button" aria-describedby="diff-hint">Diff</button><span class="separator"></span>
         <label class="control">Opacity <input id="opacity" type="range" min="0" max="100" value="55"><output id="opacity-value">55%</output></label>
         <button id="hide" type="button" aria-pressed="false">Hide reference</button>
         <details id="align"><summary>Adjust</summary><div class="alignment"><label class="control"><input id="linked" type="checkbox" checked>Link scroll</label><label class="reveal-field">Reveal position <input id="reveal" type="range" min="0" max="100" value="50"><output id="reveal-value">50%</output></label><label>Horizontal <input id="offset-x" type="number" min="-3000" max="3000" value="0" step="1"></label><label>Vertical <input id="offset-y" type="number" min="-3000" max="3000" value="0" step="1"></label><button id="reset" type="button">Reset alignment</button><button id="source" type="button">Open reference ↗</button><small>Click the slider or use arrow keys to adjust the reveal without dragging.</small></div></details>
-        <button id="reconnect" type="button" hidden>Reconnect</button><button id="dock-sidebar" type="button" aria-label="Dock in sidebar" title="Dock in sidebar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M15 4v16" stroke="currentColor" stroke-width="1.7"/></svg></button><button id="stop" type="button" aria-label="Stop review">Stop</button></div>
+        <button id="reconnect" type="button" hidden>Reconnect</button><button id="stop" type="button" aria-label="Stop review">Stop</button></div>
         <div class="bar review-bar"><button id="comment" type="button" aria-pressed="false">Comment</button><button id="area-comment" type="button" aria-pressed="false" title="Select an area, or hold C and drag on the page">Area</button><button id="review" type="button">Review (0)</button><button id="record" type="button" title="Record this page as shown. No audio. Up to 30 seconds.">Record comparison</button><button id="ai-review" type="button">AI review</button><span id="recording-note" hidden></span></div>
         <div id="viewport-controls" class="bar viewport-bar"><div class="viewport-segments" role="group" aria-label="Change responsive viewport"><button type="button" data-preset="desktop" aria-pressed="false" title="Desktop · 1440 × 900">Desktop</button><button type="button" data-preset="laptop" aria-pressed="false" title="Laptop · 1280 × 800">Laptop</button><button type="button" data-preset="tablet" aria-pressed="false" title="Tablet · 1024 × 768">Tablet</button><button type="button" data-preset="phone" aria-pressed="false" title="Phone · 390 × 844">Phone</button></div><button id="viewport-native" type="button" aria-label="Restore window viewport" title="Use the window’s native size" hidden>Reset</button><span id="viewport-caption" class="composer-note" role="status"></span></div>
-        <div id="toolbar-mini"><span class="brand"><span class="mark" aria-hidden="true"></span>Diffuse</span><button id="minimized-record" type="button" hidden>Stop recording</button></div><button id="toolbar-toggle" type="button" aria-label="Minimize Diffuse toolbar" title="Minimize toolbar" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path id="toolbar-toggle-icon" d="M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <div id="warning" role="status"></div><div id="diff-hint" class="composer-note" style="padding:0 16px 12px" hidden></div>
       </div>
       <div id="selection-outline" hidden aria-hidden="true"><span id="selection-label"></span></div>
@@ -201,8 +195,6 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
     video = el('reference');
     if(video)video.muted = true;
     for(const button of el('viewport-controls').querySelectorAll('button'))button.addEventListener('click',()=>changeViewport(button.dataset.preset||null));
-    el('toolbar-toggle').addEventListener('click',()=>{if(contextInvalidated)return;toolbarState.minimized=!toolbarState.minimized;el('align').open=false;paintToolbarState();});
-    el('minimized-record').addEventListener('click',()=>{if(contextInvalidated)return;if(recording&&!recordingBusy)stopRecording();});
     el('opacity').addEventListener('input', event => updateSettings({opacity: Number(event.target.value) / 100}));
     el('reveal').addEventListener('input',event=>updateSettings({reveal:Number(event.target.value)}));
     el('linked').addEventListener('change', event => {
@@ -217,10 +209,6 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
     el('reset').addEventListener('click', () => updateSettings({offsetX: 0, offsetY: 0}));
     el('source').addEventListener('click', () => quietSend('FOCUS_SOURCE'));
     el('diff').addEventListener('click',()=>openDiff().catch(error=>{localWarning=error.message;paint();}));
-    el('dock-sidebar').addEventListener('click', () => {
-      // Send directly from the click: Chrome requires a live user gesture to open its panel.
-      send('OPEN_SIDE_PANEL').then(requireSuccess).catch(error => {localWarning=error.message;paint();});
-    });
     el('stop').addEventListener('click', async () => {
       try { requireSuccess(await send('STOP_SESSION')); } catch (error) { localWarning = error.message; paint(); }
     });
@@ -341,8 +329,6 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
     if(!root)return;
     const open=!docked&&['comment-panel','ai-panel'].some(id=>!el(id).hidden);
     el('panel-backdrop').hidden=!open;
-    el('toolbar').setAttribute('aria-label',docked?'Diffuse quick actions. Edit comments and AI reviews in the sidebar.':'Diffuse review');
-    el('toolbar').inert=open;
     el('saved-comment-bubble').inert=open;
     for(const id of ['comment-panel','ai-panel'])el(id).setAttribute('aria-modal',String(!docked&&!el(id).hidden));
     notifyPanel();
@@ -1208,19 +1194,6 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
     }
   }
 
-  function paintToolbarState() {
-    if(contextInvalidated||!root)return;
-    const minimized=toolbarState.minimized;
-    el('toolbar').dataset.minimized=String(minimized);
-    el('toolbar-toggle').setAttribute('aria-expanded',String(!minimized));
-    el('toolbar-toggle').setAttribute('aria-label',minimized?'Expand Diffuse toolbar':'Minimize Diffuse toolbar');
-    el('toolbar-toggle').title=minimized?'Expand toolbar':'Minimize toolbar';
-    el('toolbar-toggle-icon').setAttribute('d',minimized?'M6 14l6-6 6 6':'M5 12h14');
-    el('minimized-record').hidden=!recording;
-    el('minimized-record').textContent=el('record').textContent;
-    el('minimized-record').disabled=Boolean(recordingBusy);
-  }
-
   function paintReviewControls() {
     if (contextInvalidated) return;
     if(root&&session)paintViewport();
@@ -1247,7 +1220,6 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
       el('record').textContent = recordingBusy ? 'Starting recording…' : 'Record';
       el('record').title = 'Record this page as shown. No audio. Up to 30 seconds.';
     }
-    paintToolbarState();
     el('save-comment').disabled = commentSaving || !commentDraft || recordingBusy || Boolean(recording);
     el('cancel-comment').disabled = commentSaving || recordingBusy || Boolean(recording);
     el('close-comment').disabled = commentSaving || recordingBusy || Boolean(recording);
@@ -1270,7 +1242,6 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
       const control=el(id);if(control)(control.closest('.control')||control).hidden=audit;
     }
     root.querySelector('.separator').hidden=audit;
-    el('toolbar').setAttribute('aria-label','Diffuse review');
     const settings = {opacity:.55,reveal:50,offsetX:0,offsetY:0,...session.settings};
     if(!audit){
     el('layer').style.opacity = String(settings.opacity);
@@ -1323,14 +1294,16 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
 
   function syncScroll(target) {
     if (contextInvalidated) return;
-    if (isAudit() || !session?.settings?.linked || role !== 'target') return;
+    if (isAudit() || session?.settings?.hidden || !session?.settings?.linked || role !== 'target') return;
     const descriptor = scrollDescriptor(target);
     if (!descriptor) {
       localWarning = 'This nested panel is not linked. Matching panels need the same unique id, label, or data-diffuse-scroll value.';
       paint(); return;
     }
     const position = descriptor.kind === 'root' ? {x: scrollX, y: scrollY} : {x: target.scrollLeft, y: target.scrollTop};
+    const currentId = session.id;
     send('SCROLL', {scroll: {...descriptor, ...position}}).then(result => {
+      if (contextInvalidated || session?.id !== currentId) return;
       localWarning = result?.ok ? '' : result?.error || 'Prototype scroll is unavailable.';
       paint();
     }).catch(() => {});
@@ -1343,6 +1316,89 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
     const matches = document.querySelectorAll(`[${scroll.attribute}="${CSS.escape(scroll.value)}"]`);
     if (matches.length !== 1) return {ok: false, error: 'No unique matching scroll panel in the prototype. Scroll it independently.'};
     matches[0].scrollTo({left: scroll.x, top: scroll.y, behavior: 'instant'});
+    return {ok: true};
+  }
+
+  function canScrollReference() {
+    return !contextInvalidated && role === 'target' && hasReference() && session?.status === 'live'
+      && !session.settings?.hidden && (session.settings?.opacity ?? .55) > 0 && !session.settings?.linked
+      && Number.isFinite(session.sourceViewport?.width) && session.sourceViewport.width > 0
+      && Number.isFinite(session.sourceViewport?.height) && session.sourceViewport.height > 0 && !areaDrag && !areaArmed && !cHeld && !picking
+      && !captureBusy && !host?.hasAttribute('data-evidence-hidden') && video && !el('layer')?.hidden;
+  }
+
+  function referenceWheel(event) {
+    // Left-side wheel and browser zoom retain the website's normal behavior.
+    // Diffuse's own controls must always scroll their own panels.
+    if (!canScrollReference() || event.defaultPrevented || !event.cancelable || event.ctrlKey || event.metaKey || event.composedPath().includes(host)) return;
+    const reveal = Math.max(0, Math.min(100, session.settings?.reveal ?? 50));
+    if (event.clientX < innerWidth * reveal / 100) return;
+    const bounds = video.getBoundingClientRect();
+    if (!bounds.width || !bounds.height || event.clientX < bounds.left || event.clientX >= bounds.right || event.clientY < bounds.top || event.clientY >= bounds.bottom) return;
+    const sourceWidth = session.sourceViewport?.width || bounds.width;
+    const sourceHeight = session.sourceViewport?.height || bounds.height;
+    let dx = event.deltaX, dy = event.deltaY;
+    if (!Number.isFinite(dx) || !Number.isFinite(dy) || ![0, 1, 2].includes(event.deltaMode)) return;
+    if (event.shiftKey && !dx) {dx = dy; dy = 0;}
+    const factor = event.deltaMode === 1 ? 16 : 1;
+    dx *= event.deltaMode === 2 ? sourceWidth : factor * sourceWidth / bounds.width;
+    dy *= event.deltaMode === 2 ? sourceHeight : factor * sourceHeight / bounds.height;
+    if (!dx && !dy) return;
+    const clamp = value => Math.max(-4096, Math.min(4096, value));
+    event.preventDefault(); event.stopImmediatePropagation();
+    const wheel = {x: (event.clientX - bounds.left) / bounds.width, y: (event.clientY - bounds.top) / bounds.height,
+      deltaX: clamp((pendingReferenceWheel?.wheel.deltaX || 0) + dx), deltaY: clamp((pendingReferenceWheel?.wheel.deltaY || 0) + dy)};
+    pendingReferenceWheel = {sessionId: session.id, sourceTabId: session.sourceTabId, wheel};
+    if (referenceWheelFrame !== null) return;
+    referenceWheelFrame = requestAnimationFrame(() => {
+      referenceWheelFrame = null;
+      const pending = pendingReferenceWheel; pendingReferenceWheel = null;
+      if (!pending || !canScrollReference() || session.id !== pending.sessionId || session.sourceTabId !== pending.sourceTabId) return;
+      send('SCROLL_REFERENCE', {wheel: pending.wheel}).then(result => {
+        if (contextInvalidated || session?.id !== pending.sessionId || !canScrollReference()) return;
+        if (!result?.ok) {localWarning = result?.error || 'Prototype scroll is unavailable. Reconnect the comparison.'; paint();}
+      }).catch(() => {});
+    });
+  }
+
+  function applyReferenceWheel(wheel) {
+    if (!wheel || !['x', 'y', 'deltaX', 'deltaY'].every(key => Number.isFinite(wheel[key]))
+      || wheel.x < 0 || wheel.x >= 1 || wheel.y < 0 || wheel.y >= 1
+      || Math.abs(wheel.deltaX) > 4096 || Math.abs(wheel.deltaY) > 4096) return {ok: false, error: 'Invalid reference scroll.'};
+    if (session?.settings?.hidden || session?.settings?.linked || !hasReference()) return {ok: true};
+    const x = wheel.x * innerWidth, y = wheel.y * innerHeight;
+    let node = document.elementFromPoint(x, y);
+    while (node?.shadowRoot?.elementFromPoint) {
+      const deeper = node.shadowRoot.elementFromPoint(x, y);
+      if (!deeper || deeper === node) break;
+      node = deeper;
+    }
+    if (node?.tagName === 'IFRAME') return {ok: false, error: 'Embedded reference frames need to be scrolled in the reference tab.'};
+    const ancestors = [];
+    while (node instanceof Element) {
+      if (!ancestors.includes(node)) ancestors.push(node);
+      node = node.parentElement || node.getRootNode()?.host;
+    }
+    const scrollingRoot = document.scrollingElement;
+    if (scrollingRoot && !ancestors.includes(scrollingRoot)) ancestors.push(scrollingRoot);
+    // Move the actual scrollable element beneath the mapped pointer; no matching
+    // selector is needed. At boundaries, follow the page's overscroll chaining.
+    for (const [axis, amount] of [['x', wheel.deltaX], ['y', wheel.deltaY]]) {
+      let remaining = amount;
+      const position = axis === 'x' ? 'scrollLeft' : 'scrollTop';
+      for (const element of ancestors) {
+        if (Math.abs(remaining) < .01) break;
+        const style = getComputedStyle(element), isRoot = element === scrollingRoot;
+        const overflow = axis === 'x' ? style.overflowX : style.overflowY;
+        const scrollable = isRoot ? !['hidden', 'clip'].includes(overflow) : ['auto', 'scroll', 'overlay'].includes(overflow);
+        if (!scrollable) continue;
+        const before = element[position];
+        element.scrollBy({[axis === 'x' ? 'left' : 'top']: remaining, behavior: 'instant'});
+        remaining -= element[position] - before;
+        const overscroll = axis === 'x' ? style.overscrollBehaviorX : style.overscrollBehaviorY;
+        if (overscroll === 'contain' || overscroll === 'none') break;
+      }
+    }
     return {ok: true};
   }
 
@@ -1420,6 +1476,8 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
     frameCallback = null;
     if (scrollFrame !== null) cancelAnimationFrame(scrollFrame);
     scrollFrame = null;
+    if (referenceWheelFrame !== null) cancelAnimationFrame(referenceWheelFrame);
+    referenceWheelFrame = null; pendingReferenceWheel = null;
     if (peer) { peer.onconnectionstatechange = null; peer.ontrack = null; peer.close(); peer = null; }
     if (video) { video.pause(); video.srcObject = null; }
   }
@@ -1479,7 +1537,6 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
   async function receive(message) {
     if (contextInvalidated || !runtimeAvailable()) { invalidateContext(); throw reloadError(); }
     if (message.type === 'INITIALIZE') {
-      if(toolbarState.sessionId!==message.session?.id){toolbarState.sessionId=message.session?.id||null;toolbarState.minimized=false;}
       cleanup();
       session = message.session; role = message.role;
       abort = new AbortController();
@@ -1499,9 +1556,10 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
       };
       window.addEventListener('resize', resize, {signal: abort.signal});
       window.visualViewport?.addEventListener('resize', resize, {signal: abort.signal});
+      document.addEventListener('wheel', referenceWheel, {capture: true, passive: false, signal: abort.signal});
       document.addEventListener('scroll', event => {
         if(role==='target'&&!event.composedPath().includes(host)){updatePinPositions();if(el('ai-region-preview'))el('ai-region-preview').hidden=true;}
-        if (role !== 'target' || isAudit() || !session.settings?.linked || event.composedPath().includes(host)) return;
+        if (role !== 'target' || isAudit() || session.settings?.hidden || !session.settings?.linked || event.composedPath().includes(host)) return;
         const target = event.target;
         if (scrollFrame !== null) cancelAnimationFrame(scrollFrame);
         scrollFrame = requestAnimationFrame(() => { scrollFrame = null; syncScroll(target); });
@@ -1579,7 +1637,8 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
       return {ok: true};
     }
     if (message.type === 'RTC_OFFER') return receiveOffer(message);
-    if (message.type === 'APPLY_SCROLL' && role === 'source') return applyScroll(message.scroll);
+    if (message.type === 'APPLY_SCROLL' && role === 'source' && !session.settings?.hidden && session.settings?.linked) return applyScroll(message.scroll);
+    if (message.type === 'APPLY_WHEEL' && role === 'source') return applyReferenceWheel(message.wheel);
     if (message.type === 'SYNC_NOW' && role === 'target') { syncScroll(document); return {ok: true}; }
     if (message.type === 'CHECK_FRAME' && role === 'target') { checkFrame(); return {ok: true}; }
     return {ok: false, error: 'Unknown page command.'};

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {safeSettings, DEFAULT_SETTINGS, sitePattern, viewportWarning, isReviewableUrl, isFileUrl, pageLocation, pageAccess, assertPageAccess, requestPageAccess, extensionSettingsUrl} from '../extension/core.mjs';
+import {safeSettings, DEFAULT_SETTINGS, safeReferenceWheel, safeLinkedScroll, sitePattern, viewportWarning, isReviewableUrl, isFileUrl, pageLocation, pageAccess, assertPageAccess, requestPageAccess, extensionSettingsUrl} from '../extension/core.mjs';
 
 test('page access scopes selected HTTP(S) hosts and local files while rejecting browser URLs', () => {
   assert.equal(sitePattern('http://localhost:4178/prototype.html'), 'http://localhost/*');
@@ -69,4 +69,23 @@ test('viewport mismatches and display-scale mismatches remain visible', () => {
   assert.equal(viewportWarning(size, size), '');
   assert.match(viewportWarning(size, {...size, width: 1000}), /Viewports differ/);
   assert.match(viewportWarning(size, {...size, dpr: 1}), /Zoom or display scale differs/);
+});
+
+
+test('comparison scrolling defaults to independent without overriding existing linked settings', () => {
+  assert.equal(DEFAULT_SETTINGS.linked, false);
+  assert.equal(safeSettings({}, {...DEFAULT_SETTINGS, linked: true}).linked, true);
+});
+
+test('reference wheel messages accept only bounded finite movement and normalized hit points', () => {
+  const valid = {x: .7, y: .4, deltaX: -100, deltaY: 420};
+  assert.deepEqual(safeReferenceWheel({...valid, selector: 'private'}), valid);
+  for (const invalid of [null, {}, {...valid, x: -1}, {...valid, x: 1}, {...valid, y: Infinity}, {...valid, deltaY: '12'}, {...valid, deltaX: NaN}, {...valid, deltaY: 4097}]) assert.equal(safeReferenceWheel(invalid), null);
+});
+
+test('linked scroll only passes bounded coordinates and known unique-container descriptors', () => {
+  assert.deepEqual(safeLinkedScroll({kind: 'root', x: 0, y: 300, selector: 'ignored'}), {kind: 'root', x: 0, y: 300});
+  const panel = {kind: 'element', attribute: 'id', value: 'main', x: -50, y: 500};
+  assert.deepEqual(safeLinkedScroll(panel), panel);
+  for (const invalid of [null, {}, {...panel, attribute: 'onclick'}, {...panel, value: 'x'.repeat(513)}, {...panel, y: Infinity}, {...panel, x: 10000001}]) assert.equal(safeLinkedScroll(invalid), null);
 });

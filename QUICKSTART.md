@@ -1,4 +1,4 @@
-# Try Diffuse 0.7.2
+# Try Diffuse 0.7.3
 
 Compare a live prototype over production or audit one page. Leave pinned comments on elements or areas, record a short silent interaction, and copy the review for your engineering team. Claude can suggest findings when you connect your own Anthropic API key.
 
@@ -6,7 +6,7 @@ Compare a live prototype over production or audit one page. Leave pinned comment
 
 For a first installation:
 
-1. Unzip **Diffuse-0.7.2.zip**. Keep the resulting **Diffuse** folder somewhere permanent.
+1. Unzip **Diffuse-0.7.3.zip**. Keep the resulting **Diffuse** folder somewhere permanent.
 2. In your normal Chrome browser, open `chrome://extensions`.
 3. Turn on **Developer mode**, then click **Load unpacked** and choose that **Diffuse** folder.
 4. Pin **Diffuse — Live design comparison** using Chrome’s extensions menu.
@@ -19,19 +19,19 @@ You do not need to sign in to a special test browser or share a password with Di
 
 1. Open the page you want to review in Chrome.
 2. Click the Diffuse extension icon, then **Start review**. Allow access to this page if requested.
-3. Use the bottom toolbar to select an element or area, leave a comment, record an interaction, or request an AI review.
+3. Use the side drawer to select an element or area, leave a comment, record an interaction, or request an AI review.
 
-Use the toolbar's **Minimize** icon to reduce it to a small Diffuse button. Click it to expand again. Pins and an open comment stay available; recording controls remain visible while a recording is running.
+There is no floating toolbar. If the sidebar is closed, click the Diffuse extension icon and **Open review sidebar** to return to the controls.
 
 There is no audit/comparison mode to choose. Without a reference, Diffuse reviews one page. Add a reference whenever you want to compare.
 
 ## Add a live reference with Diff
 
 1. Open your reference or prototype in another tab, preferably in the same Chrome window.
-2. On the page being reviewed, click **Diff** in the bottom toolbar or side drawer.
+2. On the page being reviewed, click **Diff** in the side drawer.
 3. Choose the reference tab and click **Connect reference**. Allow access to that selected site if requested.
 4. In Chrome’s sharing dialog, select **the same reference tab** and confirm sharing. Diffuse verifies the selected tab before connecting it.
-5. Drag the divider, adjust opacity, or use the existing **Hide reference / Show reference** toggle.
+5. Drag the divider, adjust opacity, or use **Hide reference / Show reference**. Scroll over either side to move that page independently. Enable **Link scroll** when you want production scrolling to move both pages.
 
 Use **Diff** again to change or remove the reference. This keeps your current review and saved comments. Cancelling the tab picker or choosing the wrong shared tab leaves your current reference unchanged. Save or cancel an unfinished comment before changing reference; finish any recording or AI action first.
 
@@ -45,15 +45,15 @@ Open `chrome://extensions` → Diffuse → **Details**, then enable **Allow acce
 
 ## Use the side drawer
 
-Click the split-window icon at the top right of the extension popup, or **Dock in sidebar** in the floating toolbar. Chrome gives Diffuse its own resizable space beside the page. A compact bottom toolbar keeps the main review actions on the page while comment and AI panels live in the drawer. Selection outlines and pins stay on the page.
+**Start review** opens the sidebar. For an active review, use **Open review sidebar** in the extension popup. Chrome gives Diffuse its own resizable space beside the page. All review controls live here; selection outlines and pins stay on the page.
 
-Drag Chrome’s divider to resize the drawer. Close it using Chrome’s **×** above it to restore the page width and floating controls. Closing keeps the active review and unfinished comment. **Stop** ends the review instead. Chrome controls which side the drawer uses.
+Drag Chrome’s divider to resize the drawer. Close it using Chrome’s **×** above it to restore the page width. Closing keeps the active review and unfinished comment. **Stop** ends the review instead. Chrome controls which side the drawer uses.
 
 On an unrelated tab, the drawer offers **Return to page**. Native drawer pixels are excluded from evidence. Saved pins follow their anchors within the current viewport view. AI preview highlights and older area captures without an anchor remain tied to their captured size; captured evidence stays unchanged.
 
 ## Check desktop, laptop, tablet and phone layouts
 
-The **Viewport** segments in the toolbar and drawer switch between Desktop (1440 × 900), Laptop (1280 × 800), Tablet (1024 × 768) and Phone (390 × 844). Comments stay with the view where they were captured. Use the report's viewport filter to see one view or all of them; Jira tickets retain the viewport label and dimensions.
+The **Viewport** segments in the drawer switch between Desktop (1440 × 900), Laptop (1280 × 800), Tablet (1024 × 768) and Phone (390 × 844). Comments stay with the view where they were captured. Use the report's viewport filter to see one view or all of them; Jira tickets retain the viewport label and dimensions.
 
 Chrome asks for the updated extension's debugging permission and shows a notice while viewport control is active. Close DevTools on those tabs before switching. **Reset / Use window size** restores the normal layout. Save or cancel an open comment and finish recording or AI work before switching views.
 
@@ -78,7 +78,7 @@ In the comment form, choose **Short recording**, then **Start recording**. Inter
 
 The silent clip captures the whole visible page, including Diffuse’s controls and any comparison overlay. Selecting a region does not crop the video. Preview the clip and save with **Short recording** selected. If you switch to **Screenshot** before saving, that comment excludes the clip.
 
-The toolbar’s **Record comparison** or **Record page** is also available. It captures starting screenshots and opens a comment form afterward. **Stop** ends the review; an unfinished recording is preserved in the report.
+The drawer’s **Record page** control is also available. It captures starting screenshots and opens a comment form afterward. **Stop** ends the review; an unfinished recording is preserved in the report.
 
 ## Optional Claude review
 
@@ -95,7 +95,7 @@ New reviews ask for one actionable issue per finding. **Current** describes the 
 
 ## Copy or download your review
 
-Open **Review (n)** in the page toolbar or **Review reports** in the extension popup. Earlier saved reviews remain in the notebook. Use **Hide** beside a review to clear it from the list; find it under **Hidden** and choose **Restore** when needed. Hiding preserves its comments and evidence.
+Open **Review reports** in the drawer or extension popup. Earlier saved reviews remain in the notebook. Use **Hide** beside a review to clear it from the list; find it under **Hidden** and choose **Restore** when needed. Hiding preserves its comments and evidence.
 
 - **Copy entire report** copies formatted text and screenshots. If the destination drops images, use **Copy image** or **Download image** for each screenshot.
 - **Download HTML** keeps embedded screenshots and playable recordings together in one file that opens offline.

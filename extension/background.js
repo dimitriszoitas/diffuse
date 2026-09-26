@@ -1,4 +1,4 @@
-import {DEFAULT_SETTINGS, safeSettings, isReviewableUrl, assertPageAccess, viewportWarning} from './core.mjs';
+import {DEFAULT_SETTINGS, safeSettings, safeReferenceWheel, safeLinkedScroll, isReviewableUrl, assertPageAccess, viewportWarning} from './core.mjs';
 import * as reviews from './review-store.mjs';
 import {reviewScreens} from './ai-client.mjs';
 import {readAISettings, saveAISettings, clearAIKey, protectAIStorage} from './ai-config.mjs';
@@ -66,9 +66,9 @@ function syncPanelDocking({force = false} = {}) {
 }
 
 function attachedPanel(sender, windowId) {
-  if (!isSidePanel(sender) || !Number.isInteger(windowId)) throw new Error('Open this drawer from the Diffuse toolbar.');
+  if (!isSidePanel(sender) || !Number.isInteger(windowId)) throw new Error('Open this drawer from the Diffuse icon in Chrome’s toolbar.');
   const attachment = [...panelPorts.values()].find(item => item.connected && item.visible && item.windowId === windowId && (!sender.documentId || item.documentId === sender.documentId));
-  if (!attachment) throw new Error('The drawer is no longer attached. Reopen it from the Diffuse toolbar.');
+  if (!attachment) throw new Error('The drawer is no longer attached. Reopen it from the Diffuse icon in Chrome’s toolbar.');
   return attachment;
 }
 
@@ -614,7 +614,7 @@ async function prepareReference(message) {
 
 function nextReferenceSession(current, source = null) {
   const next = {...current, id: crypto.randomUUID(), reviewId: current.reviewId || current.id, mode: source ? 'comparison' : 'audit', status: 'starting', error: null, warning: '', aiBatchId: null, aiRunning: false,
-    settings: {...DEFAULT_SETTINGS, hidden: !source, linked: Boolean(source)}};
+    settings: {...DEFAULT_SETTINGS, hidden: !source, linked: false}};
   for (const key of ['sourceTabId', 'source', 'sourceViewport', 'capture', 'connectionId', 'referenceEnded', 'referenceHandle']) delete next[key];
   if (source) {next.sourceTabId = source.id; next.source = {title: source.title, url: source.url};}
   return next;
@@ -1060,8 +1060,17 @@ async function handle(message, sender) {
       if (role === 'source') await mediaMessage('RESIZE_CAPTURE', {sessionId: session.id, viewport: message.viewport});
       await publish(); return {ok: true};
     case 'SCROLL': {
-      if (role !== 'target' || session.mode === 'audit' || !session.settings.linked) return {ok: true};
-      const result = await softTabMessage(session.sourceTabId, 'APPLY_SCROLL', {sessionId: session.id, scroll: message.scroll});
+      if (role !== 'target' || sender.frameId !== 0 || transitioning || session.mode === 'audit' || session.settings.hidden || !session.settings.linked) return {ok: true};
+      const scroll = safeLinkedScroll(message.scroll);
+      if (!scroll) return {ok: false, error: 'Invalid scroll position.'};
+      const result = await softTabMessage(session.sourceTabId, 'APPLY_SCROLL', {sessionId: session.id, scroll});
+      return result || {ok: false, error: 'Prototype is reconnecting.'};
+    }
+    case 'SCROLL_REFERENCE': {
+      if (role !== 'target' || sender.frameId !== 0 || transitioning || session.mode === 'audit' || session.settings.hidden || session.settings.linked || session.status !== 'live') return {ok: true};
+      const wheel = safeReferenceWheel(message.wheel);
+      if (!wheel) return {ok: false, error: 'Invalid reference scroll.'};
+      const result = await softTabMessage(session.sourceTabId, 'APPLY_WHEEL', {sessionId: session.id, wheel});
       return result || {ok: false, error: 'Prototype is reconnecting.'};
     }
     case 'RTC_OFFER': {
@@ -1151,7 +1160,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       if (!popup && !target) throw new Error('Open the drawer from Diffuse on the production page or Chrome toolbar.');
       const windowId = target ? sender.tab.windowId : message.windowId;
       if (!Number.isInteger(windowId) || windowId < 0) throw new Error('The Chrome window is unavailable. Reopen Diffuse from its toolbar icon.');
-      if (!chrome.sidePanel?.open) throw new Error('The drawer requires Chrome 116 or later. Use the controls on the page.');
+      if (!chrome.sidePanel?.open) throw new Error('The review sidebar requires Chrome 116 or later. Update Chrome to continue.');
       const opened = chrome.sidePanel.open({windowId});
       Promise.resolve(opened).then(() => respond({ok: true}), error => respond({ok: false, error: error.message || 'Chrome could not open the drawer. Use the Diffuse toolbar icon.'}));
     } catch (error) { respond({ok: false, error: error.message}); }

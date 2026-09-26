@@ -1,4 +1,4 @@
-export const DEFAULT_SETTINGS = Object.freeze({opacity: 0.55, reveal: 50, offsetX: 0, offsetY: 0, linked: true, hidden: false});
+export const DEFAULT_SETTINGS = Object.freeze({opacity: 0.55, reveal: 50, offsetX: 0, offsetY: 0, linked: false, hidden: false});
 
 export function safeSettings(input = {}, previous = DEFAULT_SETTINGS) {
   const result = {...previous};
@@ -99,4 +99,18 @@ export function viewportWarning(source, target) {
   if (source.width !== target.width || source.height !== target.height) parts.push(`Viewports differ: prototype ${source.width} × ${source.height}, production ${target.width} × ${target.height}. After resizing, open Prototype once, then return`);
   if (Math.abs(source.dpr - target.dpr) > 0.01) parts.push('Zoom or display scale differs');
   return parts.join(' · ');
+}
+
+// The worker accepts only bounded CSS-pixel movement and normalized hit points.
+export function safeReferenceWheel(input) {
+  if (!input || !['x', 'y', 'deltaX', 'deltaY'].every(key => typeof input[key] === 'number' && Number.isFinite(input[key]))) return null;
+  if (input.x < 0 || input.x >= 1 || input.y < 0 || input.y >= 1 || Math.abs(input.deltaX) > 4096 || Math.abs(input.deltaY) > 4096) return null;
+  return {x: input.x, y: input.y, deltaX: input.deltaX, deltaY: input.deltaY};
+}
+
+export function safeLinkedScroll(input) {
+  if (!input || !['x', 'y'].every(key => typeof input[key] === 'number' && Number.isFinite(input[key]) && Math.abs(input[key]) <= 10000000)) return null;
+  if (input.kind === 'root') return {kind: 'root', x: input.x, y: input.y};
+  if (input.kind !== 'element' || !['data-diffuse-scroll', 'id', 'aria-label'].includes(input.attribute) || typeof input.value !== 'string' || !input.value || input.value.length > 512) return null;
+  return {kind: 'element', attribute: input.attribute, value: input.value, x: input.x, y: input.y};
 }

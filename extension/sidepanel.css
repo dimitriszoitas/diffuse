@@ -27,3 +27,6 @@ body[data-composer-open=true] #dock-workspace,body[data-composer-open=true] #pan
 #panel-recover-comment{width:100%;margin:0 0 8px}
 
 .control-pair:has(select[name=severity]){grid-template-columns:1fr}
+
+/* The sidebar is the only review control surface; group its tools by purpose. */
+body{font-size:15px}.brand{font-size:23px}.brand-mark{transform:scale(.9);transform-origin:left center;width:30px;flex-basis:30px}.edition,.eyebrow{font-size:12px}.workspace-heading h1,.section-heading h2{font-size:20px}.panel-field,input,textarea,select{font-size:15px}button{font-size:14px;padding:7px 10px}.primary-button,.secondary-button,.report-button .button-label,.ai-settings-button,.jira-settings-button{font-size:14px}.panel-control-group{padding:0 0 12px;margin:0 0 12px;border-bottom:1px solid #ddd4e9}.control-group-title{font-size:14px;line-height:1.4;margin:0 0 8px;font-weight:650}.panel-control-group .tool-grid{border:0;padding:0;margin:0}.panel-control-group>p:last-child{margin-bottom:0}.panel-field{margin:10px 0}.suggestion-card p{font-size:15px}.drawer-hint{font-size:13px}.reports-access{gap:6px}

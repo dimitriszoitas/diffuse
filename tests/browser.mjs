@@ -47,6 +47,16 @@ let popup;
 const results = [];
 const record = label => { results.push(label); console.log(`PASS ${label}`); };
 
+// Drive the same command contract as the native drawer; the on-page toolbar is hidden.
+async function command(action, payload = {}) {
+  const result = await worker.evaluate(async ({action, payload}) => {
+    const session = (await chrome.storage.session.get('comparison')).comparison;
+    if (action === 'toggleRecording') action = session.recording ? 'stopRecording' : 'record';
+    return chrome.tabs.sendMessage(session.targetTabId, {namespace: 'diffuse', type: 'PANEL_COMMAND', sessionId: session.id, action, ...payload});
+  }, {action, payload});
+  assert.equal(result?.ok, true, result?.error);
+  return result;
+}
 async function until(check, label, timeout = 15000) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
@@ -124,30 +134,29 @@ try {
   await source.evaluate(() => document.querySelector('#diffuse-test-marker').remove());
   record('A changing background prototype updates the stream without tab switching');
 
-  await overlay.locator('#opacity').fill('30');
+  await command('settings', {settings: {opacity: .3}});
   await until(() => overlay.locator('#layer').evaluate(layer => layer.style.opacity === '0.3'), 'opacity');
   await overlay.locator('#handle').focus(); await production.keyboard.press('Home');
   await until(() => overlay.locator('#layer').evaluate(layer => layer.style.clipPath.includes('0%')), 'reveal');
-  await overlay.locator('#hide').click();
+  await command('settings', {settings: {hidden: true}});
   assert.equal(await overlay.locator('#layer').isVisible(), false);
-  await overlay.locator('#hide').click();
-  await overlay.locator('#align > summary').click();
-  await overlay.locator('#offset-x').fill('14');
+  await command('settings', {settings: {hidden: false}});
+    await command('settings', {settings: {offsetX: 14}});
   await until(() => overlay.locator('#reference').evaluate(video => video.style.transform.includes('14px')), 'alignment');
-  await overlay.locator('#reset').click();
-  await overlay.locator('#align > summary').click();
-  record('Opacity, keyboard reveal, hide/show, and alignment controls');
+  await command('settings', {settings: {offsetX: 0, offsetY: 0}});
+    record('Opacity, keyboard reveal, hide/show, and alignment controls');
 
+  await command('settings', {settings: {linked: true}});
   await production.evaluate(() => window.scrollTo(0, 340));
   await until(() => source.evaluate(() => Math.abs(scrollY - 340) < 2), 'linked root scroll');
   await production.locator('[data-diffuse-scroll="activity"]').evaluate(element => { element.scrollTop = 180; });
   await until(() => source.locator('[data-diffuse-scroll="activity"]').evaluate(element => element.scrollTop === 180), 'linked nested scroll');
-  await overlay.locator('#linked').uncheck();
+  await command('settings', {settings: {linked: false}});
   await new Promise(resolve => setTimeout(resolve, 200));
   await production.evaluate(() => window.scrollTo(0, 500));
   await new Promise(resolve => setTimeout(resolve, 300));
   assert.equal(await source.evaluate(() => scrollY), 340);
-  await overlay.locator('#linked').check();
+  await command('settings', {settings: {linked: true}});
   await production.evaluate(() => window.scrollTo(0, 0));
   await until(() => source.evaluate(() => scrollY === 0), 'return root scroll');
   record('Root and matching nested scrolling, with independent-scroll fallback');
@@ -161,8 +170,8 @@ try {
   await production.locator('#new-project').click();
   assert.equal(await production.locator('#project-dialog').isVisible(), true);
   await until(() => production.locator('diffuse-live-overlay').evaluate(host => host.parentElement.matches('dialog:modal') && host.matches(':popover-open')), 'modal layering');
-  await production.locator('diffuse-live-overlay #hide').click();
-  await production.locator('diffuse-live-overlay #hide').click();
+  await command('settings', {settings: {hidden: true}});
+  await command('settings', {settings: {hidden: false}});
   await production.locator('#project-name').fill('Live modal comparison');
   await production.screenshot({path: join(artifacts, 'modal-comparison.png')});
   await production.locator('#cancel-dialog').click();
@@ -206,7 +215,7 @@ try {
   await production.evaluate(() => window.scrollTo(0, 0));
   await until(() => source.evaluate(() => scrollY === 0), 'evidence scroll alignment');
   await production.locator('#new-project').evaluate(element => element.dataset.component = 'CreateProjectButton');
-  await overlay.locator('#comment').click();
+  await command('selectElement');
   await production.locator('#new-project').click();
   assert.equal(await production.locator('#project-dialog').isVisible(), false);
   await until(() => overlay.locator('#capture-retry').isVisible(), 'capture permission explanation');
@@ -256,13 +265,13 @@ try {
   const originalEvidenceHash = summary.comments[0].hash;
   record('Comment saves paired screenshots, annotated crop, component, selector, styles, state, and page context');
 
-  await overlay.locator('#record').click();
+  await command('toggleRecording');
   await until(() => overlay.locator('#record').textContent().then(text => text.includes('Stop')), 'recording start');
   await production.locator('#new-project').click();
   await production.locator('#project-name').fill('Recorded state transition');
   await new Promise(resolve => setTimeout(resolve, 1600));
   await production.locator('#cancel-dialog').click();
-  await overlay.locator('#record').click();
+  await command('toggleRecording');
   await until(() => overlay.locator('#comment-form').isVisible(), 'recording composer');
   await overlay.locator('#comment-title').fill('Dialog entrance and spacing');
   await overlay.locator('#comment-actual').fill('The dialog transition and input spacing differ.');
@@ -277,7 +286,7 @@ try {
   record('Real silent WebM recording captures interactions and attaches to a comment with paired screenshots');
 
   const reportPagePromise = context.waitForEvent('page');
-  await overlay.locator('#review').click();
+  await command('openReport');
   const reportPage = await reportPagePromise;
   await reportPage.waitForLoadState();
   await until(() => reportPage.locator('.comment-card').count().then(count => count === 2), 'saved review report');
@@ -331,7 +340,7 @@ try {
   assert.equal((await reviewSummary()).count, 1);
   record('Comment deletion updates persistent review counts');
   await production.bringToFront();
-  await overlay.locator('#record').click();
+  await command('toggleRecording');
   await until(() => overlay.locator('#record').textContent().then(text => text.includes('Stop')), 'automatic recording start');
   const deleteWhileRecording = await reportPage.evaluate(reviewId => chrome.runtime.sendMessage({namespace: 'diffuse', target: 'worker', type: 'DELETE_REVIEW', reviewId}), reviewId);
   assert.equal(deleteWhileRecording.ok, false);
@@ -352,7 +361,7 @@ try {
   assert.equal(summary.comments[1].video.stopReason, 'time-limit');
   assert.ok(summary.comments[1].video.durationMs >= 29500 && summary.comments[1].video.durationMs < 35000);
   record('Recording survives page reload, stops at 30 seconds, restores its draft after reload, and prevents review deletion while active');
-  await production.locator('diffuse-live-overlay #stop').click();
+  await command('stop');
   await until(() => production.locator('diffuse-live-overlay').count().then(count => count === 0), 'overlay cleanup');
   await until(() => worker.evaluate(async () => (await chrome.tabCapture.getCapturedTabs()).every(tab => tab.status !== 'active')), 'capture cleanup');
   record('Stop removes the overlay and releases tab capture');

@@ -25,39 +25,28 @@ try{
   assert.equal(await overlay.locator('.comment-pin').count(),1);
   assert.equal(await overlay.locator('.comment-pin').getAttribute('data-comment-id'),'desktop');
   assert.equal((await deliver({type:'GET_CONTEXT'})).context.viewportProfile.key,'desktop');
-  assert.equal(await overlay.locator('[data-preset]').count(),4);
+  assert.equal(await overlay.locator('#toolbar').isVisible(),false);
   for(const [preset,width,height] of profiles.slice(1,3)){
-    await overlay.locator(`[data-preset="${preset}"]`).click();
-    assert.equal(await page.evaluate(()=>window.messages.filter(m=>m.type==='VIEWPORT_PRESET').at(-1).preset),preset);
+    // The drawer changes the browser viewport, then publishes the new session.
     await page.setViewportSize({width,height});
     await deliver({type:'SESSION_UPDATE',session:{...session,viewportPreset:preset}});
     assert.equal(await overlay.locator('.comment-pin').count(),1);
     assert.equal(await overlay.locator('.comment-pin').getAttribute('data-comment-id'),preset);
     assert.equal((await deliver({type:'GET_CONTEXT'})).context.viewportProfile.key,preset);
-    assert.equal(await overlay.locator(`[data-preset="${preset}"]`).getAttribute('aria-pressed'),'true');
   }
-  await overlay.locator('[data-preset="phone"]').click();
-  assert.deepEqual(await page.evaluate(()=>{const message=window.messages.filter(m=>m.type==='VIEWPORT_PRESET').at(-1);return{type:message.type,preset:message.preset,sessionId:message.sessionId};}),{type:'VIEWPORT_PRESET',preset:'phone',sessionId:'review'});
   await page.setViewportSize({width:390,height:844});
   await deliver({type:'SESSION_UPDATE',session:{...session,viewportPreset:'phone'}});
   assert.equal(await overlay.locator('.comment-pin').count(),1);
   assert.equal(await overlay.locator('.comment-pin').getAttribute('data-comment-id'),'phone');
   assert.equal((await deliver({type:'GET_CONTEXT'})).context.viewportProfile.key,'phone');
-  assert.equal(await overlay.locator('[data-preset="phone"]').getAttribute('aria-pressed'),'true');
-  const toolbar=await overlay.locator('#toolbar').evaluate(node=>({left:node.getBoundingClientRect().left,right:node.getBoundingClientRect().right,overflow:node.scrollWidth-node.clientWidth}));
-  assert.ok(toolbar.left>=0&&toolbar.right<=390);assert.equal(toolbar.overflow,0);
-  await overlay.locator('[data-preset="desktop"]').focus();await page.keyboard.press('Enter');
-  assert.equal(await page.evaluate(()=>window.messages.filter(m=>m.type==='VIEWPORT_PRESET').at(-1).preset),'desktop');
+  assert.equal(await overlay.locator('#toolbar').isVisible(),false);
   await deliver({type:'SESSION_UPDATE',session:{...session,viewportPreset:'desktop'}});
   assert.equal(await overlay.locator('.comment-pin').getAttribute('data-comment-id'),'desktop');
-  await page.evaluate(()=>window.rejectViewport=true);
-  await overlay.locator('[data-preset="phone"]').click();
-  assert.match(await overlay.locator('#warning').textContent(),/Close DevTools/);
   await deliver({type:'PREPARE_EVIDENCE'});assert.equal(await overlay.locator('#toolbar').isVisible(),false);
-  await deliver({type:'RESTORE_EVIDENCE'});assert.equal(await overlay.locator('#toolbar').isVisible(),true);
+  await deliver({type:'RESTORE_EVIDENCE'});assert.equal(await overlay.locator('#toolbar').isVisible(),false);
   await mkdir(resolve(project,'artifacts/viewport-ui'),{recursive:true});
   await page.screenshot({path:resolve(project,'artifacts/viewport-ui/phone-controls.png')});
-  console.log('PASS preset actions, keyboard, captured profile, isolated comments, narrow layout and evidence hiding');
+  console.log('PASS drawer viewport session updates retain captured profiles and isolated comments without revealing page controls');
 
   // Exercise the drawer's separate classic controller, including historical
   // profile labels that must not be reclassified by their captured width.

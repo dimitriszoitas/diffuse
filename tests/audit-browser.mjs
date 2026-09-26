@@ -47,6 +47,16 @@ const origin = `http://127.0.0.1:${server.address().port}`;
 const clientPath = join(extension, 'ai-client.mjs');
 await writeFile(clientPath, (await readFile(clientPath, 'utf8')).replace('https://api.anthropic.com/v1/messages', `${origin}/mock-anthropic`));
 let context, worker, page, overlay;
+// Drive the same command contract as the native drawer; the on-page toolbar is hidden.
+async function command(action, payload = {}) {
+  const result = await worker.evaluate(async ({action, payload}) => {
+    const session = (await chrome.storage.session.get('comparison')).comparison;
+    if (action === 'toggleRecording') action = session.recording ? 'stopRecording' : 'record';
+    return chrome.tabs.sendMessage(session.targetTabId, {namespace: 'diffuse', type: 'PANEL_COMMAND', sessionId: session.id, action, ...payload});
+  }, {action, payload});
+  assert.equal(result?.ok, true, result?.error);
+  return result;
+}
 async function until(check, label, timeout = 15000) {
   const start = Date.now();
   while (Date.now() - start < timeout) { if (await check()) return; await new Promise(resolve => setTimeout(resolve, 100)); }
@@ -68,8 +78,8 @@ try {
   await popup.locator('#mode-audit').click();
   await popup.locator('#start-comparison').click();
   overlay = page.locator('diffuse-live-overlay');
-  await until(() => overlay.locator('#status').textContent({timeout: 1000}).then(text => text === 'Audit ready').catch(() => false), 'audit start');
-  assert.equal(await overlay.locator('#layer').count(), 0);
+  await until(() => overlay.locator('#status').textContent({timeout: 1000}).then(text => text === 'Review ready').catch(() => false), 'audit start');
+  assert.equal(await overlay.locator('#layer').isVisible(), false);
   assert.equal(await overlay.locator('#source').isVisible(), false);
   pass('Standalone audit starts with one page and no prototype stream');
   await page.keyboard.down('c');
@@ -109,7 +119,7 @@ try {
   await page.reload();
   await until(() => overlay.locator('.comment-pin').count().then(count => count === 1), 'pin reload recovery');
   pass('C + drag creates a dotted region, captures single-page evidence, saves its category, and opens a persistent anchored comment bubble');
-  await overlay.locator('#ai-review').click();
+  await command('openAi');
   await until(() => overlay.locator('#ai-config-status').textContent().then(text => text.includes('Add your')), 'missing key explanation');
   const settingsPromise = context.waitForEvent('page');
   await overlay.locator('#ai-settings').click();
@@ -123,7 +133,7 @@ try {
   assert.deepEqual(safeStorage, {remembered: false, temporary: true});
   assert.equal(requests.length, 0);
   pass('AI settings stores a key only for the browser session by default and makes no automatic API request');
-  await page.bringToFront(); await overlay.locator('#close-ai').click(); await overlay.locator('#ai-review').click();
+  await page.bringToFront(); await overlay.locator('#close-ai').click(); await command('openAi');
   await until(() => overlay.locator('#ai-run').isEnabled(), 'configured AI reviewer');
   await overlay.locator('#ai-instructions').fill('Review hierarchy and visible copy clarity.');
   await overlay.locator('#ai-run').click();
@@ -146,7 +156,7 @@ try {
   assert.equal(requests.length, 1, 'Show all must reveal the existing result without an API request');
   assert.equal((await summaries()).count, 1, 'Show all must not accept suggestions or create comments');
   await overlay.locator('#close-ai').click();
-  await overlay.locator('#ai-review').click();
+  await command('openAi');
   await until(() => overlay.locator('.ai-suggestion').count().then(count => count === 2), 'Show all filter survives reopening the panel');
   assert.equal(await overlay.locator('#ai-threshold').inputValue(), '0');
   assert.equal(requests.length, 1, 'Reopening the existing review must not make another API request');
@@ -170,7 +180,7 @@ try {
   assert.equal((await summaries()).count, 2);
   pass('Provider failures expose no key and never add comments');
   await overlay.locator('#close-ai').click();
-  await overlay.locator('#area-comment').click();
+  await command('selectArea');
   await page.mouse.move(700, 280); await page.mouse.down(); await page.mouse.move(880, 380, {steps: 6}); await page.mouse.up();
   await until(() => overlay.locator('#comment-form').isVisible(), 'recording region composer');
   await overlay.locator('#comment-actual').fill('Review this recorded state.');
@@ -205,7 +215,7 @@ try {
   await new Promise(resolve => setTimeout(resolve, 1200));
   await page.reload();
   await until(() => overlay.locator('#record').isEnabled().catch(()=>false), 'recording stop after reload');
-  await overlay.locator('#record').click();
+  await command('toggleRecording');
   await until(() => overlay.locator('#comment-form').isVisible(), 'composer recording restored');
   assert.equal(await overlay.locator('#comment-actual').inputValue(), 'Review this recorded state.');
   assert.equal(await overlay.locator('#comment-title').inputValue(), '');
@@ -233,10 +243,10 @@ try {
   assert.equal((await summaries()).comments[2].selection.kind, 'region');
   assert.equal((await summaries()).comments[2].fields.title, '');
   pass('Composer recording preserves optional fields, selected region and entered text through reload, with a playable preview');
-  await overlay.locator('#record').click();
+  await command('toggleRecording');
   await until(() => overlay.locator('#record').textContent().then(text=>text.includes('Stop recording')), 'second recording');
   await new Promise(resolve=>setTimeout(resolve,900));
-  await overlay.locator('#record').click();
+  await command('toggleRecording');
   await until(()=>overlay.locator('#comment-form').isVisible(),'second clip composer');
   await overlay.locator('#comment-actual').fill('Only the screenshot is needed for this comment.');
   await overlay.locator('#evidence-screenshot').click();
@@ -244,7 +254,7 @@ try {
   await until(async()=>(await summaries()).count===4,'screenshot-only save');
   assert.equal((await summaries()).comments[3].hasVideo,false);
   pass('Choosing Screenshot excludes the recorded clip from the saved comment');
-  const reportPromise = context.waitForEvent('page'); await overlay.locator('#review').click();
+  const reportPromise = context.waitForEvent('page'); await command('openReport');
   const report = await reportPromise; await report.waitForLoadState();
   await until(() => report.locator('.comment-card').count().then(count => count === 4), 'audit report');
   assert.match(await report.locator('#report-content').textContent(), /Copy change/);
@@ -252,13 +262,13 @@ try {
   const download = await downloadPromise; const path = join(artifacts, 'example-audit.html'); await download.saveAs(path);
   const exported = await readFile(path, 'utf8'); assert.match(exported, /data:image\/png/); assert.match(exported, /data:video\/webm/); assert.equal(exported.includes(fakeKey), false); assert.equal(exported.includes('Small spacing inconsistency'), false); assert.match(exported, /85/);
   pass('Audit report exports categories, only accepted AI findings, screenshots and video without credentials');
-  await page.bringToFront(); await overlay.locator('#stop').click(); await until(() => overlay.count().then(count => count === 0), 'stop audit');
+  await page.bringToFront(); await command('stop'); await until(() => overlay.count().then(count => count === 0), 'stop audit');
   const source = await context.newPage(); await source.goto(`${origin}/prototype.html`);
   popup = await openPopup(source);
   const targetTabId = await worker.evaluate(async url => (await chrome.tabs.query({url}))[0].id, page.url());
   await popup.locator('#target-tab').selectOption(String(targetTabId)); await popup.locator('#start-comparison').click();
   await until(() => overlay.locator('#status').textContent({timeout:1000}).then(text=>text==='Live').catch(()=>false), 'comparison restored', 25000);
-  await overlay.locator('#ai-review').click(); await until(() => overlay.locator('#ai-run').isEnabled(), 'comparison AI config'); await overlay.locator('#ai-run').click();
+  await command('openAi'); await until(() => overlay.locator('#ai-run').isEnabled(), 'comparison AI config'); await overlay.locator('#ai-run').click();
   await until(() => overlay.locator('.ai-suggestion').count().then(count => count === 1), 'two-screen AI result');
   assert.equal(requests.at(-1).images, 2);
   const requestsBeforeBulk = requests.length;
@@ -339,7 +349,7 @@ try {
   assert.equal(await overlay.locator('.comment-pin').count(), 2);
   assert.equal(requests.length, requestsBeforeBulk);
   pass('Repeating bulk acceptance is idempotent: already accepted findings create no duplicate comments or API requests');
-  await overlay.locator('#close-ai').click(); await overlay.locator('#stop').click();
+  await overlay.locator('#close-ai').click(); await command('stop');
   await settings.bringToFront(); await settings.reload(); await settings.locator('#clear-key').click();
   await until(() => settings.locator('#key-status').textContent().then(text=>text==='No key connected'), 'key removal');
   pass('API key can be removed from both extension storage locations');

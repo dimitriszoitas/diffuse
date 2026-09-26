@@ -63,8 +63,29 @@ try{
     await until(async()=>{const review=await worker.evaluate(async()=> (await chrome.storage.session.get('comparison')).comparison);return review?.status==='live';},'review starts on the current page');
     const review=await worker.evaluate(async()=> (await chrome.storage.session.get('comparison')).comparison);
     assert.equal(review.target.url,production.url());assert.equal(Number.isInteger(review.sourceTabId),false);
-    await until(()=>production.locator('diffuse-live-overlay').locator('#diff').isVisible().catch(()=>false),'Diff toolbar entry after start');
-    pass('The actual Start review click opens a review on the current page without choosing a reference');
+    await until(async()=> (await cdp.send('Target.getTargets',{filter:[{exclude:false}]})).targetInfos.some(t=>t.type==='page'&&t.url===`chrome-extension://${id}/sidepanel.html`),'native sidebar opens with review');
+    const sidebarTarget=(await cdp.send('Target.getTargets',{filter:[{exclude:false}]})).targetInfos.find(t=>t.type==='page'&&t.url===`chrome-extension://${id}/sidepanel.html`);
+    ({sessionId}=await cdp.send('Target.attachToTarget',{targetId:sidebarTarget.targetId,flatten:false}));
+    await until(()=>evaluate(`document.getElementById('panel-controls')?.checkVisibility()&&!document.getElementById('panel-diff').disabled`),'native sidebar connected with review controls');
+    assert.equal(await evaluate(`document.getElementById('panel-comment').disabled`),false);
+    await screenshot('started-review-sidebar');
+    assert.equal(await production.locator('diffuse-live-overlay').locator('#toolbar').isVisible(),false);
+    pass('The real Start review gesture opens the native sidebar and starts this page without a floating toolbar');
+    await worker.evaluate(async()=>{const s=(await chrome.storage.session.get('comparison')).comparison;const tab=await chrome.tabs.get(s.targetTabId);await chrome.sidePanel.close({windowId:tab.windowId});});
+    assert.equal(await production.locator('diffuse-live-overlay').locator('#toolbar').isVisible(),false);
+    await production.bringToFront();
+    const activeTarget=(await cdp.send('Target.getTargets',{filter:[{type:'tab',exclude:false},{exclude:true}]})).targetInfos.find(t=>t.url===production.url());
+    await cdp.send('Extensions.triggerAction',{id,targetId:activeTarget.targetId});
+    await until(async()=>{popupTarget=(await cdp.send('Target.getTargets',{filter:[{exclude:false}]})).targetInfos.find(t=>t.type==='page'&&t.url===`chrome-extension://${id}/popup.html`);return popupTarget;},'reopen native popup');
+    ({sessionId}=await cdp.send('Target.attachToTarget',{targetId:popupTarget.targetId,flatten:false}));
+    await until(()=>evaluate(`document.getElementById('session-panel')?.hidden===false&&document.getElementById('popup').getAttribute('aria-busy')==='false'`),'ongoing review launch');
+    assert.equal(await evaluate(`document.getElementById('return-to-comparison').checkVisibility()`),true);
+    assert.match(await evaluate(`document.getElementById('return-to-comparison').textContent`),/Open review sidebar/);
+    await screenshot('ongoing-review');
+    await click('return-to-comparison');
+    await until(async()=> (await cdp.send('Target.getTargets',{filter:[{exclude:false}]})).targetInfos.some(t=>t.type==='page'&&t.url===`chrome-extension://${id}/sidepanel.html`),'reopened sidebar');
+    assert.equal((await worker.evaluate(async()=> (await chrome.storage.session.get('comparison')).comparison)).id,review.id);
+    pass('Closing and reopening the sidebar keeps the same review and shows an explicit Open review sidebar action');
     // Chrome disables browser zoom for extension pages and rejects CDP device
     // metrics override on this native action target. Do not substitute a normal
     // browser tab and claim it exercises native popup zoom.

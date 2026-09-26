@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
 import {webcrypto} from 'node:crypto';
-import {assertPageAccess, isReviewableUrl} from '../extension/core.mjs';
+import {assertPageAccess, isReviewableUrl, safeReferenceWheel, safeLinkedScroll} from '../extension/core.mjs';
 
 const source = await readFile(new URL('../extension/background.js', import.meta.url), 'utf8');
 const event = () => ({listeners: [], addListener(fn) {this.listeners.push(fn);}, emit(...args) {this.listeners.forEach(fn => fn(...args));}});
@@ -40,7 +40,7 @@ async function harness(initial = initialSession()) {
   };
   const reviews = {getReview: async () => ({comments: structuredClone(comments)}), putDraft: async () => {state.storeWrites++;}, discardDraft: async () => {state.storeWrites++;}};
   const context = vm.createContext({createViewportController,chrome, reviews, crypto: webcrypto, AbortController, DEFAULT_SETTINGS: {opacity: .55, reveal: 50, offsetX: 0, offsetY: 0}, viewportWarning: () => '',
-    isReviewableUrl, assertPageAccess: (url, chromeApi = chrome, message) => assertPageAccess(url, chromeApi, message),
+    isReviewableUrl, safeReferenceWheel, safeLinkedScroll, assertPageAccess: (url, chromeApi = chrome, message) => assertPageAccess(url, chromeApi, message),
     protectAIStorage: async () => {}, readAISettings: async () => ({hasKey: false}), setTimeout, clearTimeout, setInterval, clearInterval});
   vm.runInContext(source.replace(/^import .*\n/gm, '') + `globalThis.api = {ready, handle, referenceBusyReason,
     current() {return session;}, replace(value) {session = value;},
@@ -176,4 +176,36 @@ test('source loss returns an idle review to the page but preserves an open comme
   assert.equal(resized.viewport.width,390);assert.equal(resized.viewport.height,844);
   assert.ok(worker.state.media.indexOf(resized)<worker.state.media.findLastIndex(item=>item.type==='CONNECT_TARGET'));
   assert.deepEqual(Array.from(worker.current().viewportDebuggerTabs),[2,3]);
+});
+
+
+test('independent reference wheel routing is scoped to the current production top frame and active visible diff', async () => {
+  const worker = await harness({...initialSession(), mode: 'comparison', sourceTabId: 3, settings: {hidden: false, linked: false}});
+  const sender = {id: 'test', url: 'https://review.test/page', tab: {id: 2}, frameId: 0};
+  const wheel = {x: .75, y: .5, deltaX: 0, deltaY: 180};
+  assert.equal((await worker.send('SCROLL_REFERENCE', {wheel}, sender)).ok, true);
+  assert.equal(worker.state.tabMessages.at(-1).id, 3);
+  assert.equal(worker.state.tabMessages.at(-1).type, 'APPLY_WHEEL');
+  assert.deepEqual(worker.state.tabMessages.at(-1).wheel, wheel);
+  const count = worker.state.tabMessages.length;
+  for (const from of [{...sender, frameId: 1}, {...sender, tab: {id: 3}}, {id: 'test', url: 'chrome-extension://test/popup.html'}]) await worker.send('SCROLL_REFERENCE', {wheel}, from);
+  assert.equal((await worker.send('SCROLL_REFERENCE', {wheel, sessionId: 'stale'}, sender)).ok, false);
+  assert.equal((await worker.send('SCROLL_REFERENCE', {wheel: {...wheel, deltaY: 1e8}}, sender)).ok, false);
+  assert.equal(worker.state.tabMessages.length, count);
+  for (const settings of [{hidden: true, linked: false}, {hidden: false, linked: true}]) {worker.current().settings = settings; await worker.send('SCROLL_REFERENCE', {wheel}, sender);}
+  worker.current().settings = {hidden: false, linked: false}; worker.current().mode = 'audit'; await worker.send('SCROLL_REFERENCE', {wheel}, sender);
+  assert.equal(worker.state.tabMessages.length, count);
+});
+
+test('linked scrolling is opt-in and stops forwarding while the reference is hidden', async () => {
+  const worker = await harness({...initialSession(), mode: 'comparison', sourceTabId: 3, settings: {hidden: false, linked: true}});
+  const sender = {id: 'test', url: 'https://review.test/page', tab: {id: 2}, frameId: 0};
+  const scroll = {kind: 'root', x: 0, y: 450};
+  await worker.send('SCROLL', {scroll}, sender);
+  assert.equal(worker.state.tabMessages.at(-1).type, 'APPLY_SCROLL');
+  const count = worker.state.tabMessages.length;
+  worker.current().settings.hidden = true; await worker.send('SCROLL', {scroll}, sender);
+  worker.current().settings.hidden = false; await worker.send('SCROLL', {scroll}, {...sender, frameId: 1});
+  assert.equal((await worker.send('SCROLL', {scroll: {...scroll, y: Infinity}}, sender)).ok, false);
+  assert.equal(worker.state.tabMessages.length, count);
 });

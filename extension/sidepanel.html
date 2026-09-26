@@ -21,7 +21,7 @@
           <span>Diffuse</span>
         </div>
         <span class="edition"><span class="signal" aria-hidden="true"></span><span id="edition-label">DESIGN REVIEW</span></span>
-        <button id="open-side-panel" class="icon-button dock-button" type="button" aria-label="Open in side drawer" title="Open in side drawer — resizes the page beside Diffuse"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M15 4v16M7 12h5m-2-2 2 2-2 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button id="open-side-panel" class="icon-button dock-button" type="button" aria-label="Open review sidebar" title="Open review sidebar"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M15 4v16M7 12h5m-2-2 2 2-2 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </header>
 
       <section id="loading" class="initial-loading" role="status" aria-live="polite">
@@ -42,7 +42,7 @@
           <button class="primary-button" id="start-comparison" type="submit" disabled><span class="button-label">Start review</span><span aria-hidden="true">→</span></button>
         </form>
         <p id="page-access-message" class="feedback" role="status" hidden></p>
-        <p class="field-help">Want to compare? Use <strong>Diff</strong> in the page toolbar to choose a reference tab.</p>
+        <p class="field-help">Want to compare? Use <strong>Diff</strong> in the review sidebar to choose a reference tab.</p>
       </section>
 
       <section id="file-access-notice" class="file-access-notice" role="status" hidden>
@@ -55,7 +55,7 @@
       <section id="session-panel" hidden aria-labelledby="session-title">
         <div class="intro">
           <h1 id="session-title">Your review is ready.</h1>
-          <p id="session-subtitle">Use Diff whenever you need a reference.</p>
+          <p id="session-subtitle">Open the sidebar to add comments or compare with a reference.</p>
         </div>
         <div class="session-card">
           <div class="session-status" id="session-status" role="status"><span class="signal" aria-hidden="true"></span><span id="session-status-label">Review ready</span></div>
@@ -76,12 +76,12 @@
           <span class="capture-state" id="capture-state" hidden><span class="signal" aria-hidden="true"></span>Capture ready</span>
           <p>Clicking Diffuse here allows screenshots and recordings for this tab.</p>
         </div>
-        <button class="primary-button" id="enable-capture" type="button" hidden>
-          <span class="button-label">Enable capture &amp; return</span>
+        <button class="primary-button" id="return-to-comparison" type="button">
+          <span class="button-label">Open review sidebar</span>
           <svg class="button-arrow" width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <button class="primary-button" id="return-to-comparison" type="button">
-          <span class="button-label">Return to review</span>
+        <button class="secondary-button" id="enable-capture" type="button" hidden>
+          <span class="button-label">Enable capture &amp; return</span>
           <svg class="button-arrow" width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <button class="secondary-button" id="stop-comparison" type="button">Stop review</button>
@@ -94,19 +94,25 @@
         <div id="panel-away" class="panel-notice" hidden><p id="panel-away-message">Return to the reviewed page to continue.</p><button id="panel-focus" type="button">Return to page</button><button id="panel-recover-page" type="button" hidden>Reconnect review</button></div>
         <div id="panel-live">
           <section id="panel-controls" aria-label="Review controls">
+            <section class="panel-control-group" aria-labelledby="compare-group-title"><h2 id="compare-group-title" class="control-group-title">Compare</h2>
             <div class="button-row"><button id="panel-diff" type="button" aria-describedby="panel-diff-hint">Diff</button></div>
             <p id="panel-diff-hint" class="muted">Choose a reference tab to compare with this page.</p>
             <div id="panel-comparison-controls">
-              <label class="panel-field">Reference opacity <output id="panel-opacity-value">55%</output><input id="panel-opacity" type="range" min="0" max="100" value="55"></label>
-              <label class="panel-field">Reveal position <output id="panel-reveal-value">50%</output><input id="panel-reveal" type="range" min="0" max="100" value="50"></label>
-              <div class="control-pair"><label class="checkbox"><input id="panel-linked" type="checkbox" checked> Link scrolling</label><button id="panel-hide" type="button" aria-pressed="false">Hide reference</button></div>
-              <details class="panel-details"><summary>Alignment &amp; pages</summary><div class="control-pair"><label class="panel-field">Horizontal<input id="panel-offset-x" type="number" min="-3000" max="3000" value="0"></label><label class="panel-field">Vertical<input id="panel-offset-y" type="number" min="-3000" max="3000" value="0"></label></div><div class="button-row"><button id="panel-reset" type="button">Reset</button><button id="panel-source" type="button">Open prototype</button><button id="panel-reconnect" type="button">Reconnect</button></div></details>
+              <div class="control-pair"><label class="checkbox"><input id="panel-linked" type="checkbox"> Link scrolling</label><button id="panel-hide" type="button" aria-pressed="false">Hide reference</button></div>
+              <details class="panel-details"><summary>Adjust reference</summary>
+                <label class="panel-field">Reference opacity <output id="panel-opacity-value">55%</output><input id="panel-opacity" type="range" min="0" max="100" value="55"></label>
+                <label class="panel-field">Reveal position <output id="panel-reveal-value">50%</output><input id="panel-reveal" type="range" min="0" max="100" value="50"></label>
+                <div class="control-pair"><label class="panel-field">Horizontal<input id="panel-offset-x" type="number" min="-3000" max="3000" value="0"></label><label class="panel-field">Vertical<input id="panel-offset-y" type="number" min="-3000" max="3000" value="0"></label></div><div class="button-row"><button id="panel-reset" type="button">Reset</button><button id="panel-source" type="button">Open prototype</button><button id="panel-reconnect" type="button">Reconnect</button></div>
+              </details>
             </div>
+            </section>
+            <section class="panel-control-group" aria-labelledby="capture-group-title"><h2 id="capture-group-title" class="control-group-title">Capture &amp; review</h2>
             <div class="tool-grid"><button id="panel-comment" type="button">Select element</button><button id="panel-area" type="button">Select area · C</button><button id="panel-record" type="button">Record page</button><button id="panel-ai" type="button">AI review</button></div>
             <p id="panel-instruction" class="muted">Choose an element, or hold C and drag on the page.</p>
             <button id="panel-cancel-selection" type="button" hidden>Cancel selection</button>
             <p id="panel-capture-error" class="feedback" role="alert" hidden></p>
             <button id="panel-retry" type="button" hidden>Retry capture</button>
+            </section>
             <section id="panel-comments" aria-label="Saved comments"></section>
           </section>
           <section id="panel-composer" hidden aria-labelledby="panel-composer-title">
@@ -155,7 +161,7 @@
         <button class="jira-settings-button" id="jira-settings" type="button"><span>Jira connections <span aria-hidden="true">↗</span></span><span>Connect your accounts</span></button>
       </div>
 
-      <p class="drawer-hint">Drag Chrome’s divider to resize this drawer. Close it using × above to return to floating controls.</p>
+      <p class="drawer-hint">Drag Chrome’s divider to resize. To reopen this sidebar, click Diffuse in Chrome’s toolbar.</p>
       <footer class="footer"><span class="footer-rule" aria-hidden="true"></span>FROM PROTOTYPE TO PRODUCTION<span class="footer-rule" aria-hidden="true"></span></footer>
     </main>
   </body>

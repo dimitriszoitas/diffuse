@@ -47,6 +47,16 @@ const origin = `http://127.0.0.1:${server.address().port}`;
 const clientPath = join(extension, 'ai-client.mjs');
 await writeFile(clientPath, (await readFile(clientPath, 'utf8')).replace('https://api.anthropic.com/v1/messages', `${origin}/mock-anthropic`));
 let context, worker, page, overlay;
+// Drive the same command contract as the native drawer; the on-page toolbar is hidden.
+async function command(action, payload = {}) {
+  const result = await worker.evaluate(async ({action, payload}) => {
+    const session = (await chrome.storage.session.get('comparison')).comparison;
+    if (action === 'toggleRecording') action = session.recording ? 'stopRecording' : 'record';
+    return chrome.tabs.sendMessage(session.targetTabId, {namespace: 'diffuse', type: 'PANEL_COMMAND', sessionId: session.id, action, ...payload});
+  }, {action, payload});
+  assert.equal(result?.ok, true, result?.error);
+  return result;
+}
 async function until(check, label, timeout = 15000) {
   const start = Date.now();
   while (Date.now() - start < timeout) { if (await check()) return; await new Promise(resolve => setTimeout(resolve, 100)); }
@@ -68,8 +78,8 @@ try {
   await popup.locator('#mode-audit').click();
   await popup.locator('#start-comparison').click();
   overlay = page.locator('diffuse-live-overlay');
-  await until(() => overlay.locator('#status').textContent({timeout: 1000}).then(text => text === 'Audit ready').catch(() => false), 'audit start');
-  assert.equal(await overlay.locator('#layer').count(), 0);
+  await until(() => overlay.locator('#status').textContent({timeout: 1000}).then(text => text === 'Review ready').catch(() => false), 'audit start');
+  assert.equal(await overlay.locator('#layer').isVisible(), false);
   assert.equal(await overlay.locator('#source').isVisible(), false);
   pass('Standalone audit starts with one page and no prototype stream');
 
@@ -81,16 +91,16 @@ try {
   });
   let inspection=await inspect();assert.deepEqual(inspection.small,[]);assert.ok(inspection.buttons.every(button=>button.width>=44&&button.height>=44));
   pass('Overlay uses at least 14px text and 44px button targets');
-  await overlay.locator('#ai-review').click();
+  await command('openAi');
   await until(()=>overlay.locator('#ai-config-status').textContent().then(text=>text.includes('Add your')), 'AI settings response');
   assert.equal(await overlay.locator('#ai-panel').getAttribute('aria-modal'),'true');
   assert.equal(await overlay.locator('#toolbar').evaluate(node=>node.inert),true);
   await overlay.locator('#close-ai').focus();await page.keyboard.press('Shift+Tab');
   assert.equal(await overlay.evaluate(host=>host.shadowRoot.activeElement.id),'ai-settings');
   await page.keyboard.press('Tab');assert.equal(await overlay.evaluate(host=>host.shadowRoot.activeElement.id),'close-ai');
-  await page.keyboard.press('Escape');assert.equal(await overlay.locator('#ai-panel').isVisible(),false);assert.equal(await overlay.evaluate(host=>host.shadowRoot.activeElement.id),'ai-review');
-  pass('AI dialog contains keyboard focus, closes with Escape, and returns focus to its trigger');
-  await overlay.locator('#area-comment').click();
+  await page.keyboard.press('Escape');assert.equal(await overlay.locator('#ai-panel').isVisible(),false);assert.equal(await overlay.locator('#toolbar').isVisible(),false);
+  pass('AI dialog contains keyboard focus, closes with Escape, without revealing the old toolbar');
+  await command('selectArea');
   await page.keyboard.press('Enter');
   for(const [id,value] of Object.entries({'area-x':'340','area-y':'300','area-width':'200','area-height':'100'}))await overlay.locator('#'+id).fill(value);
   await overlay.locator('#area-form button').click();
@@ -102,14 +112,14 @@ try {
   await overlay.locator('#save-comment').click();
   await until(()=>overlay.locator('.comment-pin').count().then(count=>count===1),'accessible area comment pin');
   pass('Area dimensions provide a keyboard and single-pointer alternative to dragging, with a focus-contained composer');
-  await overlay.locator('#comment').focus();await page.keyboard.press('Enter');await page.keyboard.press('ArrowDown');await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');
+  await command('selectElement');await page.keyboard.press('ArrowDown');await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');
   await until(()=>overlay.locator('#comment-form').isVisible(),'keyboard element capture');
   assert.notEqual(await overlay.locator('#comment-component').inputValue(),'Page');
   await page.keyboard.press('Escape');assert.equal(await overlay.locator('#comment-panel').isVisible(),false);
   pass('Element selection supports arrow keys and Enter without clicking the page');
   const targetId=await worker.evaluate(async url=>(await chrome.tabs.query({url}))[0].id,page.url());
   await worker.evaluate(async id=>chrome.tabs.setZoom(id,2),targetId);
-  await overlay.locator('#ai-review').click();
+  await command('openAi');
   await until(()=>overlay.locator('#ai-panel').isVisible(),'zoomed panel');
   inspection=await inspect();assert.deepEqual(inspection.small,[]);
   const vw=await page.evaluate(()=>innerWidth);assert.ok(inspection.panel.width<=vw&&inspection.panel.x>=0);
@@ -117,14 +127,14 @@ try {
   await page.screenshot({path:join(artifacts,'accessible-overlay-zoom.png')});
   await overlay.locator('#close-ai').click();await worker.evaluate(async id=>chrome.tabs.setZoom(id,1),targetId);
   await page.setViewportSize({width:320,height:900});
-  await overlay.locator('#ai-review').click();
+  await command('openAi');
   await until(()=>overlay.locator('#ai-panel').isVisible(),'320px panel');
   assert.equal(await overlay.locator('#ai-panel').evaluate(node=>node.scrollWidth<=node.clientWidth+1),true);
   inspection=await inspect();assert.deepEqual(inspection.small,[]);assert.ok(inspection.panel.x>=0&&inspection.panel.right<=321);
   await page.screenshot({path:join(artifacts,'accessible-overlay-narrow.png')});
   pass('Panels reflow at real 200% Chrome zoom and 320 CSS pixels without horizontal overflow');
   await overlay.locator('#close-ai').click();await page.setViewportSize({width:1440,height:1000});
-  await overlay.locator('#stop').click();
+  await command('stop');
   await writeFile(join(artifacts,'accessibility-overlay-results.json'),JSON.stringify({passed:results,scope:'Targeted keyboard, sizing and reflow checks. Not a formal WCAG certification.'},null,2));
 } catch(error) {
   if(page&&!page.isClosed())await page.screenshot({path:join(artifacts,'accessibility-overlay-failure.png')}).catch(()=>{});

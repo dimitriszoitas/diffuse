@@ -1,8 +1,8 @@
 # Diffuse — live design comparison and page audits
 
-**0.7.2 adds a 1280px Laptop view, compact controls with minimize/expand, custom dropdowns and severity radios, Hide/Restore for saved reviews, and a whole-review AI handoff.** Reload handling preserves unsaved text for copying and asks you to refresh stale pages. Jira handoff supports individual or selected observations with formatted descriptions: preview the destination, text and evidence before explicitly creating tickets. The hosted service is deployed; a real account grant and ticket creation still need end-to-end verification. The current Atlassian app is private to its owner, and the service permits the existing approved extension installation.
+**0.7.3 moves review controls into the side drawer and adds independent scrolling for the production and prototype sides.** Reload handling preserves unsaved text for copying and asks you to refresh stale pages. Jira handoff supports individual or selected observations with formatted descriptions: preview the destination, text and evidence before explicitly creating tickets. The hosted service is deployed; a real account grant and ticket creation still need end-to-end verification. The current Atlassian app is private to its owner, and the service permits the existing approved extension installation.
 
-Diffuse includes one review workflow with an optional live Diff and native Chrome side drawer. Open it from the popup’s top-right drawer icon or the page toolbar’s **Dock in sidebar** button. The webpage resizes beside Diffuse; a compact toolbar stays on the page while the drawer holds comment drafts and review panels. Closing the drawer restores the full floating controls and preserves the unfinished comment. Chrome chooses the drawer side and owns its resize handle.
+Diffuse uses a native Chrome side drawer for review controls. **Start review** opens it; for an active review, click the extension icon and **Open review sidebar**. There is no floating toolbar. The webpage resizes beside Diffuse, and closing the drawer preserves the review and unfinished comment. Chrome chooses the drawer side and owns its resize handle.
 
 Keep both comparison pages in one Chrome window. Background tabs may retain their old viewport until activated, so visit the prototype once and return after changing the drawer width if the viewport warning appears. Native drawer pixels are excluded from screenshots and recordings. New comment pins follow their captured element or area anchor through scrolling and responsive layout changes. Pins leave the screen with their target instead of sticking to the viewport edge. Older area captures without anchors retain their recorded document position; an original screenshot remains available when a target cannot be located. AI preview highlights remain tied to their captured viewport. The existing Chrome toolbar gesture is still required to grant capture on each reviewed tab. Selecting a new tab from a persistent drawer does not itself grant capture access.
 
@@ -27,9 +27,11 @@ For a page opened directly from your computer (`file:///…/page.html`), open `c
 
 ## Start a review, then add Diff when needed
 
-Start on the page being reviewed: click the Chrome extension icon, choose **Start review**, and allow access to that page. The bottom toolbar gives you comments, region selection, recording, AI review and reports. There is no upfront audit/comparison choice.
+Start on the page being reviewed: click the Chrome extension icon, choose **Start review**, and allow access to that page. The side drawer gives you comments, region selection, recording, AI review and reports. There is no upfront audit/comparison choice.
 
-Choose **Diff** in the toolbar or drawer when you want a live reference. Select an open reference tab, grant that selected site access, then confirm **the same tab** in Chrome’s sharing dialog. A capture handle identifies the selected reference; a mismatched tab or non-tab surface is rejected before replacing the working stream. The live reference stays in the offscreen capture document, so closing the small selector window does not stop it.
+Choose **Diff** in the drawer when you want a live reference. Select an open reference tab, grant that selected site access, then confirm **the same tab** in Chrome’s sharing dialog. A capture handle identifies the selected reference; a mismatched tab or non-tab surface is rejected before replacing the working stream. The live reference stays in the offscreen capture document, so closing the small selector window does not stop it.
+
+With **Link scroll** off, wheel or trackpad scrolling over the production side moves production; scrolling over the prototype side moves the reference tab. Nested scroll panels are chosen using the pointer position. **Link scroll** optionally synchronizes production scrolling with the reference.
 
 The existing divider and opacity controls appear once connected. **Hide reference / Show reference** toggles the overlay. Use Diff again to change or remove the reference. The review identity and saved evidence stay together across these changes, and each saved observation retains its own captured page/reference context. Reference changes wait until pending comments, recordings, captures and AI actions are finished. Cancellation preserves the current reference.
 
@@ -41,7 +43,7 @@ Page clicks operate the reviewed page. Switch to the reference to interact with 
 
 ## Responsive viewport views
 
-Use **Desktop (1440 × 900)**, **Laptop (1280 × 800)**, **Tablet (1024 × 768)**, or **Phone (390 × 844)** in the page toolbar or drawer. These change real CSS layout dimensions and media queries on the reviewed page and its connected reference. They do not emulate a device operating system, mobile user agent or touch input. **Reset / Use window size** restores normal sizing; ending the review releases viewport control too.
+Use **Desktop (1440 × 900)**, **Laptop (1280 × 800)**, **Tablet (1024 × 768)**, or **Phone (390 × 844)** in the drawer. These change real CSS layout dimensions and media queries on the reviewed page and its connected reference. They do not emulate a device operating system, mobile user agent or touch input. **Reset / Use window size** restores normal sizing; ending the review releases viewport control too.
 
 Chrome requires the extension's **debugger** permission for these controls and shows a debugging notice while a preset is active. Close DevTools on the review tabs before using a preset; Diffuse does not take over another debugger. A pending comment, capture, recording or AI operation must finish before switching.
 
@@ -79,7 +81,7 @@ In the comment form, choose **Short recording**, then **Start recording**. The f
 
 The clip captures the whole visible page as you interact, including Diffuse’s controls and any live prototype overlay. A selected region is screenshot context, not a video crop. No microphone or tab audio is recorded. Keep **Short recording** selected to attach the clip; choosing **Screenshot** before saving excludes the clip from the saved comment.
 
-The toolbar shortcuts **Record comparison** and **Record page** remain available. They first capture clean starting screenshots—paired in comparison mode, one in audit mode—and open the comment form afterward. These page-level recordings start with an editable page component label. Ending the session with **Stop** preserves an unfinished recording in the report.
+The drawer’s **Record page** control is available throughout the review. They first capture clean starting screenshots—paired in comparison mode, one in audit mode—and open the comment form afterward. These page-level recordings start with an editable page component label. Ending the session with **Stop** preserves an unfinished recording in the report.
 
 ## Optional AI review with your own key
 
@@ -99,7 +101,7 @@ AI errors distinguish authentication, model access, API credit, rate limits, and
 
 ## Review, copy, and export
 
-Open **Review (n)** on the page or **Review reports** in the extension popup. The notebook lists saved reviews, including earlier comparison sessions. You can edit a comment’s written fields while keeping its original evidence, or delete comments and reviews. **Hide** moves a review to the **Hidden** list without deleting anything; **Restore** brings it back. Severity uses labeled, color-coded radio choices. Category and viewport filters share one horizontally scrollable row.
+Open **Review reports** in the side drawer or extension popup. The notebook lists saved reviews, including earlier comparison sessions. You can edit a comment’s written fields while keeping its original evidence, or delete comments and reviews. **Hide** moves a review to the **Hidden** list without deleting anything; **Restore** brings it back. Severity uses labeled, color-coded radio choices. Category and viewport filters share one horizontally scrollable row.
 
 Reports include your manual comments and accepted AI comments, with their categories. Pending and dismissed AI suggestions are not exported. API keys are never exported.
 
@@ -168,10 +170,10 @@ Chrome can retain previously granted site permissions. Manage or revoke them in 
 
 - **Match viewport and zoom.** Viewport presets apply the same CSS layout dimensions to the reviewed page and its reference. In window-size mode, match viewport size and zoom before judging alignment. Chrome can keep a captured background tab at its previous size: after resizing the browser, open **Prototype ↗** once, then return with **Alt+Shift+P**. Diffuse updates the capture dimensions when the prototype resizes. A mismatch warning signals when sizes differ; pixel nudges correct offsets, not different responsive layouts.
 - **One review session at a time.** A comparison uses two tabs; an audit uses one. Keep the session’s tabs open. Navigation, capture interruption, browser lifecycle changes, or changing site permissions may require reconnecting or starting again.
-- **Page scrolling is approximate when layouts differ.** Different content heights, virtualized lists, sticky elements, and custom scroll behavior can prevent a perfect match. Turn off linked scrolling and align manually when necessary.
+- **Linked scrolling is approximate when layouts differ.** Different content heights, virtualized lists, sticky elements, and custom scroll behavior can prevent a perfect match. New comparisons scroll independently by default; turn on **Link scroll** when matching page positions is useful.
 - **Nested scrolling needs a reliable match.** A shared `data-diffuse-scroll` label is the strongest option. Cross-origin frames, closed shadow roots, canvas-based interfaces, and unrelated app structures may not expose comparable scroll targets. Their visuals may still appear in the captured video.
 - **Application states are independent.** There is no automatic click replay, form synchronization, or semantic state matching in this milestone. Bring each app into the intended state separately.
-- **Native dialogs are supported.** The overlay and toolbar remain usable over ordinary HTML modal dialogs. Dialogs inside closed shadow roots and custom application focus traps have not been validated.
+- **Native dialogs are supported.** The selection overlay remains usable over ordinary HTML modal dialogs. Dialogs inside closed shadow roots and custom application focus traps have not been validated.
 - **Page access.** HTTP/HTTPS, localhost and local HTML files are supported. Local files require Chrome’s **Allow access to file URLs** setting. Browser settings pages, new-tab pages and protected browser surfaces cannot be reviewed.
 - **Live capture uses resources.** Frame timing and visual quality depend on Chrome, the page, and the machine. This build does not promise a fixed frame rate, pixel-perfect video compression, or zero latency.
 - **Evidence is a viewport checkpoint.** Screenshot evidence captures the visible viewport, not an automatically stitched full page. The prototype image comes from the live stream, so its quality depends on that capture. The two images are timestamped but are not an atomic, simultaneous capture; moving content can differ between them.

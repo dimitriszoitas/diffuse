@@ -17,7 +17,7 @@
           <span>Diffuse</span>
         </div>
         <span class="edition"><span class="signal" aria-hidden="true"></span><span id="edition-label">DESIGN REVIEW</span></span>
-        <button id="open-side-panel" class="icon-button dock-button" type="button" aria-label="Open in side drawer" title="Open in side drawer — resizes the page beside Diffuse"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M15 4v16M7 12h5m-2-2 2 2-2 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button id="open-side-panel" class="icon-button dock-button" type="button" aria-label="Open review sidebar" title="Open review sidebar"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M15 4v16M7 12h5m-2-2 2 2-2 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </header>
 
       <section id="loading" class="initial-loading" role="status" aria-live="polite">
@@ -38,7 +38,7 @@
           <button class="primary-button" id="start-comparison" type="submit" disabled><span class="button-label">Start review</span><span aria-hidden="true">→</span></button>
         </form>
         <p id="page-access-message" class="feedback" role="status" hidden></p>
-        <p class="field-help">Want to compare? Use <strong>Diff</strong> in the page toolbar to choose a reference tab.</p>
+        <p class="field-help">Want to compare? Use <strong>Diff</strong> in the review sidebar to choose a reference tab.</p>
       </section>
 
       <section id="file-access-notice" class="file-access-notice" role="status" hidden>
@@ -51,7 +51,7 @@
       <section id="session-panel" hidden aria-labelledby="session-title">
         <div class="intro">
           <h1 id="session-title">Your review is ready.</h1>
-          <p id="session-subtitle">Use Diff whenever you need a reference.</p>
+          <p id="session-subtitle">Open the sidebar to add comments or compare with a reference.</p>
         </div>
         <div class="session-card">
           <div class="session-status" id="session-status" role="status"><span class="signal" aria-hidden="true"></span><span id="session-status-label">Review ready</span></div>
@@ -72,12 +72,12 @@
           <span class="capture-state" id="capture-state" hidden><span class="signal" aria-hidden="true"></span>Capture ready</span>
           <p>Clicking Diffuse here allows screenshots and recordings for this tab.</p>
         </div>
-        <button class="primary-button" id="enable-capture" type="button" hidden>
-          <span class="button-label">Enable capture &amp; return</span>
+        <button class="primary-button" id="return-to-comparison" type="button">
+          <span class="button-label">Open review sidebar</span>
           <svg class="button-arrow" width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <button class="primary-button" id="return-to-comparison" type="button">
-          <span class="button-label">Return to review</span>
+        <button class="secondary-button" id="enable-capture" type="button" hidden>
+          <span class="button-label">Enable capture &amp; return</span>
           <svg class="button-arrow" width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <button class="secondary-button" id="stop-comparison" type="button">Stop review</button>
