@@ -200,7 +200,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       <svg id="comment-pin-connections" aria-hidden="true"></svg><div id="comment-pins"></div><span id="pin-drag-help">Drag onto an element to attach here. Alt and arrow keys move 10 pixels; add Shift for 1 pixel.</span><div id="pin-position-status" role="status" aria-live="polite" hidden></div><div id="saved-comment-highlight" hidden aria-hidden="true"></div>
       <section id="saved-comment-bubble" hidden role="dialog" aria-label="Saved comment"><div class="bubble-top"><span id="saved-comment-category" class="bubble-meta"></span><button id="close-saved-comment" type="button" aria-label="Close saved comment">×</button></div><h3 id="saved-comment-title"></h3><p id="saved-comment-text"></p><p id="saved-comment-expected"></p><p id="saved-comment-state" class="bubble-meta"></p><p id="pin-attachment" hidden></p><div class="bubble-actions"><button id="select-pin-area" type="button">Select area</button><button id="open-pin-report" type="button">Open in review</button><button id="reset-pin-position" type="button" disabled>Reset position</button></div><p class="pin-move-hint">Drag onto another element to reattach. Select area to mark a region.</p></section>
       <div id="ai-region-preview" hidden aria-hidden="true"><span id="ai-region-label">AI suggestion · not saved</span></div>
-      <section id="ai-panel" hidden role="dialog" aria-labelledby="ai-title" aria-modal="false"><div class="composer-header"><h2 id="ai-title">AI review</h2><button id="close-ai" class="composer-close" type="button" aria-label="Close AI review">×</button></div><div class="composer-body"><p id="ai-mode-note" class="composer-note"></p><label class="composer-field"><span>Instructions <small>(optional)</small></span><textarea id="ai-instructions" maxlength="4000" placeholder="What should the review focus on?"></textarea></label><label class="composer-field"><span>Minimum issue size: <output id="ai-threshold-value">35</output>/100</span><input id="ai-threshold" type="range" min="0" max="100" value="35" aria-describedby="ai-threshold-help"><span class="threshold-ends"><small>0 · All details</small><small>100 · Largest issues only</small></span><small id="ai-threshold-help">Higher numbers hide smaller differences. This filters existing suggestions; changing it does not run AI again. Size is an estimate, separate from confidence.</small></label><p id="ai-disclosure" class="ai-disclosure">Run sends the current screenshot(s) and your instructions to Anthropic using your configured API key. API charges apply. Nothing is sent until you click Run.</p><p id="ai-config-status" class="composer-note"></p><div class="composer-actions"><button id="ai-settings" type="button">AI settings</button><button id="ai-run" type="button">Run AI review</button></div><div id="ai-error" class="composer-error" role="alert"></div><div id="ai-suggestions" tabindex="-1"></div></div></section>
+      <section id="ai-panel" hidden role="dialog" aria-labelledby="ai-title" aria-modal="false"><div class="composer-header"><h2 id="ai-title">AI review</h2><button id="close-ai" class="composer-close" type="button" aria-label="Close AI review">×</button></div><div class="composer-body"><p id="ai-mode-note" class="composer-note"></p><label class="composer-field"><span>Instructions <small>(optional)</small></span><textarea id="ai-instructions" maxlength="4000" placeholder="What should the review focus on?"></textarea></label><label class="composer-field"><span>Figma frame <small>(optional)</small></span><input id="ai-reference-url" type="url" maxlength="2048" placeholder="https://www.figma.com/design/…?node-id=…"><small>Uses the Figma MCP connection in Settings. Keep the matching file open in Figma desktop.</small></label><label class="composer-field"><span>Minimum issue size: <output id="ai-threshold-value">35</output>/100</span><input id="ai-threshold" type="range" min="0" max="100" value="35" aria-describedby="ai-threshold-help"><span class="threshold-ends"><small>0 · All details</small><small>100 · Largest issues only</small></span><small id="ai-threshold-help">Higher numbers hide smaller differences. This filters existing suggestions; changing it does not run AI again. Size is an estimate, separate from confidence.</small></label><p id="ai-disclosure" class="ai-disclosure">Run sends the current screenshot(s), your instructions, and any linked Figma design context to Anthropic using your configured API key. API charges apply. Nothing is sent until you click Run.</p><p id="ai-config-status" class="composer-note"></p><div class="composer-actions"><button id="ai-settings" type="button">AI settings</button><button id="ai-run" type="button">Run AI review</button></div><div id="ai-error" class="composer-error" role="alert"></div><div id="ai-suggestions" tabindex="-1"></div></div></section>
       <section id="comment-panel" hidden role="dialog" aria-labelledby="composer-title" aria-modal="false">
         <div class="composer-header"><h2 id="composer-title">Add a comment</h2><button id="close-comment" class="composer-close" type="button" aria-label="Close comment">×</button></div>
         <div class="composer-body">
@@ -274,6 +274,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     el('comment-form').addEventListener('input', rememberCommentFields);
     el('comment-form').addEventListener('change', rememberCommentFields);
     el('ai-instructions').addEventListener('input', notifyPanel);
+    el('ai-reference-url').addEventListener('input', notifyPanel);
     el('evidence-screenshot').addEventListener('click', () => chooseEvidence('screenshot'));
     el('evidence-recording').addEventListener('click', () => chooseEvidence('recording'));
     el('comment-record').addEventListener('click', startComposerRecording);
@@ -436,7 +437,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
         componentHint:el('component-hint').textContent,evidenceChoice,error:el('comment-error').textContent,fieldRevisions:Object.fromEntries(commentFieldRevisions),
         evidenceKey,evidenceIncluded,...(evidenceIncluded?{evidence:commentDraft.evidence||{}}:{}),
       }:null,
-      ai:{config:{hasKey:Boolean(aiConfig.hasKey),model:aiConfig.model||'',threshold:aiConfig.threshold},instructions:el('ai-instructions').value,threshold:Number(el('ai-threshold').value),batch:aiBatch,error:el('ai-error').textContent},
+      ai:{config:{hasKey:Boolean(aiConfig.hasKey),model:aiConfig.model||'',threshold:aiConfig.threshold,mcp:aiConfig.mcp||{enabled:false}},instructions:el('ai-instructions').value,referenceUrl:el('ai-reference-url').value,threshold:Number(el('ai-threshold').value),batch:aiBatch,error:el('ai-error').textContent},
       openPinId,
     };
   }
@@ -486,6 +487,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     const fields=message.fields;
     const applyAiFields=()=>{
       if(typeof message.instructions==='string')el('ai-instructions').value=message.instructions.slice(0,4000);
+      if(typeof message.referenceUrl==='string')el('ai-reference-url').value=message.referenceUrl.slice(0,2048);
       if(Number.isFinite(message.threshold)){aiThresholdOverride=Math.max(0,Math.min(100,Math.round(message.threshold)));el('ai-threshold').value=String(aiThresholdOverride);el('ai-threshold-value').value=String(aiThresholdOverride);renderAiSuggestions();}
     };
     switch(message.action) {
@@ -923,9 +925,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     el('ai-mode-note').textContent=isAudit()?'Review this page for potential UX and copy issues. Add a reference with Diff to compare designs.':'Review the current page and reference screenshots for potential mismatches.';
     el('ai-config-status').textContent='Checking AI settings…';
     try{
-      const response=requireSuccess(await send('GET_AI_CONFIG'));
+      const [response,mcpResponse]=await Promise.all([send('GET_AI_CONFIG').then(requireSuccess),send('GET_MCP_CONFIG').then(requireSuccess)]);
       if(!root)return;
-      aiConfig={...aiConfig,...response.config};
+      aiConfig={...aiConfig,...response.config,mcp:mcpResponse.config};
       if(aiSavedThreshold!==aiConfig.threshold)aiThresholdOverride=null;
       aiSavedThreshold=aiConfig.threshold;
       el('ai-threshold').value=String(aiThresholdOverride??Math.max(0,Math.min(100,Number(aiConfig.threshold)||0)));
@@ -1018,7 +1020,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     const instructions=el('ai-instructions').value.trim();const threshold=Number(el('ai-threshold').value);
     paintReviewControls();renderAiSuggestions();
     try{
-      const result=requireSuccess(await send('RUN_AI_REVIEW',{instructions,threshold}));
+      const result=requireSuccess(await send('RUN_AI_REVIEW',{instructions,threshold,referenceUrl:el('ai-reference-url').value.trim()}));
       if(!root||session?.id!==sessionId)return;
       aiBatch=result.batch||null;aiPreviewContext=aiBatch?.context?.production||aiPreviewContext;
     }catch(error){

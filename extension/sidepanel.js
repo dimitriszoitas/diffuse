@@ -188,13 +188,20 @@
     if(!ai)return;
     const inactiveField=id=>document.activeElement!==$(id);
     if(inactiveField('panel-ai-instructions'))$('panel-ai-instructions').value=ai.instructions||'';
+    if(inactiveField('panel-ai-reference-url'))$('panel-ai-reference-url').value=ai.referenceUrl||'';
     if(inactiveField('panel-ai-threshold'))$('panel-ai-threshold').value=String(ai.threshold??35);
     text('panel-ai-threshold-value',`${$('panel-ai-threshold').value}/100`);
     text('panel-ai-mode',Number.isInteger(session.sourceTabId)?'Compare the current page and reference screenshots.':'Review this page for UX and copy issues.');
     text('panel-ai-config',ai.config?.hasKey?`Model: ${ai.config.model}. Your API key stays in extension settings.`:'Add your Anthropic API key in Settings.');
+    const mcp=ai.config?.mcp||{},referenceReady=Boolean(mcp.configured??mcp.enabled);
+    const desktop=/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(?::\d+)?\//.test(mcp.endpoint||'');
+    text('panel-ai-reference-status',referenceReady?(desktop?'Uses the matching file open in Figma desktop.':'Uses your configured design server.'):'Connect Figma in Settings to review against this frame.');
+    $('panel-ai-reference-settings').textContent=referenceReady?'Connection settings ↗':'Connect Figma ↗';
+
     notice('panel-ai-error',ai.error);
     const locked=state.aiBusy||state.aiOperationBusy||session.aiRunning||pendingAction==='runAi';
-    $('panel-ai-run').disabled=locked||!ai.config?.hasKey;
+    $('panel-ai-reference-url').disabled=locked;
+    $('panel-ai-run').disabled=locked||!ai.config?.hasKey||(Boolean($('panel-ai-reference-url').value.trim())&&!referenceReady);
     text('panel-ai-run',locked?'Reviewing…':ai.batch?'Run new AI review':'Run AI review');
     const threshold=Number($('panel-ai-threshold').value);
     const key=JSON.stringify([ai.batch,threshold,locked]);if(key===aiKey)return;aiKey=key;
@@ -267,10 +274,11 @@
   $('panel-comment-form').addEventListener('change',syncFields);
   $('panel-comment-form').addEventListener('submit',event=>{event.preventDefault();if(event.currentTarget.reportValidity())act('saveComment',draftFields());});
   for(const choice of ['screenshot','recording'])$(`panel-evidence-${choice}`).addEventListener('click',()=>act('evidence',{choice,...draftFields()}));
-  const aiFields=()=>({instructions:$('panel-ai-instructions').value,threshold:Number($('panel-ai-threshold').value)});
+  const aiFields=()=>({instructions:$('panel-ai-instructions').value,referenceUrl:$('panel-ai-reference-url').value.trim(),threshold:Number($('panel-ai-threshold').value)});
   $('panel-ai-instructions').addEventListener('input',()=>command('setAiFields',aiFields(),true).catch(()=>{}));
+  $('panel-ai-reference-url').addEventListener('input',()=>{paintAi(state?.ai);command('setAiFields',aiFields(),true).catch(()=>{});});
   $('panel-ai-threshold').addEventListener('input',()=>{text('panel-ai-threshold-value',`${$('panel-ai-threshold').value}/100`);command('setAiFields',aiFields(),true).catch(()=>{});});
-  $('panel-ai-run').addEventListener('click',()=>act('runAi',aiFields()));
+  $('panel-ai-run').addEventListener('click',()=>{if($('panel-ai-reference-url').reportValidity())act('runAi',aiFields());});
   for(const [id,key,scale]of [['panel-opacity','opacity',.01],['panel-reveal','reveal',1],['panel-offset-x','offsetX',1],['panel-offset-y','offsetY',1]])$(id).addEventListener('input',()=>{const value=Number($(id).value)*scale;if(Number.isFinite(value))command('settings',{settings:{[key]:value}},true).catch(()=>{});if(id==='panel-opacity')text('panel-opacity-value',`${$(id).value}%`);if(id==='panel-reveal')text('panel-reveal-value',`${$(id).value}%`);});
   $('panel-linked').addEventListener('change',()=>act('settings',{settings:{linked:$('panel-linked').checked}}));
   $('panel-hide').addEventListener('click',()=>{

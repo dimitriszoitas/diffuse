@@ -6,5 +6,5 @@ artifacts/*
 .env.*
 !.env.example
 .vercel/
-releases/
+/releases/
 *.log

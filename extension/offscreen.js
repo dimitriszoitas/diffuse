@@ -251,6 +251,15 @@ async function receive(message) {
     return {ok: true, evidence: {production, ...(prototype ? {prototype, captureSkewMs: Math.abs(Date.parse(prototype.capturedAt) - Date.parse(production.capturedAt))} : {})}};
   }
   if (message.type === 'ANNOTATE_EVIDENCE') return {ok: true, production: await annotateProduction(message)};
+  if (message.type === 'PREPARE_MCP_IMAGES') {
+    if (!Array.isArray(message.images) || message.images.length > 2) throw new Error('The design reference returned too many images.');
+    const images = [];
+    for (const image of message.images) {
+      if (!['image/png', 'image/jpeg', 'image/webp'].includes(image?.mimeType) || typeof image.data !== 'string' || image.data.length > 12 * 1024 * 1024 || !/^[A-Za-z0-9+/]+={0,2}$/.test(image.data)) throw new Error('The design reference screenshot is invalid.');
+      images.push(await reviewerImage({dataUrl: `data:${image.mimeType};base64,${image.data}`}));
+    }
+    return {ok: true, images};
+  }
   if (message.type === 'PREPARE_AI_IMAGES') return {ok: true, production: await reviewerImage(message.evidence.production), prototype: await reviewerImage(message.evidence.prototype)};
   if (message.type === 'START_RECORDING') return startRecording(message);
   if (!stream?.active) throw new Error('The live source is no longer available. Start a new comparison from the prototype tab.');

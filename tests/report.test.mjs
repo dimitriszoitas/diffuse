@@ -12,6 +12,23 @@ const annotated = 'data:image/png;base64,YW5ub3RhdGVk';
 const crop = 'data:image/png;base64,Y3JvcA==';
 const video = 'data:video/webm;base64,dmlkZW8=';
 
+test('both Figma reference images and their provenance appear in report and Markdown exports',()=>{
+  const review=fixture(),comment=review.comments[0];
+  comment.mode='audit';delete comment.evidence.prototype;
+  comment.ai={designReference:{url:'https://www.figma.com/design/Example?node-id=1-2',nodeId:'1:2',text:'Spacing: 24'}};
+  const first='data:image/png;base64,Zmlyc3Q=',second='data:image/png;base64,c2Vjb25k';
+  comment.evidence.designReference={dataUrl:first,width:500,height:300};
+  comment.evidence.designReferenceAdditional=[{dataUrl:second,width:250,height:150}];
+  const images=evidenceImages(comment).filter(item=>item.side.startsWith('designReference'));
+  assert.equal(images.length,2);assert.equal(new Set(images.map(item=>item.filename)).size,2);
+  for(const output of [formatReviewHtml(review),formatMarkdown(review)]){
+    assert.ok(output.includes(first));assert.ok(output.includes(second));
+    assert.ok(output.includes('Figma design reference 2'));
+    assert.ok(output.includes('https://www.figma.com/design/Example?node-id=1-2'));
+  }
+  assert.deepEqual(metadataRows(comment).find(([key])=>key==='capture.designReference-2.pixels'),['capture.designReference-2.pixels','250 × 150']);
+});
+
 function fixture() {
   return {
     id: 'review-1', title: 'Account menu polish', createdAt: '2026-09-25T09:30:00.000Z', updatedAt: '2026-09-25T09:40:00.000Z',

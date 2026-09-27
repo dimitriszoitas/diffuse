@@ -1,4 +1,4 @@
-# Try Diffuse 0.8.0
+# Try Diffuse 0.10.0
 
 Compare a live prototype over production or audit one page. Leave pinned comments on elements or areas, record a short silent interaction, and copy the review for your engineering team. Claude can suggest findings when you connect your own Anthropic API key.
 
@@ -6,7 +6,7 @@ Compare a live prototype over production or audit one page. Leave pinned comment
 
 For a first installation:
 
-1. Unzip **Diffuse-0.8.0.zip**. Keep the resulting **Diffuse** folder somewhere permanent.
+1. Unzip **Diffuse-0.10.0.zip**. Keep the resulting **Diffuse** folder somewhere permanent.
 2. In your normal Chrome browser, open `chrome://extensions`.
 3. Turn on **Developer mode**, then click **Load unpacked** and choose that **Diffuse** folder.
 4. Pin **Diffuse — Live design comparison** using Chrome’s extensions menu.
@@ -151,3 +151,7 @@ Tap **C**, release it, then click on the reviewed page to start a comment. The e
 **Asana** and **ClickUp** integrations are planned. Jira handoff is included in 0.7.0 with the rollout limits above.
 
 To open a shared review, click **Load review** in the Diffuse popup, then **Choose review file** in the right sidebar. Choose a saved review there to resume it. The website stays visible while its comments load.
+
+## Compare against Figma
+
+Enable Desktop MCP in the matching file's Figma Dev Mode, then connect it in **Diffuse Settings → Figma reference**. Copy a frame link and add it to **AI review → Figma frame** or your instructions. Run the review to compare the captured page against that design. Keep the file open in Figma desktop. This uses your configured Anthropic key; Figma's hosted OAuth server is not supported yet.

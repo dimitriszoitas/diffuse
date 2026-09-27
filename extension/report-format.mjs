@@ -81,16 +81,20 @@ export function fileStem(value = 'Diffuse review') {
   return String(value).normalize('NFKD').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'diffuse-review';
 }
 
+function evidenceEntries(comment) {
+  return [...['production', 'prototype', 'designReference'].map(side => [side, comment.evidence?.[side]]),
+    ...(Array.isArray(comment.evidence?.designReferenceAdditional) ? comment.evidence.designReferenceAdditional.slice(0, 1).map((image, index) => [`designReference-${index + 2}`, image]) : [])];
+}
+
 export function evidenceImages(comment = {}, index = 0, {audit = comment.mode === 'audit'} = {}) {
   const result = [];
   const crops = [];
-  for (const side of ['production', 'prototype']) {
-    const evidence = comment.evidence?.[side];
+  for (const [side, evidence] of evidenceEntries(comment)) {
     if (!evidence) continue;
     const original = safeMediaUrl(evidence.dataUrl);
     const annotated = safeMediaUrl(evidence.annotatedDataUrl);
     const crop = safeMediaUrl(evidence.cropDataUrl);
-    const label = side === 'production' ? (audit ? 'Page' : 'Production') : 'Prototype';
+    const label = side === 'production' ? (audit ? 'Page' : 'Production') : side.startsWith('designReference') ? `Figma design reference${side === 'designReference' ? '' : ' 2'}` : 'Prototype';
     const selectionLabel = comment.selection?.kind === 'region' ? 'selected region highlighted' : 'selected element highlighted';
     if (original || annotated) result.push({
       side, kind: 'full', label: `${label}${annotated ? ` · ${selectionLabel}` : ''}`,
@@ -168,8 +172,7 @@ export function metadataRows(comment = {}) {
   visit(comment.context, 'context');
   for (const [key, value] of aiMetadataRows(comment.ai)) rows.push([key, value]);
   if (Number.isFinite(comment.evidence?.captureSkewMs)) rows.push(['capture.skewMs', String(comment.evidence.captureSkewMs)]);
-  for (const side of ['production', 'prototype']) {
-    const evidence = comment.evidence?.[side];
+  for (const [side, evidence] of evidenceEntries(comment)) {
     if (evidence?.capturedAt) rows.push([`capture.${side}.time`, formatDate(evidence.capturedAt)]);
     if (Number.isFinite(evidence?.width) && Number.isFinite(evidence?.height)) rows.push([`capture.${side}.pixels`, `${evidence.width} × ${evidence.height}`]);
   }
@@ -190,6 +193,8 @@ export function aiMetadataRows(ai) {
     const value = ai[key];
     if (typeof value === 'string' && value) rows.push([`ai.${key}`, key === 'acceptedAt' ? formatDate(value) : value]);
   }
+  if (safePageUrl(ai.designReference?.url)) rows.push(['ai.figmaReference', safePageUrl(ai.designReference.url)]);
+  if (ai.designReference?.nodeId) rows.push(['ai.figmaNode', ai.designReference.nodeId]);
   if (Number.isFinite(ai.mismatchScore) && ai.mismatchScore >= 0 && ai.mismatchScore <= 100) rows.push(['ai.estimatedDifferenceScore', `${ai.mismatchScore}/100 (AI estimate, not pixel accuracy)`]);
   if (Number.isFinite(ai.confidence) && ai.confidence >= 0 && ai.confidence <= 1) rows.push(['ai.confidence', String(ai.confidence)]);
   if (typeof ai.acceptedAt === 'string' && ai.acceptedAt) rows.push(['ai.reviewStatus', 'Accepted by the reviewer']);
@@ -225,6 +230,7 @@ export function formatCommentHtml(comment = {}, index = 0, {clipboard = false, a
   const category = categoryKey(fields.category);
   const palette = CATEGORY_PALETTE[category];
   const badge = `<span class="category-label" data-category="${category}" style="background-color:${palette.background};color:${palette.color};border:1px solid ${palette.color};border-radius:6px;padding:5px 10px;font-size:14px;font-weight:600;display:inline-block">${escapeHtml(categoryLabel(category))}</span>`;
+  const figmaReference = safePageUrl(comment.ai?.designReference?.url) ? `<p class="comment-kicker">Figma reference: ${pageLink(comment.ai.designReference.url, clipboard)}</p>` : '';
   const narrative = ['comment', 'expected'].filter((key) => fields[key]).map((key) => `<section class="field ${key === 'expected' ? 'requested-change' : 'observation'}"${inline(clipboard, key === 'expected' ? 'padding:18px 20px;margin:20px 0;background:#F0F9F5;border-left:4px solid #77BBA7;border-radius:8px;color:#172B45' : 'margin:24px 0')}><h3${inline(clipboard, 'font-size:16px;line-height:1.5;margin:0 0 8px;color:#172B45')}>${FIELD_LABELS[key]}</h3><p${inline(clipboard, 'font-size:16px;line-height:1.65;margin:0;max-width:72ch')}>${textBlock(fields[key])}</p></section>`).join('');
   const componentState = ['component', 'state'].filter((key) => fields[key]).map((key) => `<div${inline(clipboard, 'display:inline-block;vertical-align:top;margin:0 28px 12px 0;max-width:100%')}><dt${inline(clipboard, 'font-size:14px;color:#62738A;margin-bottom:3px')}>${FIELD_LABELS[key]}</dt><dd${inline(clipboard, 'margin:0;font-size:16px;font-weight:600')}>${textBlock(fields[key])}</dd></div>`).join('');
   const steps = reproductionSteps(fields.steps);
@@ -255,7 +261,7 @@ export function formatCommentHtml(comment = {}, index = 0, {clipboard = false, a
   const promptBody = prompt ? `<pre class="ai-prompt-text"${inline(clipboard, 'white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.6 monospace;padding:14px;background:#F3F6FA;border:1px solid #DFE8F2;border-radius:8px')}>${escapeHtml(prompt)}</pre>` : '';
   const aiPrompt = prompt ? (clipboard ? `<section class="ai-handoff"><h3>Suggested AI prompt</h3>${promptBody}</section>` : `<details class="ai-handoff"><summary>Suggested AI prompt</summary>${promptBody}</details>`) : '';
   const aiSummary = comment.ai?.acceptedAt ? `<p class="ai-provenance"${inline(clipboard, 'font-size:14px;color:#62738A;margin-top:24px')}>AI suggestion · accepted by the reviewer. Scores in technical details are AI estimates, not pixel-accuracy measurements.</p>` : '';
-  return `<article class="comment-card" id="issue-${index + 1}" data-comment-id="${escapeHtml(comment.id || '')}" data-category="${category}" data-viewport="${commentViewportKey(comment)}"${inline(clipboard, 'padding:28px 0;margin:28px 0;border-top:2px solid #235ED7;color:#172B45;font-size:16px;line-height:1.65')}><header class="comment-heading"><span class="issue-number"${inline(clipboard, 'display:inline-block;color:#235ED7;font-size:20px;font-weight:700;margin:0 0 12px')}>${String(index + 1).padStart(2, '0')}</span><div class="issue-heading-content"><div class="issue-labels">${badge}<span class="viewport-label">${escapeHtml(viewportLabel(comment))}</span>${fields.severity ? `<span class="severity" data-severity="${escapeHtml(fields.severity)}"${inline(clipboard, 'font-size:14px;color:#62738A;margin-left:10px')}>${escapeHtml(fields.severity)}</span>` : ''}</div><h2${inline(clipboard, 'font-size:24px;line-height:1.3;color:#172B45;margin:14px 0 8px')}>${escapeHtml(commentTitle(comment, index))}</h2><p class="comment-kicker"${inline(clipboard, 'font-size:14px;color:#62738A;margin:0')}>Recorded ${escapeHtml(formatDate(comment.createdAt))}</p></div></header><div class="comment-fields">${narrative}${!fields.expected ? '<p class="missing-change">No requested change was recorded. The original observation is preserved.</p>' : ''}${typeof comment.ai?.reason === 'string' && comment.ai.reason ? `<section class="field reasoning"><h3>Why this change</h3><p>${textBlock(comment.ai.reason)}</p></section>` : ''}</div>${capturedReference}${componentState ? `<dl class="issue-context"${inline(clipboard, 'padding:16px 0;margin:0')}>${componentState}</dl>` : ''}${reproduction}${cropEvidence}${fullEvidence}${!images.length ? '<p class="missing-evidence">No screenshot evidence was recorded for this observation.</p>' : ''}${clip}${aiPrompt}${aiSummary}${context}</article>`;
+  return `<article class="comment-card" id="issue-${index + 1}" data-comment-id="${escapeHtml(comment.id || '')}" data-category="${category}" data-viewport="${commentViewportKey(comment)}"${inline(clipboard, 'padding:28px 0;margin:28px 0;border-top:2px solid #235ED7;color:#172B45;font-size:16px;line-height:1.65')}><header class="comment-heading"><span class="issue-number"${inline(clipboard, 'display:inline-block;color:#235ED7;font-size:20px;font-weight:700;margin:0 0 12px')}>${String(index + 1).padStart(2, '0')}</span><div class="issue-heading-content"><div class="issue-labels">${badge}<span class="viewport-label">${escapeHtml(viewportLabel(comment))}</span>${fields.severity ? `<span class="severity" data-severity="${escapeHtml(fields.severity)}"${inline(clipboard, 'font-size:14px;color:#62738A;margin-left:10px')}>${escapeHtml(fields.severity)}</span>` : ''}</div><h2${inline(clipboard, 'font-size:24px;line-height:1.3;color:#172B45;margin:14px 0 8px')}>${escapeHtml(commentTitle(comment, index))}</h2><p class="comment-kicker"${inline(clipboard, 'font-size:14px;color:#62738A;margin:0')}>Recorded ${escapeHtml(formatDate(comment.createdAt))}</p></div></header><div class="comment-fields">${figmaReference}${narrative}${!fields.expected ? '<p class="missing-change">No requested change was recorded. The original observation is preserved.</p>' : ''}${typeof comment.ai?.reason === 'string' && comment.ai.reason ? `<section class="field reasoning"><h3>Why this change</h3><p>${textBlock(comment.ai.reason)}</p></section>` : ''}</div>${capturedReference}${componentState ? `<dl class="issue-context"${inline(clipboard, 'padding:16px 0;margin:0')}>${componentState}</dl>` : ''}${reproduction}${cropEvidence}${fullEvidence}${!images.length ? '<p class="missing-evidence">No screenshot evidence was recorded for this observation.</p>' : ''}${clip}${aiPrompt}${aiSummary}${context}</article>`;
 }
 
 export function formatReviewHtml(review = {}, options = {}) {
@@ -318,6 +324,7 @@ export function formatMarkdown(review = {}, {embedMedia = true} = {}) {
     const commentAudit = commentIsAudit(comment, review);
     lines.push(`## ${index + 1}. ${markdownText(commentTitle(comment, index))}`, '', `Category: ${categoryLabel(fields.category)}${fields.severity ? ` · Severity: ${markdownText(fields.severity)}` : ''}`, '', `Recorded: ${markdownText(formatDate(comment.createdAt))}`, '');
     lines.push(`**Viewport:** ${markdownText(viewportLabel(comment))}`, '');
+    if (safePageUrl(comment.ai?.designReference?.url)) lines.push(`Figma reference: ${markdownText(comment.ai.designReference.url)}`, '');
     if (!commentAudit && pageLocationText(comment.context?.prototype?.url)) lines.push(`Reference for this observation: ${markdownText(pageLocationText(comment.context.prototype.url))}`, '');
     for (const key of ['comment', 'expected']) if (fields[key]) lines.push(`### ${FIELD_LABELS[key]}`, '', markdownText(fields[key]), '');
     if (typeof comment.ai?.reason === 'string' && comment.ai.reason) lines.push('### Why this change', '', markdownText(comment.ai.reason), '');

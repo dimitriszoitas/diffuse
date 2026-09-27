@@ -12,7 +12,7 @@
     <script src="review-loader.js" defer></script>
     <script src="viewport-panel.js" type="module"></script>
     <link rel="stylesheet" href="ui-chrome.css">
-    <link rel="stylesheet" href="ui-theme.css">
+    <link rel="stylesheet" href="ui-theme.css"><link rel="stylesheet" href="ui.css">
   <script src="select-controls.js" defer></script>
 </head>
   <body data-surface="sidepanel">
@@ -158,9 +158,11 @@
             <div class="section-heading"><h2 id="panel-ai-title">AI review</h2><button id="panel-close-ai" class="close-button" type="button" aria-label="Close AI review">×</button></div>
             <p id="panel-ai-mode" class="muted"></p>
             <label class="panel-field">Instructions <span class="optional">(optional)</span><textarea id="panel-ai-instructions" maxlength="4000" rows="3" placeholder="What should this review focus on?"></textarea></label>
+            <label class="panel-field" for="panel-ai-reference-url">Figma frame link <span class="optional">(optional)</span><input id="panel-ai-reference-url" type="url" maxlength="4096" autocomplete="off" spellcheck="false" placeholder="https://www.figma.com/design/…?node-id=…" aria-describedby="panel-ai-reference-help"></label>
+            <p id="panel-ai-reference-help" class="muted mcp-reference-help"><span id="panel-ai-reference-status">Add a Figma connection to use a design reference.</span> You can also paste the frame link in your instructions. <a id="panel-ai-reference-settings" href="settings.html#figma" target="_blank" rel="noopener">Figma settings ↗</a></p>
             <label class="panel-field">Minimum issue size <output id="panel-ai-threshold-value">35/100</output><input id="panel-ai-threshold" type="range" min="0" max="100" value="35" aria-describedby="panel-threshold-help"></label>
             <p id="panel-threshold-help" class="muted">0 includes small details; 100 shows only the largest issues. Adjusting this filter uses existing results.</p>
-            <p class="panel-notice">Run sends the current screenshot(s) and your instructions to Anthropic using your API key. API charges apply. Suggestions become comments only when you accept them.</p>
+            <p class="panel-notice">Run sends the current screenshot(s), your instructions, and any linked Figma design context to Anthropic using your API key. API charges apply. Suggestions become comments only when you accept them.</p>
             <p id="panel-ai-config" class="muted"></p>
             <button id="panel-ai-run" type="button" class="primary-button">Run AI review</button>
             <p id="panel-ai-error" class="feedback" role="alert" hidden></p>

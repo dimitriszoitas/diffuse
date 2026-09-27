@@ -97,8 +97,8 @@ const fields = shape({...strings('title',180),...strings('comment expected steps
 const issue = shape({url:webUrl,key:text(128),status:text(100),createdAt:date});
 const comment = shape({createdAt:date,updatedAt:date,mode:enumOf(['audit','comparison']),fields,selection:nullable(selection),pinOffset,pinPoint,pinSelection:sanitizePinSelection,
   context:shape({production:pageContext,prototype:pageContext,alignment:shape({...numbers('opacity reveal offsetX offsetY'),...booleans('linked hidden')}),browser}),
-  evidence:shape({production:image,prototype:image,video,...numbers('captureSkewMs')}),
-  ai:shape({provider:enumOf(['anthropic']),model:text(200),...numbers('mismatchScore confidence'),reason:text(8000),acceptedAt:date,mode:enumOf(['audit','comparison'])}),jiraIssues:array(issue,100)});
+  evidence:shape({production:image,prototype:image,designReference:image,designReferenceAdditional:array(image,1),video,...numbers('captureSkewMs')}),
+  ai:shape({provider:enumOf(['anthropic']),model:text(200),...numbers('mismatchScore confidence'),reason:text(8000),acceptedAt:date,mode:enumOf(['audit','comparison']),designReference:shape({url:webUrl,fileKey:text(200),nodeId:text(200),serverName:text(200),tools:array(text(100),4),text:text(40000),capturedAt:date})}),jiraIssues:array(issue,100)});
 const review = shape({title:text(2000),createdAt:date,updatedAt:date,mode:enumOf(['audit','comparison']),productionUrl:portablePageUrl,prototypeUrl:portablePageUrl,comments:array(comment,MAX_COMMENTS)});
 
 function validateReview(value) {

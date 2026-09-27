@@ -2,6 +2,8 @@ import {DEFAULT_SETTINGS, safeSettings, safeReferenceWheel, safeLinkedScroll, is
 import * as reviews from './review-store.mjs';
 import {reviewScreens} from './ai-client.mjs';
 import {readAISettings, saveAISettings, clearAIKey, protectAIStorage} from './ai-config.mjs';
+import {readMCPSettings, saveMCPSettings, clearMCPSettings, mcpPermissionOrigin} from './mcp-config.mjs';
+import {testMCPConnection, readFigmaReference, parseFigmaReference} from './mcp-client.mjs';
 import {createViewportController} from './viewport-controller.mjs';
 
 let session = null;
@@ -873,7 +875,7 @@ async function referenceEnded(current, error) {
 
 function publicBatch(draft) {
   if (!draft?.aiBatch) return null;
-  return {id: draft.id, createdAt: draft.createdAt, mode: draft.mode, model: draft.aiBatch.model, summary: draft.aiBatch.summary, limitations: draft.aiBatch.limitations, context: {production: draft.context.production}, suggestions: draft.aiBatch.suggestions.filter(item => item.status === 'pending')};
+  return {id: draft.id, createdAt: draft.createdAt, mode: draft.mode, model: draft.aiBatch.model, summary: draft.aiBatch.summary, limitations: draft.aiBatch.limitations, context: {production: draft.context.production}, ...(draft.designReference ? {designReference:{url:draft.designReference.url,nodeId:draft.designReference.nodeId}} : {}), suggestions: draft.aiBatch.suggestions.filter(item => item.status === 'pending')};
 }
 
 async function currentBatch(batchId = session?.aiBatchId) {
@@ -897,35 +899,72 @@ async function runAIReview(message) {
   if (current.pendingDraftId) throw new Error('Save or cancel the open comment before running the AI review.');
   if (aiJob || acceptingSuggestions.size) throw new Error('Wait for the current AI review action to finish.');
   if (recordingStart || evidenceBusy || current.recording) throw new Error('Wait for the capture or recording to finish before AI review.');
+  const instructions = typeof message.instructions === 'string' ? message.instructions.trim().slice(0, 4000) : '';
+  // A Figma URL is an explicit design reference, not a general browsing request.
+  const referenceInput = (typeof message.referenceUrl === 'string' && message.referenceUrl.trim()) || instructions.match(/https:\/\/(?:www\.)?figma\.com\/[^\s<>"']+/i)?.[0]?.replace(/[.,;)]+$/, '') || '';
+  let referenceConfig, referenceUrl;
+  if (referenceInput) {
+    referenceUrl = parseFigmaReference(referenceInput).url;
+    referenceConfig = await readMCPSettings({includeToken: true});
+    if (!referenceConfig.enabled) throw new Error('Connect Figma MCP in Settings before reviewing a Figma frame.');
+    if (referenceConfig.token && instructions.includes(referenceConfig.token)) throw new Error('Remove MCP credentials from review instructions.');
+    if (!(await chrome.permissions.contains({origins: [mcpPermissionOrigin(referenceConfig.endpoint)]}))) throw new Error('Reconnect Figma MCP in Settings to allow access to the design server.');
+    if (session !== current || transitioning || current.pendingDraftId || aiJob || acceptingSuggestions.size || recordingStart || evidenceBusy || current.recording) throw new Error('The review changed while checking Figma. Return to the page and try again.');
+  }
   const job = {sessionId: current.id, controller: new AbortController()};
   aiJob = job;
-  let draft;
-  const timer = setTimeout(() => job.controller.abort(), 90000);
+  const assertCurrentJob = () => {
+    if (job.controller.signal.aborted || session !== current || aiJob !== job) throw new Error('The AI review was cancelled.');
+  };
+  let draft, replacedBatchId;
+  const timer = setTimeout(() => job.controller.abort(), referenceUrl ? 180000 : 90000);
   // A finite, user-requested streamed review may take longer than the worker's idle timeout.
   const keepAlive = setInterval(() => chrome.storage.session.get('comparison').catch(() => {}), 20000);
   current.aiRunning = true;
   try {
     await publish();
+    assertCurrentJob();
     draft = await captureDraft(null, {pending: false, forAI: true});
+    assertCurrentJob();
     const images = await evidenceStep(mediaMessage('PREPARE_AI_IMAGES', {sessionId: current.id, evidence: draft.evidence}), 'The screenshots could not be prepared for AI review.');
-    if (job.controller.signal.aborted || session?.id !== current.id) throw new Error('The AI review was cancelled.');
-    const result = await reviewScreens({apiKey: config.apiKey, model: config.model, instructions: typeof message.instructions === 'string' ? message.instructions.trim().slice(0, 4000) : '', mode: current.mode || 'comparison', production: images.production, prototype: images.prototype, signal: job.controller.signal});
-    if (job.controller.signal.aborted || session?.id !== current.id) throw new Error('The AI review was cancelled.');
-    draft.aiBatch = {model: result.model || config.model, summary: result.summary, limitations: result.limitations, suggestions: result.suggestions.map(suggestion => ({...suggestion, id: crypto.randomUUID(), score: suggestion.mismatchScore, status: 'pending'}))};
+    assertCurrentJob();
+    let designReference;
+    if (referenceUrl) {
+      const reference = await readFigmaReference({...referenceConfig, url: referenceUrl, signal: job.controller.signal});
+      assertCurrentJob();
+      const prepared = await evidenceStep(mediaMessage('PREPARE_MCP_IMAGES', {sessionId: current.id, images: reference.images}), 'The Figma reference images could not be prepared for AI review.');
+      assertCurrentJob();
+      designReference = {...reference, images: prepared.images};
+      draft.designReference = {url: reference.url, fileKey: reference.fileKey, nodeId: reference.nodeId, serverName: reference.serverName, tools: reference.tools, text: reference.text, capturedAt: new Date().toISOString()};
+      if (prepared.images[0]) draft.evidence.designReference = {...prepared.images[0], capturedAt: draft.designReference.capturedAt};
+      if (prepared.images[1]) draft.evidence.designReferenceAdditional = [{...prepared.images[1], capturedAt: draft.designReference.capturedAt}];
+    }
+    const result = await reviewScreens({apiKey: config.apiKey, model: config.model, instructions, mode: current.mode || 'comparison', production: images.production, prototype: images.prototype, designReference, signal: job.controller.signal});
+    assertCurrentJob();
+    if (referenceConfig?.token && JSON.stringify(result).includes(referenceConfig.token)) throw new Error('The AI response contained credential-like content and was discarded.');
+    draft.aiBatch = {model: result.model || config.model, summary: result.summary, limitations: [...result.limitations, ...(designReference?.warnings || [])].slice(0, 8), suggestions: result.suggestions.map(suggestion => ({...suggestion, id: crypto.randomUUID(), score: suggestion.mismatchScore, status: 'pending'}))};
     await reviews.putDraft(draft);
+    assertCurrentJob();
     const oldBatchId = current.aiBatchId;
+    replacedBatchId = oldBatchId;
     current.aiBatchId = draft.id;
     await persist();
-    if (oldBatchId && oldBatchId !== draft.id) await reviews.discardDraft(oldBatchId);
+    assertCurrentJob();
+    if (oldBatchId && oldBatchId !== draft.id) { await reviews.discardDraft(oldBatchId); replacedBatchId = undefined; }
+    assertCurrentJob();
     return {ok: true, batch: publicBatch(draft)};
   } catch (error) {
     if (draft) await reviews.discardDraft(draft.id).catch(() => {});
+    if (draft && session === current && current.aiBatchId === draft.id) {
+      current.aiBatchId = replacedBatchId;
+      await persist().catch(() => {});
+    }
     if (job.controller.signal.aborted) throw new Error('The AI review was cancelled or timed out. Try again when the page is ready.');
     throw error;
   } finally {
     clearTimeout(timer); clearInterval(keepAlive);
     if (aiJob === job) aiJob = null;
-    if (session?.id === current.id) { current.aiRunning = false; await publish(); }
+    if (session === current) { current.aiRunning = false; await publish(); }
   }
 }
 
@@ -970,7 +1009,7 @@ async function acceptSuggestion(message) {
         assertSuggestionSession(current, message.batchId);
         prototype = reference.production;
       }
-      const draft = {id: `ai-${batch.id}-${suggestion.id}`, reviewId: batch.reviewId, mode: batch.mode, createdAt: batch.createdAt, selection, context: batch.context, evidence: {...batch.evidence, production: production.production, ...(prototype ? {prototype} : {})}, ai: {provider: 'anthropic', model: batch.aiBatch.model, runId: batch.id, suggestionId: suggestion.id, mismatchScore: suggestion.mismatchScore, confidence: suggestion.confidence, reason: suggestion.reason || '', acceptedAt: new Date().toISOString(), mode: batch.mode}};
+      const draft = {id: `ai-${batch.id}-${suggestion.id}`, reviewId: batch.reviewId, mode: batch.mode, createdAt: batch.createdAt, selection, context: batch.context, evidence: {...batch.evidence, production: production.production, ...(prototype ? {prototype} : {})}, ai: {provider: 'anthropic', model: batch.aiBatch.model, runId: batch.id, suggestionId: suggestion.id, mismatchScore: suggestion.mismatchScore, confidence: suggestion.confidence, reason: suggestion.reason || '', acceptedAt: new Date().toISOString(), mode: batch.mode, ...(batch.designReference ? {designReference: batch.designReference} : {})}};
       assertSuggestionSession(current, message.batchId);
       await reviews.putDraft(draft);
       assertSuggestionSession(current, message.batchId);
@@ -1095,6 +1134,17 @@ async function handle(message, sender) {
   if (message.type === 'GET_AI_CONFIG' && (isAISettings || isPopup || isPanel || role === 'target')) return {ok: true, config: await readAISettings()};
   if (isAISettings && message.type === 'SAVE_AI_CONFIG') return {ok: true, config: await saveAISettings(message)};
   if (isAISettings && message.type === 'CLEAR_AI_KEY') return {ok: true, config: await clearAIKey()};
+  if (message.type === 'GET_MCP_CONFIG' && sender.id === chrome.runtime.id && (isSettings || isPanel || role === 'target')) return {ok: true, config: await readMCPSettings()};
+  if (isSettings && sender.id === chrome.runtime.id && message.type === 'SAVE_MCP_CONFIG') {
+    if (!(await chrome.permissions.contains({origins: [mcpPermissionOrigin(message.endpoint)]}))) throw new Error('Allow access to this MCP server before connecting.');
+    return {ok: true, config: await saveMCPSettings(message)};
+  }
+  if (isSettings && sender.id === chrome.runtime.id && message.type === 'CLEAR_MCP_CONFIG') return {ok: true, config: await clearMCPSettings()};
+  if (isSettings && sender.id === chrome.runtime.id && message.type === 'TEST_MCP_CONNECTION') {
+    const config = await readMCPSettings({includeToken: true});
+    if (!config.enabled || !(await chrome.permissions.contains({origins: [mcpPermissionOrigin(config.endpoint)]}))) throw new Error('Save the MCP connection and allow access first.');
+    return {ok: true, connection: await testMCPConnection(config)};
+  }
   if (message.type === 'GET_SESSION' && (isPopup || isPanel)) {
     const current = session;
     if (current && !transitioning && !offscreenCreation && !(await hasOffscreen()) && session === current && !transitioning && !offscreenCreation) await stopSession();

@@ -123,3 +123,18 @@ test('portable area remaps retain anchors or document fallback and never carry a
   bundle.review.comments[0].pinPoint={x:.5,y:.5};assert.throws(()=>parseReviewBundle(bundle),/element attachment/);
  }
 });
+
+
+test('Figma design provenance and reference screenshot travel with the review, connection secrets do not',()=>{
+ const source=fixture();source.comments[0].ai.designReference={url:'https://www.figma.com/design/Example?node-id=1-2',fileKey:'Example',nodeId:'1:2',serverName:'Figma Desktop',tools:['get_design_context'],text:'Spacing: 24',capturedAt:when,endpoint:'http://127.0.0.1:3845/mcp',token:'secret'};
+ source.comments[0].evidence.designReference={dataUrl:png,width:500,height:300,capturedAt:when};
+ source.comments[0].evidence.designReferenceAdditional=[{dataUrl:png,width:250,height:150,capturedAt:when}];
+ const bundle=parseReviewBundle(JSON.stringify(createReviewBundle(source,{now:when})));
+ const item=bundle.review.comments[0];
+ assert.equal(item.ai.designReference.nodeId,'1:2');assert.equal(item.ai.designReference.text,'Spacing: 24');
+ assert.equal(item.evidence.designReference.dataUrl,png);
+ assert.equal(item.evidence.designReferenceAdditional[0].width,250);
+ assert.equal(JSON.stringify(bundle).includes('secret'),false);assert.equal(item.ai.designReference.endpoint,undefined);
+ source.comments[0].evidence.designReferenceAdditional.push(source.comments[0].evidence.designReference);
+ assert.throws(()=>createReviewBundle(source,{now:when}),/list is invalid or too large/);
+});

@@ -104,6 +104,7 @@ export function jiraIssueFields(comment = {}, review = {}, {index = 0} = {}) {
   });
   const links = [
     ['Page', capturedUrl(comment, 'production', review.productionUrl)],
+    ['Figma design reference', safePageUrl(comment.ai?.designReference?.url)],
     ...(!commentIsAudit(comment, review) ? [['Reference', capturedUrl(comment, 'prototype', review.prototypeUrl)]] : []),
   ].filter(([, url]) => url);
   if (links.length) {
@@ -123,7 +124,7 @@ export function jiraIssueFields(comment = {}, review = {}, {index = 0} = {}) {
 export function jiraAttachments(comment = {}, review = {}, {index = 0} = {}) {
   const audit = commentIsAudit(comment, review);
   const candidates = evidenceImages(comment, index, {audit})
-    .filter(image => !audit || image.side === 'production')
+    .filter(image => !audit || image.side === 'production' || image.side.startsWith('designReference'))
     .map(image => ({kind: 'screenshot', side: image.side, detail: image.kind, label: image.label, filename: image.filename, dataUrl: image.dataUrl}));
   const video = evidenceVideo(comment, index);
   if (video) candidates.push({kind: 'recording', label: 'Recording', filename: video.filename, dataUrl: video.dataUrl});

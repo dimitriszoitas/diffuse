@@ -1,0 +1,18 @@
+/* Compact Figma connection controls share the existing preference surfaces. */
+.settings-page .mcp-endpoint-choice{display:flex;flex-wrap:wrap;gap:8px 20px;border:0;padding:0;margin:0 0 16px;min-width:0}
+.settings-page .mcp-endpoint-choice legend{font-size:13px;font-weight:600;margin-bottom:8px;color:var(--ui-ink,#172b45)}
+.settings-page .mcp-endpoint-choice label{display:flex;align-items:center;gap:8px;min-height:32px;margin:0;font-size:13px;font-weight:500}
+.settings-page .mcp-endpoint-choice input{width:16px;height:16px;min-height:0;margin:0;padding:0;accent-color:var(--ui-accent,#235ed7)}
+.settings-page .mcp-optional{font-weight:400;color:var(--ui-muted,#62738a)}
+.settings-page #mcp-endpoint{display:block;width:100%;min-width:0;min-height:44px;padding:10px 12px;border:1px solid var(--ui-line-strong,#bac9da);border-radius:6px;background:var(--ui-surface,#fff);color:var(--ui-ink,#172b45);font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+.settings-page #mcp-endpoint[readonly]{background:var(--ui-surface-muted,#f3f6fa);color:var(--ui-muted,#62738a)}
+.settings-page #mcp-feedback{margin:12px 20px 0;padding:10px 12px;border:1px solid var(--ui-line,#e0e7ef);border-radius:6px;background:var(--ui-accent-soft,#e8efff);font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+.settings-page #mcp-feedback[data-type="error"]{background:#fff0ec;border-color:#eecfc5;color:#963d2f}
+.settings-page #mcp-tools h3{font-size:13px;margin:0;font-weight:600}
+.settings-page .mcp-tool-list{display:flex;flex-wrap:wrap;gap:6px;list-style:none;margin:8px 0 0;padding:0}
+.settings-page .mcp-tool-list li{padding:4px 7px;border-radius:4px;background:var(--ui-surface-muted,#f3f6fa);color:var(--ui-muted,#62738a);font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere;max-width:100%}
+.settings-page .mcp-setup ol{padding-left:20px;margin:10px 0;color:var(--ui-muted,#62738a);font-size:13px;line-height:1.65}
+.settings-page .mcp-setup li+li{margin-top:6px}
+.mcp-reference-help{font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.mcp-reference-help a{color:var(--ui-accent,#235ed7);text-underline-offset:2px;white-space:nowrap}
+@media(max-width:720px){.settings-page #mcp-feedback{margin-inline:16px}}
