@@ -1,0 +1,39 @@
+/* Shared visual foundations for Diffuse-owned pages only. */
+:root {
+  --ui-bg: #f5f5f7;
+  --ui-surface: #fff;
+  --ui-surface-muted: #f0f0f2;
+  --ui-ink: #1d1d1f;
+  --ui-muted: #6e6e73;
+  --ui-line: #dedee3;
+  --ui-line-strong: #bdbdc5;
+  --ui-accent: #65558f;
+  --ui-accent-soft: #efedf5;
+  --ui-primary: #29292d;
+  --ui-danger: #b33b32;
+  --ui-radius: 6px;
+  --ink: var(--ui-ink);
+  --muted: var(--ui-muted);
+  --line: var(--ui-line);
+  --control: var(--ui-line-strong);
+  --violet: var(--ui-accent);
+  --pale: var(--ui-surface-muted);
+  --scroll-thumb: #b8b8bf;
+  --scroll-hover: #919199;
+  --scroll-track: transparent;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--ui-ink);
+  background: var(--ui-bg);
+  color-scheme: light;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+:where(button, a, input, textarea, select, summary):focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 3px;
+}
+:where(input[type=checkbox], input[type=radio], input[type=range]) { accent-color: var(--ui-accent); }
+.sidebar { --scroll-thumb: #b8b8bf; --scroll-hover: #919199; }
+@media (forced-colors: active) {
+  :root { --ui-line: CanvasText; --ui-line-strong: CanvasText; --ui-accent: Highlight; }
+}

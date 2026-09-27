@@ -4,15 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Jira connections · Diffuse</title>
+  <link rel="stylesheet" href="ai-settings.css">
   <link rel="stylesheet" href="jira-settings.css">
   <script src="jira-settings.js" type="module"></script>
   <link rel="stylesheet" href="ui-chrome.css">
   <script src="select-controls.js" defer></script>
+  <link rel="stylesheet" href="ui-theme.css">
 </head>
-<body>
+<body class="settings-page settings-legacy">
   <header class="topbar"><a class="brand" href="report.html"><span class="brand-mark" aria-hidden="true"><i></i><i></i></span>Diffuse</a><a href="report.html">Back to reviews <span aria-hidden="true">↗</span></a></header>
   <main>
-    <section class="intro"><p class="eyebrow">JIRA CONNECTIONS</p><h1>Your review. Your team’s workspace.</h1><p>Connect the Atlassian accounts you use for Jira. Each connection shows its account and available sites, so you can keep workspaces separate.</p></section>
+    <section class="intro"><h1>Jira connections</h1><p>Connect the Atlassian accounts you use for Jira. Each connection shows its account and available sites, so you can keep workspaces separate.</p></section>
     <div class="layout">
       <section class="connections" aria-labelledby="connections-heading" aria-busy="true" id="connections-section">
         <div class="section-heading"><h2 id="connections-heading">Connected accounts</h2><span class="status" id="connection-count">Loading…</span></div>
@@ -23,14 +25,14 @@
         <p class="help">Atlassian opens in a separate sign-in window. To add a different account, switch accounts there before approving access.</p>
       </section>
       <aside aria-labelledby="connection-info">
-        <p class="eyebrow">WHAT THIS CONNECTS</p><h2 id="connection-info">One account at a time.</h2>
-        <div class="note"><span class="number" aria-hidden="true">01</span><div><h3>Choose the right identity</h3><p>Your personal and work Atlassian accounts can stay connected separately. Check the account name and site address before using a connection.</p></div></div>
-        <div class="note"><span class="number" aria-hidden="true">02</span><div><h3>Separate from AI review</h3><p>Jira uses Atlassian sign-in. Your Anthropic API key is not involved, and you do not need to paste an Atlassian password or token into Diffuse.</p></div></div>
-        <div class="note"><span class="number" aria-hidden="true">03</span><div><h3>Nothing is sent as a ticket here</h3><p>This page manages account connections only. Connecting an account does not send your comments, screenshots, or recordings to Jira.</p></div></div>
+        <h2 id="connection-info">About connections</h2>
+        <div class="note"><div><h3>Choose the right identity</h3><p>Your personal and work Atlassian accounts can stay connected separately. Check the account name and site address before using a connection.</p></div></div>
+        <div class="note"><div><h3>Separate from AI review</h3><p>Jira uses Atlassian sign-in. Your Anthropic API key is not involved, and you do not need to paste an Atlassian password or token into Diffuse.</p></div></div>
+        <div class="note"><div><h3>Nothing is sent as a ticket here</h3><p>This page manages account connections only. Connecting an account does not send your comments, screenshots, or recordings to Jira.</p></div></div>
       </aside>
     </div>
     <section class="setup" aria-labelledby="setup-heading"><div><h2 id="setup-heading">Preview access</h2><p>Sign in with the account that owns Diffuse’s Atlassian app and has access to a Jira site. Other accounts can connect after app sharing is enabled. This installation ID identifies your copy of Diffuse for sign-in setup.</p></div><div class="installation"><label for="installation-id">Diffuse installation ID</label><div class="copy-field"><input id="installation-id" type="text" readonly spellcheck="false" aria-describedby="installation-help"><button id="copy-installation" type="button" disabled>Copy ID</button></div><p class="help" id="installation-help">This is an installation identifier, not a password or API key.</p></div></section>
-    <footer><span>FROM PROTOTYPE TO PRODUCTION</span><a href="settings.html#ai">AI settings <span aria-hidden="true">↗</span></a></footer>
+    <footer><a href="settings.html">All settings</a><a href="settings.html#ai">AI settings <span aria-hidden="true">↗</span></a></footer>
   </main>
 </body>
 </html>

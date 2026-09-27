@@ -11,22 +11,22 @@
   <script src="report.js" type="module"></script>
   <link rel="stylesheet" href="ui-chrome.css">
   <script src="select-controls.js" defer></script>
+  <link rel="stylesheet" href="ui-theme.css">
 </head>
 <body>
   <aside class="sidebar" id="review-sidebar" aria-label="Review navigation">
     <div class="sidebar-top"><button id="toggle-review-sidebar" class="sidebar-toggle" type="button" aria-controls="review-sidebar" aria-expanded="true" aria-label="Collapse review sidebar" title="Collapse review sidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m6-12-4 4 4 4"/></svg></button>
     <a class="brand" href="report.html" aria-label="Diffuse review notebook"><span class="brand-mark" aria-hidden="true"><i></i><i></i></span>Diffuse<span class="brand-tag">Review</span></a></div>
-    <div class="sidebar-intro"><h1>The details.<br>The next steps.</h1><p>Clear observations, with the evidence to act on them.</p></div>
     <div class="list-heading"><h2>Saved reviews</h2><button id="refresh-reviews" class="small-icon" title="Refresh reviews" aria-label="Refresh reviews">↻</button></div>
     <div class="review-visibility-tabs" role="group" aria-label="Review visibility"><button id="review-view-saved" type="button" aria-pressed="true">Saved</button><button id="review-view-hidden" type="button" aria-pressed="false">Hidden</button></div>
     <p id="hidden-reviews-hint" class="hidden-reviews-hint" hidden>Hidden reviews keep all their comments and evidence. Restore them at any time.</p>
     <nav id="review-list" class="review-list" aria-label="Saved reviews"><p class="sidebar-empty">Loading your reviews…</p></nav>
-    <footer class="sidebar-footer"><span class="local-message"><span class="local-indicator" aria-hidden="true"></span>Saved in this Chrome profile.</span><p>AI analysis is optional. You choose what to send to Anthropic using your own key.</p><a class="sidebar-settings" href="settings.html" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3-.6 2.2-2 .9-2-.6L2.8 8l1.5 1.7v2.6L2.8 14 4.4 17l2-.5 2 .9L9 20h3l.6-2.6 2-.9 2 .5 1.6-3-1.5-1.7V9.7L18.2 8l-1.6-2.5-2 .6-2-.9L12 3Z"/><circle cx="10.5" cy="11.5" r="3"/></svg><span>Settings</span></a></footer>
+    <footer class="sidebar-footer"><span class="local-message">Stored on this device</span><a class="sidebar-settings" href="settings.html" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3-.6 2.2-2 .9-2-.6L2.8 8l1.5 1.7v2.6L2.8 14 4.4 17l2-.5 2 .9L9 20h3l.6-2.6 2-.9 2 .5 1.6-3-1.5-1.7V9.7L18.2 8l-1.6-2.5-2 .6-2-.9L12 3Z"/><circle cx="10.5" cy="11.5" r="3"/></svg><span>Settings</span></a></footer>
   </aside>
   <main class="workspace">
-    <header class="workspace-bar"><span class="workspace-breadcrumb">Diffuse <span>/</span> <strong>Review notebook</strong></span><div class="workspace-utilities"><span id="review-count" class="muted">Local evidence</span><button id="import-review" class="button" type="button">Import review</button><input id="import-review-file" type="file" accept=".json,.diffuse-review.json,application/json" hidden></div></header>
+    <header class="workspace-bar"><span class="workspace-breadcrumb"><strong>Review notebook</strong></span><div class="workspace-utilities"><span id="review-count" class="muted">Local evidence</span><button id="import-review" class="button" type="button">Import review</button><input id="import-review-file" type="file" accept=".json,.diffuse-review.json,application/json" hidden></div></header>
     <section id="load-review-panel" class="load-review-panel" aria-labelledby="load-review-title" hidden>
-      <div><h2 id="load-review-title">Load review</h2><p>Open an exported .diffuse-review.json file with its comments, screenshots and page locations, or browse your saved reviews.</p></div>
+      <div><h2 id="load-review-title">Load review</h2><p>Import a review file with its comments, evidence and page locations, or open a saved review.</p></div>
       <div class="load-review-actions"><button id="choose-review-file" class="button primary" type="button">Choose review file</button><button id="browse-saved-reviews" class="button" type="button">Saved reviews</button></div>
     </section>
     <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
@@ -44,11 +44,11 @@
         </div>
       </div>
     </section>
-    <div id="report-content" aria-busy="true"><section class="empty-state"><span class="empty-symbol" aria-hidden="true">◧</span><h2>Getting your notebook ready.</h2><p>Your saved review evidence will appear here.</p></section></div>
+    <div id="report-content" aria-busy="true"><section class="empty-state"><h2>Loading reviews…</h2><p>Your saved reviews will appear here.</p></section></div>
   </main>
   <dialog id="edit-dialog" aria-labelledby="edit-title">
     <form id="edit-form">
-      <header class="dialog-header"><div><p class="eyebrow">EDIT OBSERVATION</p><h2 id="edit-title">Make the next step clear.</h2></div><button type="button" class="close-button" id="close-edit" aria-label="Close edit dialog">×</button></header>
+      <header class="dialog-header"><div><h2 id="edit-title">Edit observation</h2></div><button type="button" class="close-button" id="close-edit" aria-label="Close edit dialog">×</button></header>
       <div class="edit-category"><label for="edit-category">Category</label><select id="edit-category" name="category" data-category="design-mismatch"><option value="design-mismatch">Design mismatch</option><option value="ux-issue">UX issue</option><option value="copy-change">Copy change</option></select></div>
       <div class="dialog-fields"><label>Title <span class="optional-label">(optional)</span><input name="title" maxlength="180" placeholder="Uses your observation when left blank"></label><label>Observation<textarea name="comment" rows="3" maxlength="8000" placeholder="Describe what you see." required></textarea></label><label>Requested change <span class="optional-label">(optional)</span><textarea name="expected" rows="2" maxlength="8000" placeholder="Describe the intended appearance or behavior."></textarea></label><div class="field-pair"><label>Component<input name="component" maxlength="240" placeholder="e.g. AccountMenu"></label><label>State<input name="state" maxlength="240" placeholder="e.g. expanded, loading" required></label></div><label>Steps to reproduce<textarea name="steps" rows="3" maxlength="8000" placeholder="How can someone reach this exact state?"></textarea></label><label>Severity<select name="severity"><option value="minor">Minor</option><option value="major">Major</option><option value="critical">Critical</option></select></label><p class="form-note">Original screenshots, recording, and captured engineering context stay attached.</p><p id="edit-error" class="form-error" role="alert" hidden></p></div>
       <footer class="dialog-footer"><button type="button" class="button" id="cancel-edit">Cancel</button><button type="submit" class="button primary" id="save-comment">Save changes</button></footer>

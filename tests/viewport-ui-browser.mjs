@@ -52,7 +52,7 @@ try{
   // profile labels that must not be reclassified by their captured width.
   const drawer=await browser.newPage({viewport:{width:380,height:900}});
   await drawer.setContent((await readFile(resolve(project,'extension/sidepanel.html'),'utf8')).replace(/<script\b[^>]*>[\s\S]*?<\/script>/g,'').replace(/<link\b[^>]*>/g,''));
-  for(const file of ['popup.css','sidepanel.css'])await drawer.addStyleTag({content:await readFile(resolve(project,'extension',file),'utf8')});
+  for(const file of ['popup.css','sidepanel.css','ui-theme.css'])await drawer.addStyleTag({content:await readFile(resolve(project,'extension',file),'utf8')});
   const fixtureComments=[...comments,...[
     ['Legacy desktop','desktop'],['Legacy tablet','tablet'],['Unspecified 1280',null],['Invalid profile 1280','invalid'],['Unknown width',null]
   ].map(([title,key])=>({id:title,fields:{title},context:{production:{viewportProfile:key?{key}:undefined,viewport:title==='Unknown width'?{}:{width:1280,height:800}}}}))];

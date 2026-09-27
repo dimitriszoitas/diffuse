@@ -130,3 +130,61 @@ select:disabled { color: var(--muted); background: #eeeaf3; }
 .reports-access{grid-template-columns:1fr}.settings-access{margin-top:12px;padding-top:10px;border-top:1px solid #ddd4e9}.settings-button{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:44px;padding:8px 12px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink);font:inherit;font-weight:600;cursor:pointer}.settings-button:hover{background:var(--pale)}.settings-button svg{flex:0 0 20px}
 
 .load-review-button{display:flex;align-items:center;justify-content:space-between;gap:12px;font-weight:600;text-align:left}.load-review-button svg{flex-shrink:0}
+
+/* A small utility window: content first, quiet chrome, one primary action. */
+.popup { padding: 14px 16px 8px; font-size: 14px; line-height: 1.45; }
+.popup .brand-header { flex-wrap: nowrap; min-height: 45px; padding-bottom: 10px; gap: 12px; border-color: var(--ui-line, #dedee3); }
+.popup .brand { gap: 8px; font-size: 20px; letter-spacing: -.55px; font-weight: 650; }
+.popup .brand-mark { width: 27px; height: 29px; flex-basis: 27px; }
+.popup .brand-mark span { width: 19px; height: 23px; border-radius: 4px; }
+.popup .brand-mark span:last-child { left: 7px; top: 5px; border-color: var(--ui-bg, #f5f5f7); background: #7354b1; }
+.popup .dock-button { width: 44px; height: 44px; border-color: transparent; background: transparent; color: var(--ui-muted, #6e6e73); border-radius: 6px; }
+.popup .dock-button:hover { color: var(--ui-ink, #1d1d1f); background: var(--ui-surface-muted, #f0f0f2); }
+.popup .intro { margin: 18px 0 14px; }
+.popup h1 { font-size: 19px; line-height: 1.3; letter-spacing: -.4px; font-weight: 650; }
+.popup .intro p { margin-top: 5px; font-size: 13px; line-height: 1.5; }
+.popup .source-card { padding: 12px; border: 1px solid var(--ui-line, #dedee3); border-radius: 6px; background: var(--ui-surface, #fff); }
+.popup .step-label { color: var(--ui-muted, #6e6e73); font-size: 11px; font-weight: 500; letter-spacing: 0; }
+.popup .source-card > .source-text { margin-top: 5px; }
+.popup .source-title, .popup .session-page-title { margin-bottom: 3px; font-size: 14px; line-height: 1.4; font-weight: 600; }
+.popup .source-url { font-size: 12px; line-height: 1.4; }
+.popup .start-actions { display: grid; grid-template-columns: 1.2fr 1fr; align-items: stretch; gap: 8px; margin-top: 12px; }
+.popup .start-actions #comparison-form { min-width: 0; margin: 0; }
+.popup .start-actions .load-review-button { height: 100%; margin: 0; }
+.popup .primary-button, .popup .secondary-button { min-height: 44px; padding: 10px 12px; border-radius: 6px; font-size: 13px; line-height: 1.4; font-weight: 550; }
+.popup .primary-button { border-color: var(--ui-primary, #29292d); background: var(--ui-primary, #29292d); color: #fff; }
+.popup .primary-button:not(:disabled):hover { border-color: #414146; background: #414146; }
+.popup .primary-button:disabled { border-color: var(--ui-line, #dedee3); background: var(--ui-surface-muted, #f0f0f2); color: var(--ui-muted, #6e6e73); }
+.popup .secondary-button { border-color: var(--ui-line-strong, #bdbdc5); background: var(--ui-surface, #fff); color: var(--ui-ink, #1d1d1f); }
+.popup .secondary-button:not(:disabled):hover { background: var(--ui-surface-muted, #f0f0f2); }
+.popup .load-review-button svg { width: 17px; height: 17px; color: var(--ui-muted, #6e6e73); }
+.popup .field-help { margin-top: 10px; font-size: 12px; line-height: 1.5; }
+.popup .field-help strong { font-weight: 550; color: var(--ui-ink, #1d1d1f); }
+.popup .reports-access { display: block; padding-top: 8px; margin-top: 16px; border-color: var(--ui-line, #dedee3); }
+.popup .report-button { padding: 9px 4px; border: 0; border-radius: 4px; background: transparent; gap: 12px; }
+.popup .report-button:hover { background: var(--ui-surface-muted, #f0f0f2); }
+.popup .report-button .button-label { font-size: 13px; font-weight: 550; }
+.popup .report-count { font-size: 12px; }
+.popup .report-button .button-arrow { width: 15px; height: 15px; color: var(--ui-muted, #6e6e73); }
+.popup .report-button-copy { gap: 2px; }
+.popup .settings-access { margin-top: 8px; padding-top: 4px; border-color: var(--ui-line, #dedee3); }
+.popup .settings-button { justify-content: flex-start; min-height: 44px; padding: 8px 4px; gap: 8px; border: 0; border-radius: 4px; background: transparent; font-size: 13px; font-weight: 500; }
+.popup .settings-button:hover { background: var(--ui-surface-muted, #f0f0f2); }
+.popup .settings-button svg { width: 17px; height: 17px; flex-basis: 17px; color: var(--ui-muted, #6e6e73); }
+.popup .session-card { padding: 12px; border: 1px solid var(--ui-line, #dedee3); border-radius: 6px; margin-bottom: 12px; background: var(--ui-surface, #fff); }
+.popup .session-status { font-size: 12px; font-weight: 500; gap: 6px; margin-bottom: 12px; }
+.popup .signal { width: 6px; height: 6px; }
+.popup .session-side-label { font-size: 11px; font-weight: 500; text-transform: lowercase; letter-spacing: 0; margin-bottom: 4px; }
+.popup .session-side-label::first-letter { text-transform: uppercase; }
+.popup .session-divider { background: var(--ui-line, #dedee3); margin: 10px 0; }
+.popup .capture-notice { padding: 0; border: 0; background: transparent; font-size: 12px; }
+.popup .capture-notice p, .popup .capture-state { font-size: 12px; }
+.popup .file-access-notice { border-color: var(--ui-line, #dedee3); border-radius: 6px; background: var(--ui-surface, #fff); font-size: 13px; }
+.popup .file-access-notice h2 { font-size: 15px; font-weight: 600; }
+.popup .feedback, .popup .session-error { border-color: #e3c3bf; border-radius: 6px; background: #fbf2f1; color: var(--ui-danger, #b33b32); font-size: 13px; }
+.popup .initial-loading { font-size: 13px; }
+@media (max-width: 350px) {
+  .popup { padding: 12px; }
+  .popup .start-actions { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .popup .start-actions button { gap: 6px; padding-inline: 10px; }
+}

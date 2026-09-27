@@ -12,7 +12,7 @@ await mkdir(artifacts, {recursive: true});
 const server = http.createServer(async (req, res) => {
   try {
     const path = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
-    if (path === '/') { res.setHeader('Content-Type', 'text/html; charset=utf-8');res.end('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/extension/report.css"><link rel="stylesheet" href="/extension/jira-export.css"><script src="/extension/select-controls.js"></script></head><body><main style="max-width:1000px;margin:24px auto;padding:16px"><h1>Diffuse review fixture</h1><button id="filter" class="button">Show UX issues</button><div id="report"></div></main></body></html>');return; }
+    if (path === '/') { res.setHeader('Content-Type', 'text/html; charset=utf-8');res.end('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/extension/report.css"><link rel="stylesheet" href="/extension/jira-export.css"><link rel="stylesheet" href="/extension/ui-theme.css"><script src="/extension/select-controls.js"></script></head><body><main style="max-width:1000px;margin:24px auto;padding:16px"><h1>Diffuse review fixture</h1><button id="filter" class="button">Show UX issues</button><div id="report"></div></main></body></html>');return; }
     if (!/^\/extension\/[a-z-]+\.(m?js|css)$/.test(path)) { res.writeHead(404);res.end();return; }
     res.setHeader('Content-Type', path.endsWith('.css') ? 'text/css' : 'text/javascript');res.end(await readFile(join(project, path)));
   } catch { res.writeHead(404);res.end(); }

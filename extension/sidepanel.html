@@ -11,6 +11,7 @@
     <script src="sidepanel.js" defer></script>
     <script src="viewport-panel.js" type="module"></script>
     <link rel="stylesheet" href="ui-chrome.css">
+    <link rel="stylesheet" href="ui-theme.css">
   <script src="select-controls.js" defer></script>
 </head>
   <body data-surface="sidepanel">
@@ -21,7 +22,7 @@
           <span class="brand-mark" aria-hidden="true"><span></span><span></span></span>
           <span>Diffuse</span>
         </div>
-        <span class="edition"><span class="signal" aria-hidden="true"></span><span id="edition-label">DESIGN REVIEW</span></span>
+        <span class="edition" hidden><span class="signal" aria-hidden="true"></span><span id="edition-label">DESIGN REVIEW</span></span>
         <button id="open-side-panel" class="icon-button dock-button" type="button" aria-label="Open review sidebar" title="Open review sidebar"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M15 4v16M7 12h5m-2-2 2 2-2 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </header>
 
@@ -33,18 +34,20 @@
       <section id="setup" hidden aria-labelledby="setup-title">
         <div class="intro">
           <h1 id="setup-title">Review this page</h1>
-          <p>Comment, capture and review without leaving your work.</p>
+          <p>Capture feedback where it happens.</p>
         </div>
         <div class="source-card">
-          <span class="step-label">CURRENT PAGE</span>
+          <span class="step-label">Current page</span>
           <div class="source-text"><p class="source-title" id="source-title">Your page</p><p class="source-url" id="source-url"></p></div>
         </div>
+        <div class="start-actions">
         <form id="comparison-form">
           <button class="primary-button" id="start-comparison" type="submit" disabled><span class="button-label">Start review</span><span aria-hidden="true">→</span></button>
         </form>
         <button class="secondary-button load-review-button" id="load-review" type="button"><span>Load review</span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 15v5h14v-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        </div>
         <p id="page-access-message" class="feedback" role="status" hidden></p>
-        <p class="field-help">Want to compare? Use <strong>Diff</strong> in the review sidebar to choose a reference tab.</p>
+        <p class="field-help">Compare pages with <strong>Diff</strong> in the sidebar.</p>
       </section>
 
       <section id="file-access-notice" class="file-access-notice" role="status" hidden>
@@ -62,7 +65,7 @@
         <div class="session-card">
           <div class="session-status" id="session-status" role="status"><span class="signal" aria-hidden="true"></span><span id="session-status-label">Review ready</span></div>
           <div class="session-side" id="session-prototype">
-            <span class="session-side-label">PROTOTYPE</span>
+            <span class="session-side-label">Prototype</span>
             <p class="session-page-title" id="session-source-title"></p>
             <p class="source-url" id="session-source-url"></p>
           </div>
@@ -90,14 +93,14 @@
       </section>
 
       <section id="dock-workspace" hidden aria-label="Review workspace">
-        <header class="workspace-heading"><div><p id="panel-mode" class="eyebrow">REVIEW</p><h1 id="panel-title">Your review</h1></div><button id="panel-stop" type="button">Stop</button></header>
+        <header class="workspace-heading"><div><p id="panel-mode" class="eyebrow" hidden>REVIEW</p><h1 id="panel-title">Your review</h1></div><button id="panel-stop" type="button">Stop</button></header>
         <p id="panel-page" class="muted"></p>
         <p id="panel-warning" class="panel-notice" role="status" hidden></p>
         <div id="panel-away" class="panel-notice" hidden><p id="panel-away-message">Return to the reviewed page to continue.</p><button id="panel-focus" type="button">Return to page</button><button id="panel-recover-page" type="button" hidden>Reconnect review</button></div>
         <div id="panel-live">
           <section id="panel-controls" aria-label="Review controls">
-            <section class="panel-control-group" aria-labelledby="compare-group-title"><h2 id="compare-group-title" class="control-group-title">Compare</h2>
-            <div class="button-row"><button id="panel-diff" type="button" aria-describedby="panel-diff-hint">Diff</button></div>
+            <section class="panel-control-group compare-group" aria-labelledby="compare-group-title"><div class="compare-heading"><h2 id="compare-group-title" class="control-group-title">Compare</h2>
+            <button id="panel-diff" type="button" aria-describedby="panel-diff-hint"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16m-6-8h3m6 0h3"/></svg><span>Diff</span></button></div>
             <p id="panel-diff-hint" class="muted">Choose a reference tab to compare with this page.</p>
             <div id="panel-comparison-controls">
               <div class="control-pair"><label class="checkbox"><input id="panel-linked" type="checkbox"> Link scrolling</label><button id="panel-hide" type="button" aria-pressed="false">Hide reference</button></div>
@@ -108,9 +111,9 @@
               </details>
             </div>
             </section>
-            <section class="panel-control-group" aria-labelledby="capture-group-title"><h2 id="capture-group-title" class="control-group-title">Capture &amp; review</h2>
+            <section class="panel-control-group capture-group" aria-labelledby="capture-group-title"><h2 id="capture-group-title" class="control-group-title">Capture &amp; review</h2>
+            <div class="shortcut-cheatsheet" aria-label="Comment shortcuts"><p><span>Leave a comment</span><kbd>C</kbd></p><p><span>Comment on an area</span><span class="shortcut-keys"><kbd>C</kbd><span>+</span><kbd>Drag</kbd></span></p></div>
             <div class="tool-grid"><button id="panel-record" type="button">Record page</button><button id="panel-ai" type="button">AI review</button></div>
-            <div class="shortcut-cheatsheet" aria-label="Comment shortcuts"><p><kbd>C</kbd><span>Leave comment</span></p><p><span><kbd>C</kbd> + mouse drag</span><span>Select area and leave comment</span></p></div>
             <p id="panel-instruction" class="muted" role="status" hidden></p>
             <button id="panel-cancel-selection" type="button" hidden>Cancel selection</button>
             <p id="panel-capture-error" class="feedback" role="alert" hidden></p>
@@ -162,7 +165,7 @@
         </button>
       </div>
 
-      <p class="drawer-hint">Drag Chrome’s divider to resize. To reopen this sidebar, click Diffuse in Chrome’s toolbar.</p>
+      <p class="drawer-hint">Resize with Chrome’s divider.</p>
 </div>
       <div class="settings-access"><button class="settings-button" id="settings" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9.2 3-.6 2.3-2 .9-2.2-.6-2 3.5 1.7 1.7v2.4l-1.7 1.7 2 3.5 2.3-.6 2 .9.5 2.3h4l.6-2.3 2-.9 2.2.6 2-3.5-1.7-1.7v-2.4L20 9.1l-2-3.5-2.3.6-2-.9L13.2 3h-4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="11.2" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/></svg><span>Settings</span></button></div>
       <footer class="footer"><span class="footer-rule" aria-hidden="true"></span>FROM PROTOTYPE TO PRODUCTION<span class="footer-rule" aria-hidden="true"></span></footer>

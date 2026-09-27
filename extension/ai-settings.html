@@ -8,11 +8,12 @@
   <script src="ai-settings.js" type="module"></script>
   <link rel="stylesheet" href="ui-chrome.css">
   <script src="select-controls.js" defer></script>
+  <link rel="stylesheet" href="ui-theme.css">
 </head>
-<body>
-  <header class="topbar"><a class="brand" href="report.html"><span class="brand-mark" aria-hidden="true"><i></i><i></i></span>Diffuse</a><span class="edition">AI REVIEW</span></header>
+<body class="settings-page settings-legacy">
+  <header class="topbar"><a class="brand" href="report.html"><span class="brand-mark" aria-hidden="true"><i></i><i></i></span>Diffuse</a><a href="settings.html">All settings <span aria-hidden="true">↗</span></a></header>
   <main>
-    <section class="intro"><p class="eyebrow">YOUR EYE. A SECOND PERSPECTIVE.</p><h1>A little help finding the details.</h1><p>Connect your Anthropic API key to review a captured screen with Claude. You choose which suggestions become comments.</p></section>
+    <section class="intro"><h1>AI review</h1><p>Connect your Anthropic API key to review a captured screen with Claude. You choose which suggestions become comments.</p></section>
     <div class="layout">
       <form id="ai-settings-form" aria-busy="true">
         <div class="section-heading"><h2>Claude connection</h2><span class="key-status" id="key-status" role="status">Loading…</span></div>
@@ -28,13 +29,13 @@
         <input id="threshold" type="range" min="0" max="100" step="1" value="35" aria-valuetext="35 out of 100" aria-describedby="threshold-help">
         <p class="help" id="threshold-help">0 shows all findings. Higher numbers hide smaller differences; 90 shows only the largest issues. This is a display filter, not review accuracy or confidence.</p>
         <div id="ai-feedback" role="status" aria-live="polite" tabindex="-1" hidden></div>
-        <div class="actions"><button id="save" class="primary" type="submit" disabled>Save settings <span aria-hidden="true">↗</span></button><button id="clear-key" class="text-button" type="button" disabled>Remove key</button></div>
+        <div class="actions"><button id="save" class="primary" type="submit" disabled>Save settings</button><button id="clear-key" class="text-button" type="button" disabled>Remove key</button></div>
       </form>
       <aside>
-        <p class="eyebrow">YOU STAY IN CONTROL</p><h2>Only when you ask.</h2>
-        <div class="note"><span class="number">01</span><div><h3>A captured moment</h3><p>An AI review sends the production screenshot, the prototype screenshot in comparison mode, and your review instructions directly to Anthropic. API usage is billed to your Anthropic account.</p></div></div>
-        <div class="note"><span class="number">02</span><div><h3>Your key stays separate</h3><p>The key is used only by Diffuse’s connection to Anthropic. It is never added to comments, exported reports, or the pages you are reviewing.</p></div></div>
-        <div class="note"><span class="number">03</span><div><h3>Suggestions, then your judgment</h3><p>Claude sees the captured screen. It does not test hidden states or interactions. Review every finding before accepting it.</p></div></div>
+        <h2>How AI review works</h2>
+        <div class="note"><div><h3>Screenshots and billing</h3><p>An AI review sends the production screenshot, the prototype screenshot in comparison mode, and your review instructions directly to Anthropic. API usage is billed to your Anthropic account.</p></div></div>
+        <div class="note"><div><h3>Your key stays separate</h3><p>The key is used only by Diffuse’s connection to Anthropic. It is never added to comments, exported reports, or the pages you are reviewing.</p></div></div>
+        <div class="note"><div><h3>Review the suggestions</h3><p>Claude sees the captured screen. It does not test hidden states or interactions. Review every finding before accepting it.</p></div></div>
         <a class="console-link" href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener noreferrer">Manage Anthropic API keys <span aria-hidden="true">↗</span></a>
       </aside>
     </div>

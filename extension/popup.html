@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="popup.css" />
     <script src="popup.js" defer></script>
     <link rel="stylesheet" href="ui-chrome.css">
+    <link rel="stylesheet" href="ui-theme.css">
   <script src="select-controls.js" defer></script>
 </head>
   <body>
@@ -16,7 +17,7 @@
           <span class="brand-mark" aria-hidden="true"><span></span><span></span></span>
           <span>Diffuse</span>
         </div>
-        <span class="edition"><span class="signal" aria-hidden="true"></span><span id="edition-label">DESIGN REVIEW</span></span>
+        <span class="edition" hidden><span class="signal" aria-hidden="true"></span><span id="edition-label">DESIGN REVIEW</span></span>
         <button id="open-side-panel" class="icon-button dock-button" type="button" aria-label="Open review sidebar" title="Open review sidebar"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M15 4v16M7 12h5m-2-2 2 2-2 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </header>
 
@@ -28,18 +29,20 @@
       <section id="setup" hidden aria-labelledby="setup-title">
         <div class="intro">
           <h1 id="setup-title">Review this page</h1>
-          <p>Comment, capture and review without leaving your work.</p>
+          <p>Capture feedback where it happens.</p>
         </div>
         <div class="source-card">
-          <span class="step-label">CURRENT PAGE</span>
+          <span class="step-label">Current page</span>
           <div class="source-text"><p class="source-title" id="source-title">Your page</p><p class="source-url" id="source-url"></p></div>
         </div>
+        <div class="start-actions">
         <form id="comparison-form">
           <button class="primary-button" id="start-comparison" type="submit" disabled><span class="button-label">Start review</span><span aria-hidden="true">→</span></button>
         </form>
         <button class="secondary-button load-review-button" id="load-review" type="button"><span>Load review</span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 15v5h14v-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        </div>
         <p id="page-access-message" class="feedback" role="status" hidden></p>
-        <p class="field-help">Want to compare? Use <strong>Diff</strong> in the review sidebar to choose a reference tab.</p>
+        <p class="field-help">Compare pages with <strong>Diff</strong> in the sidebar.</p>
       </section>
 
       <section id="file-access-notice" class="file-access-notice" role="status" hidden>
@@ -57,7 +60,7 @@
         <div class="session-card">
           <div class="session-status" id="session-status" role="status"><span class="signal" aria-hidden="true"></span><span id="session-status-label">Review ready</span></div>
           <div class="session-side" id="session-prototype">
-            <span class="session-side-label">PROTOTYPE</span>
+            <span class="session-side-label">Prototype</span>
             <p class="session-page-title" id="session-source-title"></p>
             <p class="source-url" id="session-source-url"></p>
           </div>

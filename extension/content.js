@@ -140,6 +140,16 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
 
 *{scrollbar-width:thin;scrollbar-color:#9381ae transparent}*::-webkit-scrollbar{width:8px;height:8px}*::-webkit-scrollbar-track{background:transparent}*::-webkit-scrollbar-thumb{background:#9381ae;border:2px solid transparent;background-clip:padding-box;border-radius:8px}*::-webkit-scrollbar-corner{background:transparent}
 .composer-row:has(select[id$=severity]){grid-template-columns:1fr}
+/* Keep on-page annotations quieter than the page being reviewed. */
+:host{--ink:#1d1d1f;--panel:#29292d;--raised:#36363b;--text:#f5f5f7;--muted:#b8b8bf;--line:#62626b;--accent:#b1a0d7}
+button,summary,input,textarea,select{border-radius:6px;font-size:14px}button:hover,summary:hover{background:#424248}
+#handle{left:-21px;width:44px;height:52px;border:1px solid #c5c5cd;border-radius:6px;background:#fff;color:#3b3648;font-size:20px;box-shadow:0 2px 10px #00000020}
+.edge-label{top:12px;padding:5px 8px;border-radius:4px;background:#29292df2;font-size:11px;font-weight:600;letter-spacing:.04em}
+#saved-comment-bubble{border:1px solid #62626b;border-radius:8px;padding:14px;box-shadow:0 8px 28px #00000024;font-size:14px;line-height:1.55}
+#saved-comment-bubble h3{font-size:17px;font-weight:600;letter-spacing:-.2px;margin:12px 0}.bubble-meta{font-size:12px}.bubble-actions{gap:6px;margin-top:12px}
+#saved-comment-category{border-radius:4px;padding:3px 7px;font-size:12px;font-weight:600}.comment-pin{box-shadow:0 2px 8px #00000030;font-size:14px;font-weight:650}
+#context-reload-notice{border-color:#62626b;border-radius:8px;padding:12px;box-shadow:0 5px 20px #00000020;font-size:13px}
+*{scrollbar-color:#777780 transparent}*::-webkit-scrollbar-thumb{background-color:#777780}
 @media(forced-colors:active){*{scrollbar-color:auto}}
   `;
 

@@ -42,3 +42,89 @@ body[data-surface=sidepanel] .popup{height:100dvh;min-height:0;display:flex;flex
 .shortcut-cheatsheet kbd{display:inline-flex;justify-content:center;align-items:center;width:23px;min-height:23px;border:1px solid #c4b5da;border-bottom-width:2px;border-radius:5px;background:#fff;color:var(--ink);font:600 12px inherit}
 body[data-composer-open=true] .drawer-scroll{display:flex;flex-direction:column;overflow:hidden}
 body[data-composer-open=true] .settings-access{display:none}
+
+/* Keep the drawer close to a native inspector: tight groups, hairline dividers. */
+body[data-surface=sidepanel] { background: var(--ui-bg, #f5f5f7); }
+body[data-surface=sidepanel] .popup { max-width: 760px; padding: 12px 16px 0; font-size: 14px; }
+body[data-surface=sidepanel] .brand-header { min-height: 42px; padding-bottom: 12px; }
+body[data-surface=sidepanel] .brand { font-size: 19px; }
+body[data-surface=sidepanel] .brand-mark { transform: none; }
+.workspace-heading { gap: 12px; margin: 18px 0 3px; }
+.popup .workspace-heading h1 { font-size: 19px; font-weight: 650; letter-spacing: -.4px; margin: 0; }
+.popup #panel-stop { min-width: 50px; border-color: transparent; background: transparent; color: var(--ui-muted, #6e6e73); font-size: 12px; padding-inline: 8px; }
+.popup #panel-stop:hover { color: var(--ui-danger, #b33b32); background: #f3e9e7; }
+.popup #panel-page { margin: -3px 0 18px; font-size: 12px; line-height: 1.5; }
+.popup .muted { font-size: 12px; line-height: 1.5; }
+.popup .panel-control-group { border-color: var(--ui-line, #dedee3); padding-bottom: 16px; margin-bottom: 16px; }
+.popup .control-group-title { font-size: 12px; font-weight: 600; line-height: 1.4; letter-spacing: 0; margin-bottom: 8px; }
+.popup .compare-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.popup .compare-heading .control-group-title { margin: 0; }
+.popup #panel-diff { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 86px; padding: 8px 12px; font-size: 13px; }
+.popup #panel-diff svg { color: var(--ui-muted, #6e6e73); }
+.popup #panel-diff-hint { margin: 5px 0 0; }
+.popup #panel-comparison-controls { margin-top: 12px; }
+.popup button:not(.primary-button):not(.settings-button):not(.report-button):not(.dock-button):not(.viewport-info) { border-radius: 6px; }
+.popup .panel-control-group button, .popup .button-row button, .popup .panel-details button { font-size: 13px; font-weight: 500; border-color: var(--ui-line-strong, #bdbdc5); }
+.popup .panel-control-group button:hover, .popup .button-row button:hover, .popup .panel-details button:hover { background: var(--ui-surface-muted, #f0f0f2); }
+.popup .control-pair { gap: 8px; }
+.popup .checkbox { font-size: 12px; gap: 7px; }
+.popup .checkbox input { width: 16px; height: 16px; min-height: 16px; }
+.popup .panel-details { border-color: var(--ui-line, #dedee3); border-radius: 6px; padding: 0 10px; margin: 10px 0 0; background: transparent; }
+.popup .panel-details summary { font-size: 12px; font-weight: 500; }
+.popup .panel-details p { font-size: 12px; }
+.popup .tool-grid { gap: 8px; }
+.popup .tool-grid button { text-align: center; min-height: 44px; font-size: 13px; background: var(--ui-surface, #fff); }
+.popup .tool-grid button[aria-pressed=true] { background: var(--ui-accent-soft, #efedf5) !important; border-color: var(--ui-accent, #65558f); color: var(--ui-accent, #65558f) !important; }
+.popup .shortcut-cheatsheet { padding: 0; margin: 2px 0 12px; color: var(--ui-muted, #6e6e73); font-size: 12px; }
+.popup .shortcut-cheatsheet p { display: flex; align-items: center; justify-content: space-between; min-height: 29px; margin: 0; gap: 12px; }
+.popup .shortcut-cheatsheet p > span:first-child { flex-shrink: 1; }
+.popup .shortcut-cheatsheet p > :last-child { margin-left: auto; }
+.popup .shortcut-cheatsheet .shortcut-keys { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.popup .shortcut-cheatsheet kbd { width: auto; min-width: 23px; min-height: 21px; padding: 1px 5px; border: 1px solid var(--ui-line, #dedee3); border-bottom-color: var(--ui-line-strong, #bdbdc5); border-radius: 4px; background: var(--ui-surface, #fff); font-family: inherit; font-size: 11px; font-weight: 500; }
+.popup #panel-comments { margin-top: 0; }
+.popup #panel-comments h2 { font-size: 12px; font-weight: 600; margin-bottom: 8px; }
+.popup .saved-item { position: relative; padding: 10px 8px; gap: 8px; margin-bottom: 0; border: 0; border-bottom: 1px solid var(--ui-line, #dedee3); border-radius: 0 !important; background: transparent; font-size: 13px; font-weight: 500; line-height: 1.45; }
+.popup .saved-item:hover { background: var(--ui-surface-muted, #f0f0f2); }
+.popup .saved-item:last-child { border-bottom: 0; }
+.popup .saved-item small { font-size: 11px; margin-top: 3px; line-height: 1.4; }
+.popup .category-dot { width: 7px; height: 7px; flex-basis: 7px; margin-top: 6px; border: 0; }
+.popup .panel-notice { border: 1px solid var(--ui-line, #dedee3); background: var(--ui-surface-muted, #f0f0f2); border-radius: 6px; padding: 10px 12px; font-size: 12px; line-height: 1.55; }
+.popup .drawer-hint { border: 0; padding: 0; margin: 3px 4px 12px; color: var(--ui-muted, #6e6e73); font-size: 11px; }
+body[data-surface=sidepanel] .popup .settings-access { border-top: 1px solid var(--ui-line, #dedee3); background: var(--ui-bg, #f5f5f7); margin-top: 0; padding: 3px 0 max(3px, env(safe-area-inset-bottom)); }
+.popup .section-heading { margin: 14px 0 8px; }
+.popup .section-heading h2 { font-size: 18px; font-weight: 600; letter-spacing: -.3px; }
+.popup .close-button { background: transparent; border-color: transparent; color: var(--ui-muted, #6e6e73); font-size: 23px; }
+.popup .close-button:hover { background: var(--ui-surface-muted, #f0f0f2); color: var(--ui-ink, #1d1d1f); }
+.popup .panel-field { font-size: 12px; line-height: 1.4; font-weight: 550; margin: 12px 0; }
+.popup input:not([type=range]):not([type=checkbox]), .popup textarea, .popup select { border-color: var(--ui-line-strong, #bdbdc5); border-radius: 5px; padding: 9px 10px; background: var(--ui-surface, #fff); color: var(--ui-ink, #1d1d1f); font-size: 13px; font-weight: 400; line-height: 1.5; }
+.popup input::placeholder, .popup textarea::placeholder { color: var(--ui-muted, #6e6e73); }
+.popup .panel-field small, .popup .optional, .popup .panel-field output { font-size: 11px; }
+.popup .panel-field output { color: var(--ui-muted, #6e6e73); }
+.popup .panel-field textarea { resize: vertical; }
+.popup .evidence-choice { font-size: 12px; margin: 12px 0; }
+.popup .evidence-choice legend { font-weight: 550; margin-bottom: 6px; }
+.popup .evidence-choice button { font-size: 12px; }
+.popup .evidence-choice [aria-pressed=true] { background: var(--ui-accent-soft, #efedf5); color: var(--ui-accent, #65558f); border-color: var(--ui-accent, #65558f); }
+.popup .panel-evidence figure { border-color: var(--ui-line, #dedee3); border-radius: 5px; }
+.popup .panel-evidence img { background: var(--ui-surface-muted, #f0f0f2); }
+.popup .panel-evidence figcaption { font-size: 11px; padding: 6px 8px; }
+.popup .selection-context { font-size: 11px; line-height: 1.5; }
+.popup #panel-recording-preview { border-radius: 5px; background: var(--ui-primary, #29292d); }
+.popup #panel-composer > .section-heading { border-color: var(--ui-line, #dedee3); }
+.popup #panel-composer > .sticky-save { border-color: var(--ui-line, #dedee3); background: var(--ui-bg, #f5f5f7); padding-top: 10px; }
+.popup .sticky-save .primary-button { justify-content: center; }
+.popup .suggestion-card { padding: 12px; margin-top: 12px; border-color: var(--ui-line, #dedee3); border-radius: 6px; }
+.popup .suggestion-card h3 { font-size: 15px; font-weight: 600; line-height: 1.45; margin: 8px 0 10px; }
+.popup .suggestion-card h4 { font-size: 11px; font-weight: 550; }
+.popup .suggestion-card p { font-size: 13px; line-height: 1.6; }
+.popup .suggestion-meta { font-size: 11px; line-height: 1.5; }
+.popup .suggestion-change { border-left: 2px solid #b8a899; border-radius: 0; background: #f7f5f2; padding: 10px; }
+.popup .suggestion-change h4 { color: var(--ui-muted, #6e6e73); }
+.popup .ai-count { border-color: var(--ui-line, #dedee3); border-radius: 6px; background: var(--ui-surface-muted, #f0f0f2); }
+.popup .ai-count p { font-size: 12px; }
+.popup .ai-count button:last-child { background: var(--ui-primary, #29292d); border-color: var(--ui-primary, #29292d); }
+@media(max-width:380px) {
+  body[data-surface=sidepanel] .popup { padding: 10px 12px 0; }
+  .popup .workspace-heading h1 { font-size: 18px; }
+  .popup .shortcut-cheatsheet { font-size: 11px; }
+}

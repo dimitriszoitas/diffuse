@@ -11,7 +11,7 @@ const browser=await chromium.launch({headless:true,args:['--use-mock-keychain','
 try {
   const page=await browser.newPage({viewport:{width:380,height:700}});page.on('pageerror',error=>console.error(error.message));
   await page.setContent((await readFile(resolve(project,'extension/sidepanel.html'),'utf8')).replace(/<script\b[^>]*>[\s\S]*?<\/script>/g,'').replace(/<link\b[^>]*>/g,''));
-  for(const file of ['popup.css','sidepanel.css'])await page.addStyleTag({content:await readFile(resolve(project,'extension',file),'utf8')});
+  for(const file of ['popup.css','sidepanel.css','ui-theme.css'])await page.addStyleTag({content:await readFile(resolve(project,'extension',file),'utf8')});
   await page.evaluate(()=>{
     if(!crypto.randomUUID)crypto.randomUUID=()=> 'fixture-editor';
     window.session={id:'session',mode:'audit',target:{title:'Demo page'},settings:{},comments:[]};

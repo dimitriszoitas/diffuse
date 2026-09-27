@@ -1,1 +1,8 @@
-html,body{width:100%;max-height:none;min-height:100%;overflow-x:hidden}.popup{max-width:600px;margin:auto;padding:20px}.intro{margin:22px 0 14px}.intro h1{font-size:26px;margin-bottom:8px}.card-heading{margin:18px 0 8px}.capture-help{font-size:14px;line-height:1.6;color:var(--muted);background:var(--pale);border:1px solid #c4b5da;border-radius:10px;padding:12px;margin:18px 0}#reviewed-page{overflow-wrap:anywhere}.diff-actions{display:flex;gap:10px}.diff-actions button{flex:1}#reference-tab{height:auto;min-height:48px}#connect-reference{margin-top:14px}.feedback{font-size:16px}
+html,body{width:100%;max-height:none;min-height:100%;overflow-x:hidden}
+.popup{max-width:540px;margin:auto;padding:20px 24px}
+.intro{margin:24px 0 16px}.intro h1{font-size:23px;font-weight:650;letter-spacing:-.5px;margin-bottom:6px}.intro p{font-size:14px;line-height:1.5}
+.card-heading{margin:20px 0 8px}.step-label{font-size:12px;letter-spacing:0;text-transform:none;font-weight:600}
+.capture-help{font-size:13px;line-height:1.55;color:var(--ui-muted);background:transparent;border:0;border-left:2px solid var(--ui-line);border-radius:0;padding:2px 0 2px 12px;margin:18px 0}
+#reviewed-page{overflow-wrap:anywhere;font-size:12px}.diff-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}.diff-actions button{flex:0 1 auto;font-size:13px}
+#reference-tab{height:auto;min-height:44px}#connect-reference{margin-top:16px}.feedback{font-size:13px}.brand-header .edition{font-size:11px;letter-spacing:.04em;color:var(--ui-muted)}
+@media(max-width:400px){.popup{padding:16px}.intro h1{font-size:21px}}
