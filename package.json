@@ -1,6 +1,6 @@
 {
   "name": "diffuse-live-comparison",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "private": true,
   "type": "module",
   "description": "A local-first Chrome extension for live prototype-to-production review.",

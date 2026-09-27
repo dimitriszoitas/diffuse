@@ -20,8 +20,8 @@
   const make = (document,tag,className,text) => { const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node; };
   const contains = (root,node) => root===node || root.contains(node);
   const disabled = select => select.disabled || select.matches(':disabled');
-  function enhance(root = document, {theme = root instanceof ShadowRoot ? 'dark' : 'light'} = {}) {
-    if(managers.has(root)){managers.get(root).refresh();return()=>destroy(root);}
+  function enhance(root = document, {theme = root.host?.dataset.theme || root.documentElement?.dataset.theme || 'light'} = {}) {
+    if(managers.has(root)){setTheme(root,theme);managers.get(root).refresh();return()=>destroy(root);}
     const document=root.ownerDocument||root,view=document.defaultView,abort=new AbortController(),items=new Map();
     const style=make(document,'style');style.dataset.diffuseSelectStyle='';style.textContent=css;(root.head||root).append(style);
     const manager={root,items,style,abort,theme,open:null,refresh:()=>{discover(root);for(const item of items.values())item.sync();}};
@@ -40,7 +40,7 @@
     function build(select){
       if(items.has(select)||select.dataset.diffuseSelectIgnore!==undefined)return;
       const id=`diffuse-select-${++serial}`,severity=select.name==='severity'||/severity$/.test(select.id),wrapper=make(document,'div',severity?'df-severity':'df-select');
-      wrapper.dataset.diffuseSelectTheme=theme;wrapper.dataset.diffuseSelectFor=select.id||id;
+      wrapper.dataset.diffuseSelectTheme=manager.theme;wrapper.dataset.diffuseSelectFor=select.id||id;
       const label=make(document,'span','df-select-label');label.id=`${id}-label`;wrapper.append(label);
       const error=make(document,'span','df-select-error');error.id=`${id}-error`;error.hidden=true;error.setAttribute('role','alert');
       const original={tabindex:select.getAttribute('tabindex'),ariaHidden:select.getAttribute('aria-hidden')};
@@ -96,7 +96,7 @@
       }
       function open(direction=1){
         if(disabled(select))return;if(manager.open&&manager.open!==item)manager.open.close();manager.open=item;
-        if(!menu){menu=make(document,'div','df-select-menu');menu.id=`${id}-menu`;menu.setAttribute('role','listbox');menu.setAttribute('aria-label',labelFor(select));menu.dataset.diffuseSelectTheme=theme;menu.hidden=true;menu.popover='manual';const dialog=select.closest('dialog');(dialog||root.body||root).append(menu);
+        if(!menu){menu=make(document,'div','df-select-menu');menu.id=`${id}-menu`;menu.setAttribute('role','listbox');menu.setAttribute('aria-label',labelFor(select));menu.dataset.diffuseSelectTheme=manager.theme;menu.hidden=true;menu.popover='manual';const dialog=select.closest('dialog');(dialog||root.body||root).append(menu);
           listen(menu,'pointerdown',event=>event.preventDefault());listen(menu,'click',event=>{const row=event.target.closest('[data-index]');if(row)choose(Number(row.dataset.index));});listen(menu,'pointermove',event=>{const row=event.target.closest('[data-index]');if(row&&row.getAttribute('aria-disabled')!=='true')setActive(Number(row.dataset.index),false);});
         }
         const options=available();active=options.find(({option})=>option.selected)?.index??(direction<0?options.at(-1)?.index:options[0]?.index)??-1;
@@ -136,9 +136,10 @@
     listen(view,'resize',()=>{if(manager.open)manager.open.position();},{passive:true});
     discover(root);return()=>destroy(root);
   }
+  function setTheme(root=document,theme='light'){const manager=managers.get(root);if(!manager)return;manager.theme=theme==='dark'?'dark':'light';for(const node of root.querySelectorAll('[data-diffuse-select-theme]'))node.dataset.diffuseSelectTheme=manager.theme;}
   function refresh(root=document){managers.get(root)?.refresh();}
   function destroy(root=document,{preserveUI=false}={}){const manager=managers.get(root);if(!manager)return;manager.abort.abort();manager.observer.disconnect();if(manager.resetFrame)(root.ownerDocument||root).defaultView.cancelAnimationFrame(manager.resetFrame);for(const item of manager.items.values())item.dispose(preserveUI);if(!preserveUI)manager.style.remove();manager.items.clear();managers.delete(root);}
-  globalThis.DiffuseSelect=Object.freeze({enhance,refresh,destroy,css});
+  globalThis.DiffuseSelect=Object.freeze({enhance,refresh,destroy,setTheme,css});
   if(location.protocol==='chrome-extension:'){
     if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>enhance(document),{once:true});else enhance(document);
   }

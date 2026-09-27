@@ -8,6 +8,7 @@
   let role = null;
   let host = null;
   let root = null;
+  let releaseTheme = null;
   let video = null;
   let peer = null;
   let connectionId = null;
@@ -223,7 +224,13 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
         <div class="composer-footer"><div id="comment-error" class="composer-error" role="alert"></div><div class="composer-actions"><button id="cancel-comment" type="button">Cancel</button><button id="save-comment" type="submit" form="comment-form">Save comment</button></div></div>
       </section>`;
     document.documentElement.append(host);
-    globalThis.DiffuseSelect?.enhance(root, {theme: 'light'});
+    if (globalThis.DiffuseDarkStyles) {
+      const darkStyle = document.createElement('style');
+      darkStyle.textContent = globalThis.DiffuseDarkStyles;
+      root.append(darkStyle);
+    }
+    releaseTheme = globalThis.DiffuseTheme?.attach(host, root);
+    globalThis.DiffuseSelect?.enhance(root, {theme: host.dataset.theme || 'light'});
     liftAboveDialogs();
     video = el('reference');
     if(video)video.muted = true;
@@ -1745,6 +1752,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   }
 
   function stopResources() {
+    releaseTheme?.(); releaseTheme = null;
     clearInterval(contextTimer); contextTimer = null;
     finishPinDrag(true,false);clearTimeout(pinStatusTimer);pinStatusTimer=null;pinPlacements.clear();pinPendingDrops.clear();pinIgnoreClick=null;pinTrailingRelease=null;
     clearInterval(pinsTimer); pinsTimer = null;
@@ -1944,7 +1952,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (contextInvalidated || !runtimeAvailable()) { invalidateContext(); return; }
-    if (sender.id !== chrome.runtime.id || message?.namespace !== 'diffuse' || message.target) return;
+    if (sender.id !== chrome.runtime.id || message?.namespace !== 'diffuse' || message.target || message.type === 'APPEARANCE_CHANGED') return;
     const reply = value => { try { respond(value); } catch { /* The sender may have reloaded as well. */ } };
     receive(message).then(reply, error => { localWarning = error.message; paint(); reply({ok: false, error: error.message, code: error.code}); });
     return true;

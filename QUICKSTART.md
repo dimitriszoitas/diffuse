@@ -1,4 +1,4 @@
-# Try Diffuse 0.10.0
+# Try Diffuse 0.10.1
 
 Compare a live prototype over production or audit one page. Leave pinned comments on elements or areas, record a short silent interaction, and copy the review for your engineering team. Claude can suggest findings when you connect your own Anthropic API key.
 
@@ -6,7 +6,7 @@ Compare a live prototype over production or audit one page. Leave pinned comment
 
 For a first installation:
 
-1. Unzip **Diffuse-0.10.0.zip**. Keep the resulting **Diffuse** folder somewhere permanent.
+1. Unzip **Diffuse-0.10.1.zip**. Keep the resulting **Diffuse** folder somewhere permanent.
 2. In your normal Chrome browser, open `chrome://extensions`.
 3. Turn on **Developer mode**, then click **Load unpacked** and choose that **Diffuse** folder.
 4. Pin **Diffuse — Live design comparison** using Chrome’s extensions menu.
@@ -81,6 +81,10 @@ In the comment form, choose **Short recording**, then **Start recording**. Inter
 The silent clip captures the whole visible page, including Diffuse’s controls and any comparison overlay. Selecting a region does not crop the video. Preview the clip and save with **Short recording** selected. If you switch to **Screenshot** before saving, that comment excludes the clip.
 
 The drawer’s **Record page** control is also available. It captures starting screenshots and opens a comment form afterward. **Stop** ends the review; an unfinished recording is preserved in the report.
+
+## Choose light or dark
+
+Open **Settings → Appearance** and choose **Light**, **Dark**, or **System**. Changes apply immediately to all Diffuse controls. Light is the default; System follows your device. The website and captured evidence keep their original appearance.
 
 ## Optional Claude review
 

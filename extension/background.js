@@ -37,6 +37,17 @@ const ready = chrome.storage.session.get('comparison').then(async data => {
 const persist = () => chrome.storage.session.set({comparison: session});
 const tabMessage = (tabId, type, data = {}) => chrome.tabs.sendMessage(tabId, {namespace: 'diffuse', type, ...data}, {frameId: 0});
 const softTabMessage = (tabId, type, data) => tabMessage(tabId, type, data).catch(() => null);
+const safeAppearance = value => ['light', 'dark', 'system'].includes(value) ? value : 'light';
+chrome.storage.onChanged?.addListener((changes, area) => {
+  if (area !== 'local' || !changes.diffuseTheme) return;
+  ready.then(async () => {
+    if (!session) return;
+    const preference = safeAppearance((await chrome.storage.local.get('diffuseTheme')).diffuseTheme);
+    const tabs = new Set([session?.targetTabId, session?.sourceTabId].filter(Number.isInteger));
+    await Promise.all([...tabs].map(tabId => softTabMessage(tabId, 'APPEARANCE_CHANGED', {preference})));
+  }).catch(() => {});
+});
+
 
 function isSidePanel(sender) {
   const url = chrome.runtime.getURL('sidepanel.html');
@@ -448,7 +459,7 @@ async function initializeTab(role) {
   const tabId = role === 'source' ? current.sourceTabId : current.targetTabId;
   const tab = await chrome.tabs.get(tabId);
   await assertPageAccess(tab.url, chrome, 'This page moved to a site that Diffuse cannot access. Open Diffuse on this page and start a new review.');
-  await chrome.scripting.executeScript({target: {tabId}, files: ['inspector.js', 'select-controls.js', 'content.js']});
+  await chrome.scripting.executeScript({target: {tabId}, files: ['inspector.js', 'select-controls.js', 'theme.js', 'theme-content.js', 'content.js']});
   if (session?.id !== current.id) return;
   const response = await tabMessage(tabId, 'INITIALIZE', {role, session: current});
   if (!response?.ok) throw new Error(response?.error || 'Could not prepare the page for comparison.');
@@ -1110,6 +1121,7 @@ async function handle(message, sender) {
   const isAISettings = isSettings || sender.url?.split(/[?#]/)[0] === chrome.runtime.getURL('ai-settings.html');
   const role = session && Number.isInteger(sender.tab?.id) ? sender.tab.id === session.targetTabId ? 'target' : sender.tab.id === session.sourceTabId ? 'source' : null : null;
   const isDiff = sender.id === chrome.runtime.id && sender.url?.split('?')[0] === chrome.runtime.getURL('diff.html');
+  if (message.type === 'GET_APPEARANCE' && sender.id === chrome.runtime.id && role && sender.frameId === 0) return {ok: true, preference: safeAppearance((await chrome.storage.local.get('diffuseTheme')).diffuseTheme)};
   if (isDiff) {
     if (!session || sender.url !== chrome.runtime.getURL('diff.html') + `?session=${encodeURIComponent(session.id)}` || (message.type !== 'GET_DIFF_CONTEXT' && message.sessionId !== session.id)) throw new Error('This review changed. Close this window and open Diff again.');
     if (message.type === 'GET_DIFF_CONTEXT') return diffContext();

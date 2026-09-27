@@ -1,6 +1,6 @@
 # Diffuse — live design comparison and page audits
 
-**0.10.0 adds native, read-only Figma MCP design references to AI audits.** Connect Figma desktop in Settings and paste a frame link to review against its layout, variables, and screenshot. Load shared reviews directly on the website with the right sidebar, drag pins to reattach them, or select an area. Shared review files retain those attachments and the original evidence.
+**0.10.1 adds optional dark mode across Diffuse.** Choose Light, Dark, or System in **Settings → Appearance**. The sidebar, popup, review notebook, settings, and on-page comment controls change together. The website being reviewed keeps its own appearance. Native, read-only Figma MCP references remain available for AI audits.
 
 Diffuse uses a native Chrome side drawer for review controls. **Start review** opens it; for an active review, click the extension icon and **Open review sidebar**. There is no floating toolbar. The webpage resizes beside Diffuse, and closing the drawer preserves the review and unfinished comment. Chrome chooses the drawer side and owns its resize handle.
 
@@ -20,6 +20,19 @@ Diffuse layers a **continuously running prototype** over a production page in Ch
 The extension loads directly from its files; no build step is needed. If Diffuse updates while a page is open, its old controls stop and show a refresh notice. Unsaved comment text remains available to copy before refreshing; an interrupted Save is never retried automatically. After changing extension code, choose **Reload** on its card in `chrome://extensions`, then refresh both comparison pages.
 
 **Upgrading an existing installation:** replace the extension files in the same installed folder, then choose **Reload** on the existing extension card. Do not remove and reinstall the extension or load it from a different folder path: saved reviews belong to its extension ID in this Chrome profile. Keep that installation path unchanged to preserve access to them. Use **Export review** to share a complete review that another Diffuse installation can import.
+
+## Choose an appearance
+
+Open **Settings → Appearance** and choose **Light**, **Dark**, or **System**. Light remains the default. Changes save immediately in this Chrome profile and apply to every open Diffuse view, including comments on the page. System follows your device's light or dark appearance automatically.
+
+Appearance is a local preference. It does not restyle the website, change captured evidence, or travel in shared review files. Downloaded HTML reports retain their portable light presentation.
+
+<details>
+<summary>Preview the dark review sidebar</summary>
+
+<img src="https://raw.githubusercontent.com/dimitriszoitas/diffuse/main/docs/screenshots/diffuse-dark.png" width="360" alt="Diffuse review sidebar in its optional dark navy appearance">
+
+</details>
 
 ## Review a local HTML file
 

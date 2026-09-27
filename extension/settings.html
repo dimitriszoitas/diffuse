@@ -6,14 +6,27 @@
   <link rel="stylesheet" href="ai-settings.css"><link rel="stylesheet" href="jira-settings.css"><link rel="stylesheet" href="settings.css"><link rel="stylesheet" href="ui-chrome.css">
   <script src="ai-settings.js" type="module"></script><script src="jira-settings.js" type="module"></script><script src="settings.js" type="module"></script><script src="mcp-settings.js" type="module"></script><script src="select-controls.js" defer></script>
   <link rel="stylesheet" href="ui-theme.css"><link rel="stylesheet" href="ui.css">
+  <link rel="stylesheet" href="ui-dark.css">
+  <script src="theme.js"></script>
 </head>
 <body class="settings-page">
   <header class="topbar"><a class="brand" href="report.html"><span class="brand-mark" aria-hidden="true"><i></i><i></i></span>Diffuse</a><a href="report.html">Back to reviews <span aria-hidden="true">↗</span></a></header>
   <main>
-    <section class="intro"><h1>Settings</h1><p>AI review, design references, connected accounts, and browser permissions.</p></section>
+    <section class="intro"><h1>Settings</h1><p>Appearance, AI review, design references, and connected accounts.</p></section>
     <div class="settings-layout">
-      <nav class="settings-nav" aria-label="Settings sections"><a href="#ai"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3 1.7 5.3L16 10l-5.3 1.7L9 17l-1.7-5.3L2 10l5.3-1.7L9 3Z"/><path d="m18 14 .9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9L18 14Z"/></svg>AI review</a><a href="#figma"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3H8a4 4 0 0 0 0 8h4V3Zm0 0h4a4 4 0 0 1 0 8h-4V3ZM12 11H8a4 4 0 0 0 0 8h4v-8Zm0 0h4a4 4 0 1 1-4 4v-4ZM12 19v1a4 4 0 1 1-4-4"/></svg>Figma reference</a><a href="#jira"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 13 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 1 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/></svg>Jira connections</a><a href="#browser"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01m-2 7 3 2-3 2m6 0h3"/></svg>Browser &amp; shortcuts</a></nav>
+      <nav class="settings-nav" aria-label="Settings sections"><a href="#appearance"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v16M12 4a8 8 0 0 1 0 16Z"/></svg>Appearance</a><a href="#ai"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3 1.7 5.3L16 10l-5.3 1.7L9 17l-1.7-5.3L2 10l5.3-1.7L9 3Z"/><path d="m18 14 .9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9L18 14Z"/></svg>AI review</a><a href="#figma"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3H8a4 4 0 0 0 0 8h4V3Zm0 0h4a4 4 0 0 1 0 8h-4V3ZM12 11H8a4 4 0 0 0 0 8h4v-8Zm0 0h4a4 4 0 1 1-4 4v-4ZM12 19v1a4 4 0 1 1-4-4"/></svg>Figma reference</a><a href="#jira"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 13 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 1 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/></svg>Jira connections</a><a href="#browser"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01m-2 7 3 2-3 2m6 0h3"/></svg>Browser &amp; shortcuts</a></nav>
       <div class="settings-content">
+        <section id="appearance" class="settings-section" aria-labelledby="appearance-heading">
+          <div class="settings-section-heading"><h2 id="appearance-heading">Appearance</h2><p>A comfortable view for your workspace. Only Diffuse changes; the website keeps its own appearance.</p></div>
+          <div class="settings-card appearance-card">
+            <fieldset class="appearance-options"><legend>Theme</legend>
+              <label><input type="radio" name="appearance" value="light"><span><i class="appearance-swatch appearance-swatch-light" aria-hidden="true"></i>Light</span></label>
+              <label><input type="radio" name="appearance" value="dark"><span><i class="appearance-swatch appearance-swatch-dark" aria-hidden="true"></i>Dark</span></label>
+              <label><input type="radio" name="appearance" value="system"><span><i class="appearance-swatch appearance-swatch-system" aria-hidden="true"></i>System</span></label>
+            </fieldset>
+            <p class="help" id="appearance-status" role="status">Changes apply immediately across Diffuse.</p>
+          </div>
+        </section>
         <section id="ai" class="settings-section" aria-labelledby="ai-heading"><div class="settings-section-heading"><h2 id="ai-heading">AI review</h2><p>Choose how Claude reviews your pages. You approve findings before they become comments.</p></div>
       <form id="ai-settings-form" aria-busy="true">
         <div class="section-heading"><h3>Anthropic connection</h3><span class="key-status" id="key-status" role="status">Loading…</span></div>
