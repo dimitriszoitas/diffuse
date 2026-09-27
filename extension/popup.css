@@ -128,3 +128,5 @@ select:disabled { color: var(--muted); background: #eeeaf3; }
 
 /* One entry point for all configuration. */
 .reports-access{grid-template-columns:1fr}.settings-access{margin-top:12px;padding-top:10px;border-top:1px solid #ddd4e9}.settings-button{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:44px;padding:8px 12px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink);font:inherit;font-weight:600;cursor:pointer}.settings-button:hover{background:var(--pale)}.settings-button svg{flex:0 0 20px}
+
+.load-review-button{display:flex;align-items:center;justify-content:space-between;gap:12px;font-weight:600;text-align:left}.load-review-button svg{flex-shrink:0}

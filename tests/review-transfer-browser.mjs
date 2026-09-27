@@ -42,12 +42,27 @@ try {
  assert.equal(bundle.review.comments[1].context.production.url,fixture.comments[1].context.production.url);
  assert.deepEqual(bundle.review.comments[0].evidence,fixture.comments[0].evidence);assert.equal(bundle.review.id,undefined);
  pass('Actual Export review download retains both paths, viewport presets, anchors, screenshots and a real WebM recording');
+ await page.goto(`chrome-extension://${id}/report.html?load=1`);
+ await page.locator('#choose-review-file').waitFor({state:'visible'});
+ assert.equal(await page.locator('#choose-review-file').evaluate(el=>el===document.activeElement),true);
+ const canceled=page.waitForEvent('filechooser');await page.locator('#choose-review-file').click();await (await canceled).setFiles([]);
+ assert.equal(await page.locator('#load-review-panel').isVisible(),true);
+ assert.equal(await page.locator('.review-row').count(),1);
+ const invalid=page.waitForEvent('filechooser');await page.locator('#choose-review-file').click();await (await invalid).setFiles({name:'invalid.json',mimeType:'application/json',buffer:Buffer.from('{}')});
+ await page.waitForFunction(()=>document.querySelector('#notice').dataset.type==='error');
+ assert.equal(await page.locator('#load-review-panel').isVisible(),true);
+ assert.equal(await page.locator('.review-row').count(),1);
+ assert.equal(await page.locator('#choose-review-file').isEnabled(),true);
+ await page.screenshot({path:join(artifacts,'load-review.png'),animations:'disabled'});
+ pass('Load review opens a focused file loader; cancel and invalid files keep saved reviews intact and allow retry');
  // Isolate the notebook's import behavior from separate navigation tests. Simulate a recipient needing site access.
  await page.evaluate(()=>{const send=chrome.runtime.sendMessage.bind(chrome.runtime);chrome.runtime.sendMessage=message=>message?.type==='OPEN_REVIEW'?Promise.resolve({ok:false,error:'Allow Diffuse to access this page before continuing.'}):send(message);});
  for(let index=0;index<2;index++) {
-  await page.locator('#import-review-file').setInputFiles({name:'shared.diffuse-review.json',mimeType:'application/json',buffer:bytes});
+  const chooser=page.waitForEvent('filechooser');await page.locator(index===0?'#choose-review-file':'#import-review').click();await (await chooser).setFiles({name:'shared.diffuse-review.json',mimeType:'application/json',buffer:bytes});
   await page.waitForFunction(count=>document.querySelectorAll('.review-row').length===count&&document.querySelector('#notice').textContent.includes('Review imported and saved.'),index+2);
   assert.equal(await page.locator('#open-review').isVisible(),true);
+  assert.equal(await page.locator('#load-review-panel').isVisible(),false);
+  assert.equal(new URL(page.url()).searchParams.has('load'),false);
  }
  const saved=await page.evaluate(async()=>{const store=await import(chrome.runtime.getURL('review-store.mjs'));return Promise.all((await store.listReviews()).map(review=>store.getReview(review.id)));});
  assert.equal(saved.length,3);assert.equal(new Set(saved.map(review=>review.id)).size,3);

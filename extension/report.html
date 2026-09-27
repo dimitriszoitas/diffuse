@@ -25,6 +25,10 @@
   </aside>
   <main class="workspace">
     <header class="workspace-bar"><span class="workspace-breadcrumb">Diffuse <span>/</span> <strong>Review notebook</strong></span><div class="workspace-utilities"><span id="review-count" class="muted">Local evidence</span><button id="import-review" class="button" type="button">Import review</button><input id="import-review-file" type="file" accept=".json,.diffuse-review.json,application/json" hidden></div></header>
+    <section id="load-review-panel" class="load-review-panel" aria-labelledby="load-review-title" hidden>
+      <div><h2 id="load-review-title">Load review</h2><p>Open an exported .diffuse-review.json file with its comments, screenshots and page locations, or browse your saved reviews.</p></div>
+      <div class="load-review-actions"><button id="choose-review-file" class="button primary" type="button">Choose review file</button><button id="browse-saved-reviews" class="button" type="button">Saved reviews</button></div>
+    </section>
     <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
     <section class="export-toolbar" id="export-toolbar" hidden>
       <div><h2>Share review</h2><p id="handoff-description">Every observation, its evidence, and the next step.</p></div>

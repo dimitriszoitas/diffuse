@@ -1079,7 +1079,7 @@ async function handle(message, sender) {
   if (message.type === 'START_AUDIT' && (isPopup || isPanel)) return startAudit(message);
   if (message.type === 'OPEN_REPORT' && (isPopup || isPanel || isReport || role === 'target')) {
     const id = message.reviewId || session?.reviewId;
-    await chrome.tabs.create({url: chrome.runtime.getURL('report.html') + (id ? `?review=${encodeURIComponent(id)}` : '')});
+    await chrome.tabs.create({url: chrome.runtime.getURL('report.html') + (message.loadReview === true ? '?load=1' : id ? `?review=${encodeURIComponent(id)}` : '')});
     return {ok: true};
   }
   if (isReport) {

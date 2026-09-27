@@ -569,10 +569,25 @@ ui['export-review'].addEventListener('click', async () => {
   } catch (error) { notice(error.message.replace('Cannot import this review:', 'Cannot export this review:'), 'error'); }
   finally { ui['export-review'].disabled = !selectedReview; }
 });
-ui['import-review'].addEventListener('click', () => ui['import-review-file'].click());
+function dismissReviewLoader() {
+  ui['load-review-panel'].hidden = true;
+  const url = new URL(location.href);
+  url.searchParams.delete('load');
+  history.replaceState(null, '', url.href);
+}
+for (const id of ['import-review', 'choose-review-file']) ui[id].addEventListener('click', () => ui['import-review-file'].click());
+ui['browse-saved-reviews'].addEventListener('click', () => {
+  dismissReviewLoader();
+  setSidebarCollapsed(false);
+  const target = ui['review-list'].querySelector('button') || ui['import-review'];
+  target.focus();
+  target.scrollIntoView({block:'nearest'});
+});
 ui['import-review-file'].addEventListener('change', async () => {
   const file = ui['import-review-file'].files?.[0];
   if (!file) return;
+  ui['choose-review-file'].disabled = true;
+  ui['browse-saved-reviews'].disabled = true;
   ui['import-review'].disabled = true;
   ui['import-review'].textContent = 'Importing…';
   let imported;
@@ -580,6 +595,7 @@ ui['import-review-file'].addEventListener('change', async () => {
     if (file.size > REVIEW_TRANSFER_MAX_BYTES) throw new Error('This review exceeds the 256 MB portable file limit.');
     // IndexedDB is shared by extension pages; large evidence never crosses runtime messages.
     imported = await importReview(await file.text());
+    dismissReviewLoader();
     await loadReviews(imported.review.id);
     notice(`Imported “${imported.review.title}” with ${imported.comments.length} observations. Opening its page…`);
     try {
@@ -590,6 +606,8 @@ ui['import-review-file'].addEventListener('change', async () => {
   } catch (error) { notice(error.message, 'error'); }
   finally {
     ui['import-review-file'].value = '';
+    ui['choose-review-file'].disabled = false;
+    ui['browse-saved-reviews'].disabled = false;
     ui['import-review'].disabled = false;
     ui['import-review'].textContent = 'Import review';
   }
@@ -598,3 +616,9 @@ ui['import-review-file'].addEventListener('change', async () => {
 try { setSidebarCollapsed((await chrome.storage.local.get(SIDEBAR_COLLAPSED_KEY))[SIDEBAR_COLLAPSED_KEY] === true); }
 catch { setSidebarCollapsed(false); }
 await loadReviews();
+
+if (new URL(location.href).searchParams.get('load') === '1') {
+  ui['load-review-panel'].hidden = false;
+  ui['choose-review-file'].focus();
+  ui['load-review-panel'].scrollIntoView({block:'nearest'});
+}

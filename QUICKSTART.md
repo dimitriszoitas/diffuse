@@ -145,3 +145,5 @@ Press **C** on the reviewed page to start a comment. The element picker supports
 ## Coming soon
 
 **Asana** and **ClickUp** integrations are planned. Jira handoff is included in 0.7.0 with the rollout limits above.
+
+To open a shared review, click **Load review** below **Start review** in the Diffuse popup, then **Choose review file**. You can also browse your saved reviews from the loader.
