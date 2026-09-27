@@ -12,7 +12,7 @@
   <main>
     <section class="intro"><h1>Settings</h1><p>AI review, connected accounts, and browser permissions.</p></section>
     <div class="settings-layout">
-      <nav class="settings-nav" aria-label="Settings sections"><a href="#ai">AI review</a><a href="#jira">Jira connections</a><a href="#browser">Browser &amp; shortcuts</a></nav>
+      <nav class="settings-nav" aria-label="Settings sections"><a href="#ai"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3 1.7 5.3L16 10l-5.3 1.7L9 17l-1.7-5.3L2 10l5.3-1.7L9 3Z"/><path d="m18 14 .9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9L18 14Z"/></svg>AI review</a><a href="#jira"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 13 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 1 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/></svg>Jira connections</a><a href="#browser"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01m-2 7 3 2-3 2m6 0h3"/></svg>Browser &amp; shortcuts</a></nav>
       <div class="settings-content">
         <section id="ai" class="settings-section" aria-labelledby="ai-heading"><div class="settings-section-heading"><h2 id="ai-heading">AI review</h2><p>Choose how Claude reviews your pages. You approve findings before they become comments.</p></div>
       <form id="ai-settings-form" aria-busy="true">
@@ -51,7 +51,7 @@
         </section>
         <section id="browser" class="settings-section" aria-labelledby="browser-heading"><div class="settings-section-heading"><h2 id="browser-heading">Browser &amp; shortcuts</h2><p>Manage local file access and review keyboard shortcuts.</p></div>
           <div class="settings-card"><div class="section-heading"><h3>Local HTML files</h3><span class="status" id="file-access-status" role="status">Checking…</span></div><p class="help">To review HTML files on your computer, enable “Allow access to file URLs” in Chrome’s extension settings.</p><div class="actions"><button id="browser-settings" type="button">Manage browser access <span aria-hidden="true">↗</span></button><button id="check-access" type="button">Check again</button></div><p id="browser-feedback" role="status" hidden></p></div>
-          <div class="settings-card"><h3>Comment shortcuts</h3><dl class="shortcut-list"><div><dt><kbd>C</kbd></dt><dd>Select an element and leave a comment.</dd></div><div><dt><kbd>C</kbd> + mouse drag</dt><dd>Select an area and leave a comment.</dd></div><div><dt><kbd>Esc</kbd></dt><dd>Cancel the current selection.</dd></div></dl><p class="help">Use these on the reviewed page. Shortcuts stay inactive while you type in a field.</p></div>
+          <div class="settings-card"><h3>Comment shortcuts</h3><dl class="shortcut-list"><div><dt><kbd>C</kbd></dt><dd>Tap C, release, then click to leave a comment.</dd></div><div><dt><kbd>C</kbd> + mouse drag</dt><dd>Select an area and leave a comment.</dd></div><div><dt><kbd>Esc</kbd></dt><dd>Cancel the current selection.</dd></div></dl><p class="help">Use these on the reviewed page. Shortcuts stay inactive while you type in a field.</p></div>
         </section>
       </div>
     </div>

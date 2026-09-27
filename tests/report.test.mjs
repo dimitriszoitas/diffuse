@@ -399,9 +399,9 @@ test('category navigation accounts for all observations and safely targets stabl
 
 test('rich clipboard retains readable typography and requested-change emphasis without an external stylesheet', () => {
   const html = formatReviewHtml(fixture(), {clipboard: true});
-  assert.ok(html.includes('font-size:16px;line-height:1.65;color:#211A35'));
-  assert.ok(html.includes('font-size:26px;line-height:1.3;color:#211A35'));
-  assert.ok(html.includes('background:#FFF0EB;border-left:4px solid #EF785C'));
+  assert.match(html, /class="diffuse-report" style="[^"]*font-size:16px;line-height:1.65;color:#[0-9a-f]{6}/i);
+  assert.match(html, /<h2 style="font-size:24px;line-height:1.3;color:#[0-9a-f]{6}/i);
+  assert.match(html, /class="field requested-change" style="[^"]*background:#[0-9a-f]{6};border-left:4px solid #[0-9a-f]{6}/i);
   assert.ok(html.includes('role="presentation" style="width:100%;table-layout:fixed;'));
   assert.equal((html.match(/<td style="width:50%;vertical-align:top/g) || []).length, 2, 'Keep paired evidence side by side when rich-copy destinations retain basic HTML tables');
   assert.ok(!/font-size:(?:[0-9]|1[0-3])px/.test(html));

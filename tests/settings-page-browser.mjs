@@ -103,9 +103,40 @@ try {
   }
   await panel.locator('.viewport-info').hover();
   assert.equal(await panel.locator('#viewport-help-text').isVisible(),true);
+  for(const width of [420,360,320]){
+    await panel.setViewportSize({width,height:720});
+    await panel.locator('.viewport-info').hover();
+    const tip=await panel.locator('#viewport-help-text').boundingBox();
+    assert.ok(tip && tip.x>=8 && tip.x+tip.width<=width-8 && tip.y>=0 && tip.y+tip.height<=720,`Viewport explanation stays inside ${width}px drawer`);
+  }
+  await panel.evaluate(()=>document.activeElement?.blur());
+  await panel.keyboard.press('Escape');
+  assert.equal(await panel.locator('#viewport-help-text').isVisible(),false,'Escape dismisses a hover tooltip even when its button is not focused');
+  await panel.mouse.move(2,2);
+  await panel.locator('.viewport-info').hover();
+  const infoBounds=await panel.locator('.viewport-info').boundingBox(),tipBounds=await panel.locator('#viewport-help-text').boundingBox();
+  const pointerX=Math.max(tipBounds.x+5,Math.min(infoBounds.x+infoBounds.width/2,tipBounds.x+tipBounds.width-5));
+  await panel.mouse.move(pointerX,infoBounds.y+infoBounds.height+3);
+  await panel.waitForTimeout(50);
+  await panel.mouse.move(pointerX,tipBounds.y+15);
+  await panel.waitForTimeout(200);
+  assert.equal(await panel.locator('#viewport-help-text').isVisible(),true,'The hover gap is crossable and the tooltip stays visible while reading its text');
+  await panel.mouse.move(2,2);await panel.waitForTimeout(200);
+  assert.equal(await panel.locator('#viewport-help-text').isVisible(),false,'Leaving the tooltip dismisses it');
   await panel.locator('.viewport-info').focus();
   await panel.keyboard.press('Escape');
   assert.equal(await panel.locator('#viewport-help-text').isVisible(),false);
+  assert.equal(await panel.locator('.viewport-info').evaluate(node=>document.activeElement===node),true,'Escape retains keyboard focus');
+  await panel.locator('.viewport-info').hover();
+  await panel.locator('.drawer-scroll').evaluate(node=>node.scrollTop=30);
+  await panel.waitForTimeout(40);
+  assert.equal(await panel.locator('#viewport-help-text').isVisible(),false,'Scrolling the drawer hides its tooltip');
+  await panel.locator('.drawer-scroll').evaluate(node=>node.scrollTop=0);
+  await panel.emulateMedia({forcedColors:'active'});
+  await panel.evaluate(()=>document.activeElement?.blur());await panel.locator('.viewport-info').focus();
+  assert.equal(await panel.locator('#viewport-help-text').isVisible(),true);
+  assert.equal(await panel.locator('#viewport-help-text').evaluate(node=>{const style=getComputedStyle(node);return style.color!==style.backgroundColor&&parseFloat(style.borderTopWidth)>0;}),true,'Tooltip text and boundary remain visible in forced colors');
+  await panel.keyboard.press('Escape');await panel.emulateMedia({forcedColors:'none'});
   for(const width of [360,320]){
     await panel.setViewportSize({width,height:600});
     for(const end of [false,true]){

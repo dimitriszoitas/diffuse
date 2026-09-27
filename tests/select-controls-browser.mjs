@@ -90,6 +90,15 @@ try{
   await light.evaluate(()=>{document.querySelector('#dialog').close();DiffuseSelect.destroy(document);});assert.equal(await light.locator('.df-select,.df-severity,.df-select-menu').count(),0);assert.equal(await light.locator('#edge').getAttribute('aria-hidden'),null);assert.equal(await light.locator('#edge').getAttribute('tabindex'),null);
   await light.evaluate(()=>document.querySelector('#edge').value='Third');assert.equal(await light.locator('#edge').inputValue(),'Third');assert.deepEqual(lightErrors,[]);
   passed.push('Menus flip and clamp inside narrow windows, work within modal dialogs, and restore native fields on normal teardown');
+  await light.evaluate(()=>{const label=document.createElement('label');label.textContent='Severity';label.style.cssText='display:block;margin:16px';label.innerHTML+='<select name="severity"><option value="minor">Minor</option><option value="major">Major</option><option value="critical">Critical</option></select>';document.body.append(label);DiffuseSelect.enhance(document);});
+  for(const width of [420,360,320]){
+    await light.setViewportSize({width,height:500});
+    const cells=await light.locator('.df-severity-choice>span').evaluateAll(nodes=>nodes.map(node=>{const r=node.getBoundingClientRect();return{x:r.x,y:r.y,width:r.width,height:r.height,overflow:node.scrollWidth>node.clientWidth};}));
+    assert.equal(cells.length,3);assert.ok(cells.every(cell=>cell.y===cells[0].y&&cell.height>=44&&!cell.overflow),'Severity stays on one horizontal row with readable labels');
+    assert.ok(cells[2].x+cells[2].width<=width,'Severity fits narrow drawers');
+  }
+  await light.screenshot({path:resolve(artifacts,'horizontal-severity.png')});
+  passed.push('All three severity choices remain horizontal and fit at 320, 360 and 420px');
   await light.close();
   for(const check of passed)console.log(`PASS ${check}`);
   await writeFile(resolve(artifacts,'checks.json'),JSON.stringify({passed},null,2));

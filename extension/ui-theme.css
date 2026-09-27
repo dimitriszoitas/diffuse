@@ -1,25 +1,29 @@
 /* Shared visual foundations for Diffuse-owned pages only. */
 :root {
-  --ui-bg: #f5f5f7;
+  --ui-bg: #eef3f8;
   --ui-surface: #fff;
-  --ui-surface-muted: #f0f0f2;
-  --ui-ink: #1d1d1f;
-  --ui-muted: #6e6e73;
-  --ui-line: #dedee3;
-  --ui-line-strong: #bdbdc5;
-  --ui-accent: #65558f;
-  --ui-accent-soft: #efedf5;
-  --ui-primary: #29292d;
+  --ui-surface-muted: #f3f6fa;
+  --ui-ink: #172b45;
+  --ui-muted: #62738a;
+  --ui-line: #e0e7ef;
+  --ui-line-strong: #bac9da;
+  --ui-accent: #235ed7;
+  --ui-accent-soft: #e8efff;
+  --ui-primary: #235ed7;
+  --ui-primary-fill: linear-gradient(180deg, #3677f5, #1b53cc);
+  --ui-primary-hover: linear-gradient(180deg, #2b6de9, #174bbc);
+  --ui-primary-shadow: inset 0 1px 0 #ffffff2e, 0 2px 4px #164cb326, 0 4px 10px #164cb314;
+  --ui-surface-shadow: 0 2px 6px #213c5b03, 0 8px 24px #213c5b05;
   --ui-danger: #b33b32;
-  --ui-radius: 6px;
+  --ui-radius: 8px;
   --ink: var(--ui-ink);
   --muted: var(--ui-muted);
   --line: var(--ui-line);
   --control: var(--ui-line-strong);
   --violet: var(--ui-accent);
   --pale: var(--ui-surface-muted);
-  --scroll-thumb: #b8b8bf;
-  --scroll-hover: #919199;
+  --scroll-thumb: #bdcbdb;
+  --scroll-hover: #879eb9;
   --scroll-track: transparent;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: var(--ui-ink);
@@ -33,7 +37,7 @@
   outline-offset: 3px;
 }
 :where(input[type=checkbox], input[type=radio], input[type=range]) { accent-color: var(--ui-accent); }
-.sidebar { --scroll-thumb: #b8b8bf; --scroll-hover: #919199; }
+.sidebar { --scroll-thumb: #bdcbdb; --scroll-hover: #879eb9; }
 @media (forced-colors: active) {
   :root { --ui-line: CanvasText; --ui-line-strong: CanvasText; --ui-accent: Highlight; }
 }

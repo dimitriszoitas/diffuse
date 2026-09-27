@@ -131,60 +131,65 @@ select:disabled { color: var(--muted); background: #eeeaf3; }
 
 .load-review-button{display:flex;align-items:center;justify-content:space-between;gap:12px;font-weight:600;text-align:left}.load-review-button svg{flex-shrink:0}
 
-/* A small utility window: content first, quiet chrome, one primary action. */
-.popup { padding: 14px 16px 8px; font-size: 14px; line-height: 1.45; }
-.popup .brand-header { flex-wrap: nowrap; min-height: 45px; padding-bottom: 10px; gap: 12px; border-color: var(--ui-line, #dedee3); }
-.popup .brand { gap: 8px; font-size: 20px; letter-spacing: -.55px; font-weight: 650; }
-.popup .brand-mark { width: 27px; height: 29px; flex-basis: 27px; }
-.popup .brand-mark span { width: 19px; height: 23px; border-radius: 4px; }
-.popup .brand-mark span:last-child { left: 7px; top: 5px; border-color: var(--ui-bg, #f5f5f7); background: #7354b1; }
-.popup .dock-button { width: 44px; height: 44px; border-color: transparent; background: transparent; color: var(--ui-muted, #6e6e73); border-radius: 6px; }
-.popup .dock-button:hover { color: var(--ui-ink, #1d1d1f); background: var(--ui-surface-muted, #f0f0f2); }
-.popup .intro { margin: 18px 0 14px; }
-.popup h1 { font-size: 19px; line-height: 1.3; letter-spacing: -.4px; font-weight: 650; }
-.popup .intro p { margin-top: 5px; font-size: 13px; line-height: 1.5; }
-.popup .source-card { padding: 12px; border: 1px solid var(--ui-line, #dedee3); border-radius: 6px; background: var(--ui-surface, #fff); }
-.popup .step-label { color: var(--ui-muted, #6e6e73); font-size: 11px; font-weight: 500; letter-spacing: 0; }
-.popup .source-card > .source-text { margin-top: 5px; }
+/* A focused launcher with the same blue workspace palette as the notebook. */
+.popup { padding: 16px; font-size: 14px; line-height: 1.5; }
+.popup .brand-header { flex-wrap: nowrap; min-height: 46px; padding-bottom: 14px; gap: 12px; border-color: var(--ui-line); }
+.popup .brand { gap: 9px; font-size: 21px; letter-spacing: -.65px; font-weight: 650; color: var(--ui-ink); }
+.popup .brand-mark { width: 28px; height: 30px; flex-basis: 28px; }
+.popup .brand-mark span { width: 20px; height: 24px; border-radius: 4px; }
+.popup .brand-mark span:last-child { left: 7px; top: 5px; border-color: var(--ui-bg); background: #346bdc; }
+.popup .dock-button { width: 44px; height: 44px; border: 1px solid #e2eaf5; background: #fff; color: var(--ui-accent); border-radius: 8px; box-shadow: 0 2px 5px #234a7710; }
+.popup .dock-button:hover { background: var(--ui-accent-soft); border-color: #c8d8f2; }
+.popup .intro { margin: 20px 0 16px; }
+.popup h1 { font-size: 22px; line-height: 1.25; letter-spacing: -.6px; font-weight: 650; }
+.popup .intro p { margin-top: 6px; font-size: 13px; line-height: 1.5; }
+.popup .source-card { position: relative; display: grid; grid-template-columns: 38px minmax(0, 1fr); column-gap: 11px; padding: 15px 14px; border: 1px solid #e5ebf3; border-radius: 9px; background: #fff; box-shadow: 0 3px 12px #24446306; }
+.popup .source-card .source-page-icon { grid-row: 1 / 3; display: grid; place-items: center; align-self: center; width: 38px; height: 40px; border-radius: 7px; background: #edf3ff; color: var(--ui-accent); }
+.popup .source-card .source-page-icon svg { width: 21px; height: 21px; }
+.popup .step-label { color: var(--ui-muted); font-size: 11px; font-weight: 500; letter-spacing: 0; }
+.popup .source-card > .source-text { min-width: 0; margin-top: 3px; }
 .popup .source-title, .popup .session-page-title { margin-bottom: 3px; font-size: 14px; line-height: 1.4; font-weight: 600; }
 .popup .source-url { font-size: 12px; line-height: 1.4; }
-.popup .start-actions { display: grid; grid-template-columns: 1.2fr 1fr; align-items: stretch; gap: 8px; margin-top: 12px; }
+.popup .start-actions { display: grid; grid-template-columns: 1.15fr 1fr; align-items: stretch; gap: 9px; margin-top: 14px; }
 .popup .start-actions #comparison-form { min-width: 0; margin: 0; }
 .popup .start-actions .load-review-button { height: 100%; margin: 0; }
-.popup .primary-button, .popup .secondary-button { min-height: 44px; padding: 10px 12px; border-radius: 6px; font-size: 13px; line-height: 1.4; font-weight: 550; }
-.popup .primary-button { border-color: var(--ui-primary, #29292d); background: var(--ui-primary, #29292d); color: #fff; }
-.popup .primary-button:not(:disabled):hover { border-color: #414146; background: #414146; }
-.popup .primary-button:disabled { border-color: var(--ui-line, #dedee3); background: var(--ui-surface-muted, #f0f0f2); color: var(--ui-muted, #6e6e73); }
-.popup .secondary-button { border-color: var(--ui-line-strong, #bdbdc5); background: var(--ui-surface, #fff); color: var(--ui-ink, #1d1d1f); }
-.popup .secondary-button:not(:disabled):hover { background: var(--ui-surface-muted, #f0f0f2); }
-.popup .load-review-button svg { width: 17px; height: 17px; color: var(--ui-muted, #6e6e73); }
-.popup .field-help { margin-top: 10px; font-size: 12px; line-height: 1.5; }
-.popup .field-help strong { font-weight: 550; color: var(--ui-ink, #1d1d1f); }
-.popup .reports-access { display: block; padding-top: 8px; margin-top: 16px; border-color: var(--ui-line, #dedee3); }
-.popup .report-button { padding: 9px 4px; border: 0; border-radius: 4px; background: transparent; gap: 12px; }
-.popup .report-button:hover { background: var(--ui-surface-muted, #f0f0f2); }
-.popup .report-button .button-label { font-size: 13px; font-weight: 550; }
+.popup .primary-button, .popup .secondary-button { min-height: 44px; padding: 10px 12px; border-radius: 7px; font-size: 13px; line-height: 1.4; font-weight: 550; }
+.popup .primary-button { border: 1px solid #2257c7; background: linear-gradient(180deg, #3677f5, #1b53cc); color: #fff; box-shadow: inset 0 1px 0 #ffffff38, 0 3px 7px #245cc323; }
+.popup .primary-button:not(:disabled):hover { border-color: #1f4fb7; background: linear-gradient(180deg, #286be7, #164abd); }
+.popup .primary-button:disabled { border-color: var(--ui-line); background: var(--ui-surface-muted); color: var(--ui-muted); box-shadow: none; }
+.popup .secondary-button { border-color: #d9e3ef; background: #fff; color: var(--ui-ink); box-shadow: 0 1px 2px #24446305; }
+.popup .secondary-button:not(:disabled):hover { background: #f6f9ff; border-color: #bdcee7; }
+.popup .load-review-button svg { width: 17px; height: 17px; color: var(--ui-accent); }
+.popup .field-help { margin-top: 12px; font-size: 12px; line-height: 1.5; }
+.popup .field-help strong { font-weight: 550; color: var(--ui-accent); }
+.popup .reports-access { display: block; padding-top: 0; margin-top: 18px; border: 0; }
+.popup .report-button { padding: 12px; border: 1px solid #e5ebf3; border-radius: 8px; background: #fff; gap: 10px; box-shadow: 0 2px 7px #24446304; }
+.popup .report-button:hover { background: #f9fbff; border-color: #c8d8ef; }
+.popup .report-icon { display: grid; place-items: center; flex: 0 0 34px; width: 34px; height: 36px; border-radius: 7px; background: #edf4f4; color: #297c80; }
+.popup .report-icon svg { width: 18px; height: 18px; }
+.popup .report-button .button-label { font-size: 13px; font-weight: 600; }
 .popup .report-count { font-size: 12px; }
-.popup .report-button .button-arrow { width: 15px; height: 15px; color: var(--ui-muted, #6e6e73); }
-.popup .report-button-copy { gap: 2px; }
-.popup .settings-access { margin-top: 8px; padding-top: 4px; border-color: var(--ui-line, #dedee3); }
-.popup .settings-button { justify-content: flex-start; min-height: 44px; padding: 8px 4px; gap: 8px; border: 0; border-radius: 4px; background: transparent; font-size: 13px; font-weight: 500; }
-.popup .settings-button:hover { background: var(--ui-surface-muted, #f0f0f2); }
-.popup .settings-button svg { width: 17px; height: 17px; flex-basis: 17px; color: var(--ui-muted, #6e6e73); }
-.popup .session-card { padding: 12px; border: 1px solid var(--ui-line, #dedee3); border-radius: 6px; margin-bottom: 12px; background: var(--ui-surface, #fff); }
-.popup .session-status { font-size: 12px; font-weight: 500; gap: 6px; margin-bottom: 12px; }
+.popup .report-button .button-arrow { width: 15px; height: 15px; color: #8a9bb1; }
+.popup .report-button-copy { flex: 1; gap: 2px; }
+.popup .settings-access { margin-top: 12px; padding-top: 8px; border-color: var(--ui-line); }
+.popup .settings-button { justify-content: flex-start; min-height: 44px; padding: 8px 10px; gap: 9px; border: 0; border-radius: 6px; background: transparent; font-size: 13px; font-weight: 500; color: #526982; }
+.popup .settings-button:hover { background: #e3ebf5; color: var(--ui-ink); }
+.popup .settings-button svg { width: 17px; height: 17px; flex-basis: 17px; color: #778da6; }
+.popup .session-card { padding: 14px; border: 1px solid #e5ebf3; border-radius: 9px; margin-bottom: 14px; background: #fff; box-shadow: 0 3px 12px #24446306; }
+.popup .session-status { width: fit-content; padding: 4px 7px; border-radius: 4px; background: #e8f5ef; color: #257859; font-size: 11px; font-weight: 550; gap: 6px; margin-bottom: 12px; }
+.popup .session-status .signal { background: currentColor; }
 .popup .signal { width: 6px; height: 6px; }
 .popup .session-side-label { font-size: 11px; font-weight: 500; text-transform: lowercase; letter-spacing: 0; margin-bottom: 4px; }
 .popup .session-side-label::first-letter { text-transform: uppercase; }
-.popup .session-divider { background: var(--ui-line, #dedee3); margin: 10px 0; }
+.popup .session-divider { background: var(--ui-line); margin: 12px 0; }
 .popup .capture-notice { padding: 0; border: 0; background: transparent; font-size: 12px; }
 .popup .capture-notice p, .popup .capture-state { font-size: 12px; }
-.popup .file-access-notice { border-color: var(--ui-line, #dedee3); border-radius: 6px; background: var(--ui-surface, #fff); font-size: 13px; }
+.popup .file-access-notice { border-color: #d6e3f6; border-radius: 8px; background: #eaf2ff; font-size: 13px; }
 .popup .file-access-notice h2 { font-size: 15px; font-weight: 600; }
-.popup .feedback, .popup .session-error { border-color: #e3c3bf; border-radius: 6px; background: #fbf2f1; color: var(--ui-danger, #b33b32); font-size: 13px; }
+.popup .feedback, .popup .session-error { border-color: #f1d1cd; border-radius: 7px; background: #fff1ef; color: var(--ui-danger); font-size: 13px; }
 .popup .initial-loading { font-size: 13px; }
 @media (max-width: 350px) {
   .popup { padding: 12px; }
-  .popup .start-actions { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .popup .start-actions { grid-template-columns: 1fr 1fr; gap: 7px; }
   .popup .start-actions button { gap: 6px; padding-inline: 10px; }
 }

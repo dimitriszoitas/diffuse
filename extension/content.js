@@ -40,7 +40,6 @@
   let areaArmed = false;
   let areaDrag = null;
   let cHeld = false;
-  let cGestureUsed = false;
   let ignoreNextAreaClick = false;
   let pinsTimer = null;
   let openPinId = null;
@@ -140,17 +139,24 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
 
 *{scrollbar-width:thin;scrollbar-color:#9381ae transparent}*::-webkit-scrollbar{width:8px;height:8px}*::-webkit-scrollbar-track{background:transparent}*::-webkit-scrollbar-thumb{background:#9381ae;border:2px solid transparent;background-clip:padding-box;border-radius:8px}*::-webkit-scrollbar-corner{background:transparent}
 .composer-row:has(select[id$=severity]){grid-template-columns:1fr}
-/* Keep on-page annotations quieter than the page being reviewed. */
-:host{--ink:#1d1d1f;--panel:#29292d;--raised:#36363b;--text:#f5f5f7;--muted:#b8b8bf;--line:#62626b;--accent:#b1a0d7}
-button,summary,input,textarea,select{border-radius:6px;font-size:14px}button:hover,summary:hover{background:#424248}
-#handle{left:-21px;width:44px;height:52px;border:1px solid #c5c5cd;border-radius:6px;background:#fff;color:#3b3648;font-size:20px;box-shadow:0 2px 10px #00000020}
-.edge-label{top:12px;padding:5px 8px;border-radius:4px;background:#29292df2;font-size:11px;font-weight:600;letter-spacing:.04em}
-#saved-comment-bubble{border:1px solid #62626b;border-radius:8px;padding:14px;box-shadow:0 8px 28px #00000024;font-size:14px;line-height:1.55}
+/* On-page annotations use the same cool canvas and blue accents as the drawer. */
+:host{color-scheme:light!important;--ink:#172b45;--panel:#fff;--raised:#f3f6fa;--text:#172b45;--muted:#62738a;--line:#bac9da;--accent:#235ed7}
+button,summary,input,textarea,select{border-radius:6px;font-size:14px}button:hover,summary:hover{background:#e8efff}input,textarea,select{background:#fff;color:var(--text)}input::placeholder,textarea::placeholder{color:var(--muted)}.composer-field select{color-scheme:light}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline-width:2px;box-shadow:none}
+#handle{left:-21px;width:44px;height:52px;border:1px solid #bac9da;border-radius:6px;background:#fff;color:#235ed7;font-size:20px;box-shadow:0 2px 10px #213c5b20}
+.edge-label{top:12px;padding:5px 8px;border:1px solid #d3dff1;border-radius:4px;background:#f4f8fff5;color:#2355a2;font-size:11px;font-weight:600;letter-spacing:.04em}
+#selection-outline{background:#235ed710;box-shadow:0 0 0 1px #ffffffb0}#selection-outline[data-region=true]{background:#235ed718}#selection-label,#ai-region-label{background:#235ed7;color:#fff}
+#saved-comment-bubble{border:1px solid #d4dfed;border-radius:8px;padding:14px;box-shadow:0 6px 12px #213c5b0a,0 18px 48px #213c5b20;font-size:14px;line-height:1.55}
 #saved-comment-bubble h3{font-size:17px;font-weight:600;letter-spacing:-.2px;margin:12px 0}.bubble-meta{font-size:12px}.bubble-actions{gap:6px;margin-top:12px}
-#saved-comment-category{border-radius:4px;padding:3px 7px;font-size:12px;font-weight:600}.comment-pin{box-shadow:0 2px 8px #00000030;font-size:14px;font-weight:650}
-#context-reload-notice{border-color:#62626b;border-radius:8px;padding:12px;box-shadow:0 5px 20px #00000020;font-size:13px}
-*{scrollbar-color:#777780 transparent}*::-webkit-scrollbar-thumb{background-color:#777780}
+#saved-comment-category{border-radius:4px;padding:3px 7px;font-size:12px;font-weight:600}.comment-pin{box-shadow:0 2px 8px #213c5b30;font-size:14px;font-weight:650}
+#context-reload-notice{border-color:#d4dfed;border-radius:8px;padding:12px;box-shadow:0 5px 20px #213c5b20;font-size:13px}
+#picker-tip,#capture-progress{border-color:#d4dfed;border-radius:8px;padding:10px 14px;font-size:13px;box-shadow:0 5px 20px #213c5b18}
+#comment-panel,#ai-panel{border-color:#d4dfed;border-radius:10px;box-shadow:0 16px 60px #213c5b30}.composer-header{border-color:#e0e7ef}.composer-footer{background:#f3f6fa}
+#save-comment{background:linear-gradient(180deg,#3677f5,#1b53cc);color:#fff;border-color:#235ed7;box-shadow:inset 0 1px 0 #ffffff2e,0 2px 6px #164cb326}.composer-error{background:#fff0f1;color:#a32942;border-color:#f0cbd4}.evidence-options button[aria-pressed=true]{color:#fff}
+.ai-suggestion,.ai-disclosure,#ai-results-status{background:#f3f6fa;border-color:#d4dfed;border-radius:8px}.ai-suggestion h4,.ai-suggestion-meta,.threshold-ends small,#ai-results-status p,.ai-disclosure{color:var(--muted)}.ai-change{background:#e8efff;border-color:#94b3ef}.ai-change h4{color:#235ed7}#ai-show-all{background:#e8efff;color:#235ed7;border-color:#bac9da}#ai-accept-all{background:#235ed7;color:#fff;border-color:#235ed7}
+*{scrollbar-color:#bdcbdb transparent}*::-webkit-scrollbar-thumb{background-color:#bdcbdb}
 @media(forced-colors:active){*{scrollbar-color:auto}}
+
   `;
 
   function makeOverlay() {
@@ -201,7 +207,7 @@ button,summary,input,textarea,select{border-radius:6px;font-size:14px}button:hov
         <div class="composer-footer"><div id="comment-error" class="composer-error" role="alert"></div><div class="composer-actions"><button id="cancel-comment" type="button">Cancel</button><button id="save-comment" type="submit" form="comment-form">Save comment</button></div></div>
       </section>`;
     document.documentElement.append(host);
-    globalThis.DiffuseSelect?.enhance(root, {theme: 'dark'});
+    globalThis.DiffuseSelect?.enhance(root, {theme: 'light'});
     liftAboveDialogs();
     video = el('reference');
     if(video)video.muted = true;
@@ -559,22 +565,24 @@ button,summary,input,textarea,select{border-radius:6px;font-size:14px}button:hov
     const options={capture:true,signal:abort.signal};
     const suppress=event=>{event.preventDefault();event.stopImmediatePropagation();};
     document.addEventListener('keydown',event=>{
-      if(event.key==='Escape'&&(areaArmed||areaDrag||cHeld)){suppress(event);cHeld=false;cGestureUsed=true;cancelArea();return;}
+      if(event.key==='Escape'&&(areaArmed||areaDrag||cHeld)){suppress(event);cancelArea();stopPicking(false);return;}
       if(event.code==='KeyC'&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&!event.shiftKey&&!editableEvent(event)&&canSelect()){
-        if (!cHeld) cGestureUsed=false;
-        cHeld=true;suppress(event);
+        suppress(event);
+        if(event.repeat||cHeld)return;
+        // Arm on the initial press, independent of where focus is on release.
+        // Holding C still turns the next primary pointer gesture into an area.
+        startPicking();cHeld=true;
       }
     },options);
     document.addEventListener('keyup',event=>{
       if(event.code!=='KeyC')return;
-      const selectElement=cHeld&&!cGestureUsed&&!areaDrag&&!editableEvent(event)&&!isDiffuseEvent(event);
-      cHeld=false;cGestureUsed=false;
-      if(selectElement&&canSelect()){suppress(event);startPicking();}
+      if(cHeld)suppress(event);
+      cHeld=false;
     },options);
-    window.addEventListener('blur',()=>{cHeld=false;cGestureUsed=false;if(areaDrag)cancelArea();},{signal:abort.signal});
+    window.addEventListener('blur',()=>{cHeld=false;if(areaDrag)cancelArea();},{signal:abort.signal});
     document.addEventListener('pointerdown',event=>{
       if(event.button!==0||!(areaArmed||cHeld)||!canSelect()||isDiffuseEvent(event)||editableEvent(event))return;
-      suppress(event);cGestureUsed=true;stopPicking(false);closePin();closeAi();
+      suppress(event);stopPicking(false);closePin();closeAi();
       areaArmed=true;ignoreNextAreaClick=false;
       areaDrag={startX:event.clientX,startY:event.clientY,x:event.clientX,y:event.clientY,pointerId:event.pointerId};
       el('picker-tip').hidden=true;
@@ -911,6 +919,7 @@ button,summary,input,textarea,select{border-radius:6px;font-size:14px}button:hov
     el('comment-panel').hidden = true;
     el('comment-error').textContent = '';
     stopPicking(false);
+    ignoreNextAreaClick = false;
     picking = true;
     hoveredElement = null;
     selectedElement = null;
@@ -921,7 +930,7 @@ button,summary,input,textarea,select{border-radius:6px;font-size:14px}button:hov
     el('picker-tip').firstElementChild.textContent='Choose an element, or use arrow keys and Enter. Esc to cancel.';
     el('picker-tip').hidden = false;
     const suppress = event => {
-      if (isDiffuseEvent(event)) return;
+      if (event.button !== 0 || isDiffuseEvent(event)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
     };
@@ -932,6 +941,7 @@ button,summary,input,textarea,select{border-radius:6px;font-size:14px}button:hov
     }, options);
     for (const eventName of ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'dblclick']) document.addEventListener(eventName, suppress, options);
     document.addEventListener('click', event => {
+      if(event.button!==0)return;
       const target = pickTarget(event);
       if (!target) return;
       suppress(event);
@@ -1587,7 +1597,7 @@ button,summary,input,textarea,select{border-radius:6px;font-size:14px}button:hov
     stopResources();
     stopPicking(false);
     clearInterval(pinsTimer);pinsTimer=null;
-    areaArmed=false;areaDrag=null;cHeld=false;cGestureUsed=false;ignoreNextAreaClick=false;openPinId=null;pinItems=[];pinsUrl='';pinsViewport='';
+    areaArmed=false;areaDrag=null;cHeld=false;ignoreNextAreaClick=false;openPinId=null;pinItems=[];pinsUrl='';pinsViewport='';
     aiBatch=null;aiBusy=false;aiOperationBusy=false;aiBulkAccepting=false;aiThresholdOverride=null;aiSavedThreshold=null;aiPreviewContext=null;
     clearInterval(recordingTimer); recordingTimer = null;
     recording = null; recordingBusy = false; commentSaving = false; captureBusy = false;

@@ -37,7 +37,7 @@ The existing divider and opacity controls appear once connected. **Hide referenc
 
 **Start review** opens the native Chrome side drawer. To reopen it during a review, click Diffuse’s extension icon and choose **Open review sidebar**. The drawer resizes the page and keeps unfinished comments when closed. Chrome controls its side and resize handle. Visit the reference once after resizing if a viewport mismatch appears: inactive tabs may retain their previous dimensions. A full reference reload clears its capture identity; choose it again through Diff. Saved comments remain intact.
 
-**Keyboard shortcuts:** `Alt+Shift+D` toggles a connected reference; `Alt+Shift+P` switches between reference and reviewed page. Press **C** to leave a comment; hold **C + left-click-drag** to select an area. Escape cancels. The shortcuts are ignored while typing in an editable field.
+**Keyboard shortcuts:** `Alt+Shift+D` toggles a connected reference; `Alt+Shift+P` switches between reference and reviewed page. Tap **C**, release it, then click an element to leave a comment; hold **C + left-click-drag** to select an area. Escape cancels. The shortcuts are ignored while typing in an editable field.
 
 Page clicks operate the reviewed page. Switch to the reference to interact with it. Scroll linking does not synchronize menus, form inputs or application state.
 
@@ -54,7 +54,7 @@ Every captured comment keeps its viewport view and exact dimensions. Pins and dr
 Starting from the reviewed page’s actual Chrome toolbar icon grants that page’s initial capture access. A persistent drawer on a newly selected tab does not grant access by itself. If needed, click Diffuse in Chrome’s toolbar on the reviewed page and choose **Enable capture & return**; a pending capture retries without discarding its draft.
 
 1. Open the page and state you want to review. If you have connected a reference through **Diff**, bring both apps into matching states and wait for the live reference.
-2. Press **C** over the reviewed element to leave a comment. Hold **C** and drag to select an area. Press Escape to cancel.
+2. Tap **C**, release it, then click the reviewed element to leave a comment. Hold **C** and drag to select an area. Press Escape to cancel.
 3. Diffuse hides its interface briefly and captures the reviewed page, plus the reference when connected, **before** opening the comment form. The selected element receives a marked screenshot and a contextual crop alongside the original screenshot.
 4. Write an **Actual / comment** description. **Title and expected result are optional**; a blank title displays a short excerpt from your observation. Add reproduction steps when useful.
 5. **Save comment** stays visible at the bottom while the fields scroll. Under **Attach evidence**, keep **Screenshot** or choose **Short recording**. Check the component name, name the state, choose a category and severity, and save.

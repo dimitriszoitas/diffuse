@@ -37,6 +37,7 @@
           <p>Capture feedback where it happens.</p>
         </div>
         <div class="source-card">
+          <span class="source-page-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 8h16M8 12h8m-8 4h5"/></svg></span>
           <span class="step-label">Current page</span>
           <div class="source-text"><p class="source-title" id="source-title">Your page</p><p class="source-url" id="source-url"></p></div>
         </div>
@@ -135,7 +136,7 @@
               <label class="panel-field">Expected <span class="optional">(optional)</span><textarea id="panel-field-expected" name="expected" maxlength="6000" placeholder="Describe the intended result." rows="3"></textarea></label>
               <label class="panel-field">Category<select id="panel-field-category" name="category"><option value="design-mismatch">Design mismatch</option><option value="ux-issue">UX issue</option><option value="copy-change">Copy change</option></select></label>
               <label class="panel-field">Component<input id="panel-field-component" name="component" maxlength="200"><small id="panel-component-hint"></small></label>
-              <div class="control-pair"><label class="panel-field">State<input id="panel-field-state" name="state" required maxlength="200"></label><label class="panel-field">Severity<select id="panel-field-severity" name="severity"><option value="minor">Minor</option><option value="major">Major</option><option value="critical">Critical</option></select></label></div>
+              <div class="comment-context-fields"><label class="panel-field">State<input id="panel-field-state" name="state" required maxlength="200"></label><label class="panel-field severity-field">Severity<select id="panel-field-severity" name="severity"><option value="minor">Minor</option><option value="major">Major</option><option value="critical">Critical</option></select></label></div>
               <label class="panel-field">Steps to reproduce <span class="optional">(optional)</span><textarea id="panel-field-steps" name="steps" maxlength="6000" rows="3" placeholder="How did you reach this state?"></textarea></label>
             </form>
             </div>
@@ -160,7 +161,7 @@
 
       <div class="reports-access">
         <button class="report-button" id="review-reports" type="button">
-          <span class="report-button-copy"><span class="button-label">Review reports</span><span class="report-count" id="report-count">Saved on this device</span></span>
+          <span class="report-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h11a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/><path d="M6 17H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h11M10 9h7m-7 4h7m-7 4h4"/></svg></span><span class="report-button-copy"><span class="button-label">Review reports</span><span class="report-count" id="report-count">Saved on this device</span></span>
           <svg class="button-arrow" width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
       </div>

@@ -1,20 +1,20 @@
 /* Jira settings components use the same page foundation as AI settings. */
-.settings-page .connections { padding: 20px; border: 1px solid var(--ui-line, #dedee3); border-radius: 8px; background: var(--ui-surface, #fff); min-width: 0; }
-.settings-page .empty-state { color: var(--ui-muted, #6e6e73); font-size: 13px; line-height: 1.6; padding: 16px 0; border: 0; border-top: 1px solid var(--ui-line, #dedee3); border-radius: 0; margin: 0 0 12px; }
-.settings-page .account { border: 1px solid var(--ui-line, #dedee3); border-radius: 6px; margin: 0 0 12px; padding: 16px; min-width: 0; background: var(--ui-surface, #fff); }
+.settings-page .connections { padding: 20px; border: 1px solid var(--ui-line, #e0e7ef); border-radius: 8px; background: var(--ui-surface, #fff); box-shadow: var(--ui-surface-shadow); min-width: 0; }
+.settings-page .empty-state { color: var(--ui-muted, #62738a); font-size: 13px; line-height: 1.6; padding: 16px 0; border: 0; border-top: 1px solid var(--ui-line, #e0e7ef); border-radius: 0; margin: 0 0 12px; }
+.settings-page .account { border: 1px solid var(--ui-line, #e0e7ef); border-radius: 6px; margin: 0 0 12px; padding: 16px; min-width: 0; background: var(--ui-surface-muted); }
 .settings-page .account h3 { font-size: 14px; font-weight: 600; line-height: 1.4; margin: 0 0 4px; overflow-wrap: anywhere; }
-.settings-page .account-identity { font-size: 12px; margin: 0 0 12px; color: var(--ui-muted, #6e6e73); overflow-wrap: anywhere; }
+.settings-page .account-identity { font-size: 12px; margin: 0 0 12px; color: var(--ui-muted, #62738a); overflow-wrap: anywhere; }
 .settings-page .site-list { list-style: none; padding: 0; margin: 0; }
-.settings-page .site-list li { padding: 10px 0; border-top: 1px solid var(--ui-line, #dedee3); }
+.settings-page .site-list li { padding: 10px 0; border-top: 1px solid var(--ui-line, #e0e7ef); }
 .settings-page .site-list strong, .settings-page .site-list a { display: block; overflow-wrap: anywhere; font-size: 12px; }
 .settings-page .site-list strong { font-size: 13px; font-weight: 550; }
 .settings-page .account-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .settings-page .disconnect { color: var(--ui-danger, #b33b32); border-color: transparent; }
 .settings-page .disconnect:not(:disabled):hover { background: #fbf2f1; }
 .settings-page .account-notice { padding: 10px 12px; margin: 12px 0 0; border-radius: 6px; background: #fbf2f1; color: var(--ui-danger, #b33b32); font-size: 13px; }
-.settings-page .setup { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 28px; padding-top: 24px; margin-top: 28px; border-top: 1px solid var(--ui-line, #dedee3); }
+.settings-page .setup { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 28px; padding-top: 24px; margin-top: 28px; border-top: 1px solid var(--ui-line, #e0e7ef); }
 .settings-page .setup h2 { font-size: 15px; }
-.settings-page .setup p { font-size: 13px; color: var(--ui-muted, #6e6e73); margin-bottom: 0; }
+.settings-page .setup p { font-size: 13px; color: var(--ui-muted, #62738a); margin-bottom: 0; }
 .settings-page .installation { min-width: 0; }
 .settings-page .copy-field { display: flex; gap: 8px; }
 .settings-page .copy-field input { flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }

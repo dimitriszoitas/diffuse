@@ -31,9 +31,16 @@ try {
   });
   await page.addScriptTag({content:await readFile(resolve(project,'extension/sidepanel.js'),'utf8')});
   await page.waitForSelector('body[data-composer-open=true]');
+  await page.addScriptTag({content:await readFile(resolve(project,'extension/select-controls.js'),'utf8')});
+  await page.evaluate(()=>DiffuseSelect.enhance(document));
   const geometry=()=>page.evaluate(()=>{const b=document.querySelector('#panel-save-comment').getBoundingClientRect();return{top:b.top,bottom:b.bottom,height:b.height,viewport:innerHeight,overflow:document.documentElement.scrollWidth-innerWidth};});
   for(const [width,height] of [[380,700],[320,480],[600,800]]){
     await page.setViewportSize({width,height});
+    const severity=page.locator('.df-severity-options');
+    await severity.scrollIntoViewIfNeeded();
+    const cells=await severity.locator('.df-severity-choice>span').evaluateAll(nodes=>nodes.map(node=>{const r=node.getBoundingClientRect();return{x:r.x,y:r.y,width:r.width,height:r.height,overflow:node.scrollWidth>node.clientWidth};}));
+    assert.equal(cells.length,3);assert.ok(cells.every(cell=>cell.y===cells[0].y&&cell.height>=44&&!cell.overflow));
+    assert.ok(cells[2].x+cells[2].width<=width,'All severity options fit the actual composer');
     for(const end of [false,true]){
       await page.locator('.panel-composer-scroll').evaluate((el,end)=>el.scrollTop=end?el.scrollHeight:0,end);
       const b=await geometry();assert(b.top>=0&&b.bottom<=height+1&&b.height>=44);assert.equal(b.overflow,0);
@@ -41,6 +48,8 @@ try {
   }
   console.log('PASS Save remains visible at both ends of the form in narrow and short drawers.');
   await page.setViewportSize({width:380,height:700});
+  await page.locator('.df-severity-options').scrollIntoViewIfNeeded();
+  await page.screenshot({path:resolve(out,'horizontal-severity.png')});
   await page.locator('#panel-field-comment').fill('The page connection must not lose this comment.');
   await page.locator('#panel-save-comment').click();
   await page.waitForSelector('#panel-recover-comment:not([hidden])');

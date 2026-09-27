@@ -19,7 +19,7 @@ You do not need to sign in to a special test browser or share a password with Di
 
 1. Open the page you want to review in Chrome.
 2. Click the Diffuse extension icon, then **Start review**. Allow access to this page if requested.
-3. Press **C** over the page to leave a comment, or hold **C** and drag to select an area. Use the side drawer for recording, AI review and reports.
+3. Tap **C**, release it, then click anywhere on the page to leave a comment, or hold **C** and drag to select an area. Use the side drawer for recording, AI review and reports.
 
 There is no floating toolbar. If the sidebar is closed, click the Diffuse extension icon and **Open review sidebar** to return to the controls.
 
@@ -61,7 +61,7 @@ Chrome asks for the updated extension's debugging permission and shows a notice 
 
 Starting a review from the real Chrome toolbar grants capture for that page. If Chrome needs access again—for example after starting from a persistent drawer on a newly selected tab—click the actual Diffuse icon on the reviewed page, then **Enable capture & return**. Your draft stays available.
 
-1. Press **C** over the page to select an element for a comment. For an area, hold **C + left-click-drag** to draw a rectangle. Shortcuts are ignored while typing in editable inputs; Escape cancels.
+1. Tap **C**, release it, then click an element to leave a comment. For an area, hold **C + left-click-drag** to draw a rectangle. Shortcuts are ignored while typing in editable inputs; Escape cancels.
 2. Diffuse captures evidence before opening the form: both screens in comparison mode, or the one page in audit mode. Write your observation. **Title and expected result are optional**; an omitted title uses a short excerpt from your observation.
 3. Under **Attach evidence**, keep **Screenshot** or choose **Short recording**. Your written text and selected element or region stay attached when recording.
 4. Check the component name, label the state, choose a category and severity, and save. Categories have visible labels and distinct colors: **Design mismatch — purple**, **UX issue — amber**, and **Copy change — blue**. Comparison defaults to Design mismatch; audit defaults to UX issue.
@@ -142,7 +142,7 @@ Start the review on the **production** tab, then use **Diff** to choose the prot
 
 ## Keyboard and readable controls
 
-Press **C** on the reviewed page to start a comment. The element picker supports arrow keys and **Enter**; Escape cancels. Viewport icons have accessible names, and the information icon shows help on both hover and keyboard focus. **Adjust reference → Reveal position** supports clicks and arrow keys.
+Tap **C**, release it, then click on the reviewed page to start a comment. The element picker supports arrow keys and **Enter**; Escape cancels. Viewport icons have accessible names, and the information icon shows help on both hover and keyboard focus. **Adjust reference → Reveal position** supports clicks and arrow keys.
 
 ## Coming soon
 
