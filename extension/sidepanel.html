@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="viewport-panel.css" />
     <script src="popup.js" defer></script>
     <script src="sidepanel.js" defer></script>
+    <script src="review-loader.js" defer></script>
     <script src="viewport-panel.js" type="module"></script>
     <link rel="stylesheet" href="ui-chrome.css">
     <link rel="stylesheet" href="ui-theme.css">
@@ -29,6 +30,17 @@
       <section id="loading" class="initial-loading" role="status" aria-live="polite">
         <span class="spinner" aria-hidden="true"></span>
         Getting your tabs ready…
+      </section>
+
+      <section id="page-review-loader" aria-labelledby="page-review-loader-title" hidden>
+        <div class="section-heading"><h2 id="page-review-loader-title">Load review</h2><button id="close-page-review-loader" class="close-button" type="button" aria-label="Close review loader">×</button></div>
+        <p class="muted">Bring saved feedback onto the page, with comments here in the sidebar.</p>
+        <button id="choose-page-review-file" class="primary-button" type="button">Choose review file <span aria-hidden="true">↓</span></button>
+        <input id="page-review-file" type="file" accept=".json,.diffuse-review.json,application/json" hidden>
+        <div id="page-review-loader-status" class="panel-notice" role="status" aria-live="polite" tabindex="-1" hidden></div>
+        <button id="open-loaded-review" class="secondary-button" type="button" hidden>Open review on page</button>
+        <h3 class="review-loader-heading">Saved reviews</h3>
+        <div id="page-review-list" aria-label="Saved reviews"></div>
       </section>
 
       <section id="setup" hidden aria-labelledby="setup-title">

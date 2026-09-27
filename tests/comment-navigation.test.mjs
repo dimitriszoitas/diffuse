@@ -10,9 +10,11 @@ const source=await readFile(new URL('../extension/background.js',import.meta.url
 const event=()=>({listeners:[],addListener(fn){this.listeners.push(fn);},removeListener(fn){this.listeners=this.listeners.filter(item=>item!==fn);}});
 const saved=()=>({id:'saved-review',title:'Preserved title',productionUrl:'https://example.test/first',createdAt:'2026-09-01',comments:[{id:'first',fields:{comment:'Original'},selection:null,context:{production:{url:'https://example.test/first',viewport:{width:1440,height:900},viewportProfile:{key:'desktop'}}}},{id:'second',fields:{comment:'Second'},context:{production:{url:'https://example.test/second?q=1#part',viewport:{width:1542,height:1107},viewportProfile:{key:'desktop'}}}}]});
 async function harness({review=saved(),initial=null,redirect=null,allow=true}={}){
- const state={review:structuredClone(review),messages:[],tab:{id:9,windowId:1,status:'complete',url:'https://example.test/first'},size:{width:1440,height:900},created:[],injections:0,persisted:null,commands:[],pinWrites:[],remapWrites:[],contextGate:null,inspectGate:null,inspection:remappedSelection()};
+ const state={review:structuredClone(review),messages:[],tab:{id:9,windowId:1,status:'complete',active:true,url:'https://example.test/first'},otherTabs:[],queries:[],updates:[],size:{width:1440,height:900},created:[],injections:0,persisted:null,commands:[],pinWrites:[],remapWrites:[],contextGate:null,inspectGate:null,inspection:remappedSelection()};
+ const tabs=()=>[state.tab,...state.otherTabs.filter(item=>item.id!==state.tab.id)];
+ const getTab=id=>{const tab=tabs().find(item=>item.id===id);if(!tab)throw new Error('No tab');return tab;};
  const chrome={runtime:{id:'test',getURL:path=>`chrome-extension://test/${path}`,getContexts:async()=>[{}],onMessage:event(),onConnect:event(),onInstalled:event(),sendMessage:async()=>({ok:true})},storage:{session:{get:async()=>({comparison:initial}),set:async value=>{state.persisted=structuredClone(value);}}},
- tabs:{onUpdated:event(),onRemoved:event(),onActivated:event(),get:async()=>({...state.tab}),query:async()=>[state.tab],create:async options=>{state.created.push(options);state.tab={...state.tab,url:redirect||options.url};return state.tab;},update:async(_id,options)=>{if(options.url)state.tab.url=redirect||options.url;return state.tab;},sendMessage:async(_id,message)=>{state.messages.push(structuredClone(message));if(message.type==='INITIALIZE')return{ok:true,viewport:state.size};if(message.type==='GET_CONTEXT'){if(state.contextGate)await state.contextGate;return{ok:true,context:{url:state.tab.url,viewport:state.size}};};if(message.type==='REFRESH_SELECTION'){if(state.inspectGate)await state.inspectGate;return{ok:true,selection:structuredClone(state.inspection)};}if(message.type==='REVEAL_COMMENT')return{ok:true,found:true};return{ok:true};}},
+ tabs:{onUpdated:event(),onRemoved:event(),onActivated:event(),get:async id=>({...getTab(id)}),query:async options=>{state.queries.push(structuredClone(options));return tabs().filter(tab=>(!Number.isInteger(options.windowId)||tab.windowId===options.windowId)&&(!options.currentWindow||tab.windowId===1)&&(!options.active||tab.active));},create:async options=>{state.created.push(options);const id=Math.max(...tabs().map(tab=>tab.id))+1;state.otherTabs=tabs().map(tab=>({...tab,active:false}));state.tab={id,windowId:options.windowId||1,status:'complete',active:true,url:redirect||options.url};return state.tab;},update:async(id,options)=>{state.updates.push({id,...options});const tab=getTab(id);if(options.url)tab.url=redirect||options.url;if(options.active){state.otherTabs=tabs().filter(item=>item.id!==id).map(item=>({...item,active:item.windowId===tab.windowId?false:item.active}));state.tab=tab;tab.active=true;}return tab;},sendMessage:async(_id,message)=>{state.messages.push(structuredClone(message));if(message.type==='INITIALIZE')return{ok:true,viewport:state.size};if(message.type==='GET_CONTEXT'){if(state.contextGate)await state.contextGate;return{ok:true,context:{url:state.tab.url,viewport:state.size}};};if(message.type==='REFRESH_SELECTION'){if(state.inspectGate)await state.inspectGate;return{ok:true,selection:structuredClone(state.inspection)};}if(message.type==='REVEAL_COMMENT')return{ok:true,found:true};return{ok:true};}},
  windows:{onFocusChanged:event(),update:async()=>{}},permissions:{contains:async()=>allow},scripting:{executeScript:async()=>{state.injections++;}},offscreen:{closeDocument:async()=>{}},
  debugger:{onDetach:event(),getTargets:async()=>[],attach:async()=>{},detach:async()=>{},sendCommand:async(_target,method,params)=>{state.commands.push({method,params});if(method==='Emulation.setDeviceMetricsOverride')state.size={width:params.width,height:params.height};}}};
  const context=vm.createContext({URL,chrome,createViewportController,crypto:webcrypto,AbortController,DEFAULT_SETTINGS:{},viewportWarning:()=>'',isReviewableUrl,assertPageAccess:(url,api=chrome,message)=>assertPageAccess(url,api,message),reviews:{getReview:async()=>structuredClone(state.review),cleanPinOffset,cleanPinSelection,remapCommentPin:async(reviewId,commentId,selection,position)=>{const pinPoint=selection.kind==='element'?pinPointFromPosition(selection,position):null;assert.equal(reviewId,state.review.id);const comment=state.review.comments.find(item=>item.id===commentId);assert.ok(comment);comment.pinSelection=structuredClone(selection);if(pinPoint)comment.pinPoint=pinPoint;else delete comment.pinPoint;comment.pinOffset={x:0,y:0};state.remapWrites.push({reviewId,commentId,selection:structuredClone(selection)});return structuredClone(comment);},updateCommentPin:async(reviewId,commentId,offset)=>{assert.equal(reviewId,state.review.id);const comment=state.review.comments.find(item=>item.id===commentId);assert.ok(comment);comment.pinOffset=structuredClone(offset);state.pinWrites.push({reviewId,commentId,offset:structuredClone(offset)});return structuredClone(comment);}},protectAIStorage:async()=>{},setTimeout,clearTimeout});
@@ -21,7 +23,7 @@ async function harness({review=saved(),initial=null,redirect=null,allow=true}={}
 }
 test('opening a review preserves stored data and accepts report hash URLs',async()=>{
  const worker=await harness();const before=structuredClone(worker.state.review);const result=await worker.send({type:'OPEN_REVIEW',reviewId:'saved-review'});
- assert.equal(result.ok,true);assert.equal(result.session.reviewId,before.id);assert.notEqual(result.session.id,before.id);assert.equal(result.session.commentCount,2);assert.equal(worker.state.created[0].url,before.productionUrl);assert.deepEqual(worker.state.review,before);assert.equal(worker.state.messages.find(message=>message.type==='REVEAL_COMMENT').commentId,'first');
+ assert.equal(result.ok,true);assert.equal(result.session.reviewId,before.id);assert.notEqual(result.session.id,before.id);assert.equal(result.session.commentCount,2);assert.equal(worker.state.created.length,0);assert.equal(result.reusedTab,true);assert.equal(result.tabId,9);assert.equal(result.windowId,1);assert.deepEqual(worker.state.review,before);assert.equal(worker.state.messages.find(message=>message.type==='REVEAL_COMMENT').commentId,'first');
 });
 test('comment navigation retains exact path, query, hash and recorded dimensions',async()=>{
  const worker=await harness();await worker.send({type:'OPEN_REVIEW',reviewId:'saved-review'});const current=worker.getSession();const result=await worker.navigateToComment(current,'second');
@@ -191,4 +193,51 @@ test('area remapping rejects mixed selection modes and malformed or mismatched r
  await assert.rejects(worker.handle({...base,region,position:{x:30,y:40}},targetSender()),/component or an area/);
  await assert.rejects(worker.handle({...base,region},targetSender()),/component or area is no longer/);
  assert.equal(worker.state.remapWrites.length,0);
+});
+
+test('loading from an existing matching launch tab chooses its route and reveals that path’s comment in place',async()=>{
+ const worker=await harness(),before=structuredClone(worker.state.review);worker.state.tab.url='https://example.test/second?q=1#part';
+ const result=await worker.handle({type:'OPEN_REVIEW',reviewId:'saved-review',targetTabId:9,windowId:1},{id:'test',url:'chrome-extension://test/popup.html'});
+ assert.equal(result.ok,true);assert.equal(result.reusedTab,true);assert.equal(result.tabId,9);assert.equal(result.windowId,1);assert.equal(result.session.target.url,worker.state.tab.url);
+ assert.equal(worker.state.created.length,0);assert.equal(worker.state.updates.some(item=>item.url),false);assert.deepEqual(worker.state.review,before);
+ assert.equal(worker.state.messages.filter(item=>item.type==='REVEAL_COMMENT').at(-1).commentId,'second');assert.deepEqual(worker.state.size,{width:1542,height:1107});
+ assert.equal(result.session.commentCount,2);assert.equal(result.session.status,'live');
+});
+test('an unrelated launch tab is preserved while a matching tab in its window is reused',async()=>{
+ const worker=await harness();worker.state.tab.url='https://unrelated.test/';worker.state.otherTabs=[{id:10,windowId:1,active:false,status:'complete',url:'https://example.test/second?q=1#part'},{id:11,windowId:2,active:false,status:'complete',url:'https://example.test/first'}];
+ const result=await worker.send({type:'OPEN_REVIEW',reviewId:'saved-review',targetTabId:9});
+ assert.equal(result.reusedTab,true);assert.equal(result.tabId,10);assert.equal(result.windowId,1);assert.equal(worker.state.created.length,0);
+ assert.equal(worker.state.otherTabs.find(item=>item.id===9).url,'https://unrelated.test/');assert.equal(worker.state.updates.some(item=>item.url),false);
+ assert.equal(worker.state.messages.filter(item=>item.type==='REVEAL_COMMENT').at(-1).commentId,'second');
+});
+test('when no current-window tab matches exactly a new saved page opens without replacing a near-match or another window',async()=>{
+ const worker=await harness();worker.state.tab.url='https://example.test/second?q=1#different';worker.state.otherTabs=[{id:10,windowId:2,active:false,status:'complete',url:'https://example.test/first'}];
+ const result=await worker.send({type:'OPEN_REVIEW',reviewId:'saved-review',targetTabId:9,windowId:1});
+ assert.equal(result.reusedTab,false);assert.equal(worker.state.created.length,1);assert.equal(worker.state.created[0].url,'https://example.test/first');assert.equal(worker.state.created[0].windowId,1);
+ assert.equal(worker.state.otherTabs.find(item=>item.id===9).url,'https://example.test/second?q=1#different');assert.equal(worker.state.updates.some(item=>item.url),false);
+});
+test('an explicitly requested comment takes precedence over a launch tab on another recorded path',async()=>{
+ const worker=await harness();worker.state.otherTabs=[{id:10,windowId:1,status:'complete',active:false,url:'https://example.test/second?q=1#part'}];
+ const result=await worker.send({type:'OPEN_REVIEW',reviewId:'saved-review',commentId:'second',targetTabId:9});
+ assert.equal(result.tabId,10);assert.equal(result.reusedTab,true);assert.equal(worker.state.created.length,0);assert.equal(worker.state.updates.some(item=>item.url),false);
+ assert.equal(worker.state.messages.filter(item=>item.type==='REVEAL_COMMENT').at(-1).commentId,'second');
+});
+test('an empty review can attach to its production URL without inventing a selected comment',async()=>{
+ const review=saved();review.comments=[];const worker=await harness({review});const result=await worker.send({type:'OPEN_REVIEW',reviewId:review.id,targetTabId:9});
+ assert.equal(result.reusedTab,true);assert.equal(result.session.commentCount,0);assert.equal(worker.state.messages.some(item=>item.type==='REVEAL_COMMENT'),false);
+});
+test('tab reuse still checks permission before any focus, stop or stored-data mutation',async()=>{
+ const worker=await harness({allow:false});await assert.rejects(worker.send({type:'OPEN_REVIEW',reviewId:'saved-review',targetTabId:9}),/Allow Diffuse/);
+ assert.equal(worker.state.created.length,0);assert.equal(worker.state.updates.length,0);assert.equal(worker.getSession(),null);
+});
+
+test('permission denial identifies the actual matching page rather than the review production origin',async()=>{
+ const review=saved();review.comments[1].context.production.url='https://preview.example.test/second';
+ const worker=await harness({review,allow:false});worker.state.tab.url='https://unrelated.test/';worker.state.otherTabs=[{id:10,windowId:1,active:false,status:'complete',url:'https://preview.example.test/second'}];
+ const message={type:'OPEN_REVIEW',reviewId:review.id,targetTabId:9,windowId:1};
+ await assert.rejects(worker.send(message),error=>/Allow Diffuse/.test(error.message)&&error.pageUrl==='https://preview.example.test/second');
+ const listener=worker.chrome.runtime.onMessage.listeners[0];
+ const result=await new Promise(resolve=>listener({namespace:'diffuse',target:'worker',...message},{id:'test',url:'chrome-extension://test/report.html'},resolve));
+ assert.equal(result.ok,false);assert.equal(result.pageUrl,'https://preview.example.test/second');
+ assert.equal(worker.state.created.length,0);assert.equal(worker.state.updates.length,0);assert.equal(worker.getSession(),null);
 });

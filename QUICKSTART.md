@@ -99,7 +99,7 @@ New reviews ask for one actionable issue per finding. **Current** describes the 
 
 Open the **⋯ Review options** menu beside the review title and choose **Export review** to download a `.diffuse-review.json` file. It includes every saved comment across pages and viewports, the captured URLs and anchors, written fields, screenshots, recordings and accepted AI context. Account credentials and local session identifiers are excluded.
 
-The recipient chooses **Import review** in their notebook and selects that file. The import creates a separate saved review, preserving existing reviews. **Open review page** opens the saved URL and restores the comment pins. Chrome may first ask for access to that site. Clicking a comment in the sidebar returns to its captured URL and viewport, then reveals its location.
+Open the reviewed site, click Diffuse, then **Load review**. In the right sidebar, choose the shared review file or one of your saved reviews. Its comments appear directly on the page and in the sidebar. Diffuse reuses a matching open tab; if the page is not open, it opens the recorded URL. Imported reviews are saved separately without replacing existing reviews. Chrome may first ask for access to that site. Clicking a comment in the sidebar returns to its captured path and viewport, then reveals its location.
 
 The recipient needs access to the reviewed website. An export does not include the website itself, its login session, or unsaved application state. Local files and localhost addresses must also exist on their computer; original screenshot and recording evidence remains readable in the notebook even when the page is unavailable. A live Diff reference can be connected again separately.
 
@@ -150,4 +150,4 @@ Tap **C**, release it, then click on the reviewed page to start a comment. The e
 
 **Asana** and **ClickUp** integrations are planned. Jira handoff is included in 0.7.0 with the rollout limits above.
 
-To open a shared review, click **Load review** below **Start review** in the Diffuse popup, then **Choose review file**. You can also browse your saved reviews from the loader.
+To open a shared review, click **Load review** in the Diffuse popup, then **Choose review file** in the right sidebar. Choose a saved review there to resume it. The website stays visible while its comments load.

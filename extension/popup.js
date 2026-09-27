@@ -11,7 +11,7 @@ function pageLocation(url){return pageHelpers?.pageLocation(url)||'Page unavaila
 function setPageDetails(titleElement,urlElement,page,fallback){titleElement.textContent=page?.title||fallback;titleElement.title=page?.title||fallback;urlElement.textContent=pageLocation(page?.url);urlElement.title=page?.url||'';}
 function showError(message){ui.feedback.textContent=message||'';ui.feedback.hidden=!message;if(message)ui.feedback.focus();}
 function describeError(error){const message=error?.message||String(error||'Something went wrong.');return /receiving end does not exist|could not establish connection|message port closed|extension context invalidated/i.test(message)?'Diffuse couldn’t connect. Close and reopen it to retry.':message;}
-async function sendMessage(type,payload={}){const response=await chrome.runtime.sendMessage({namespace:'diffuse',target:'worker',type,...payload});if(!response||response.ok!==true)throw new Error(response?.error||'Diffuse didn’t respond. Reopen it and try again.');return response;}
+async function sendMessage(type,payload={}){const response=await chrome.runtime.sendMessage({namespace:'diffuse',target:'worker',type,...payload});if(!response||response.ok!==true)throw Object.assign(new Error(response?.error||'Diffuse didn’t respond. Reopen it and try again.'),{code:response?.code,pageUrl:response?.pageUrl});return response;}
 function openSidebar(windowId=(session?reviewWindowId:null)??sourceTab?.windowId){
   if(!Number.isInteger(windowId)||!chrome.sidePanel?.open)throw new Error('The review sidebar requires Chrome 116 or later. Open Diffuse from a Chrome page to continue.');
   // Keep this call in the original click/submit stack: Chrome requires a user gesture.
@@ -52,7 +52,20 @@ ui['comparison-form'].addEventListener('submit',async event=>{
 ui['open-file-settings'].addEventListener('click',async()=>{try{await chrome.tabs.create({url:pageHelpers.extensionSettingsUrl(chrome.runtime.id)});if(!isSidePanel)window.close();}catch(error){showError(describeError(error));}});
 ui['refresh-file-access'].addEventListener('click',()=>loadTabs().then(renderSession).catch(error=>showError(describeError(error))));
 window.addEventListener('focus',()=>{if(pageHelpers&&!busy)loadTabs().then(renderSession).catch(()=>{});});
-for(const [id,type]of [['load-review','OPEN_REPORT'],['review-reports','OPEN_REPORT'],['settings','OPEN_SETTINGS']])ui[id].addEventListener('click',async()=>{if(busy)return;showError('');setBusy(true);try{await sendMessage(type,id==='load-review'?{loadReview:true}:{});finishAction();}catch(error){showError(describeError(error));}finally{setBusy(false);}});
+for(const [id,type]of [['review-reports','OPEN_REPORT'],['settings','OPEN_SETTINGS']])ui[id].addEventListener('click',async()=>{if(busy)return;showError('');setBusy(true);try{await sendMessage(type);finishAction();}catch(error){showError(describeError(error));}finally{setBusy(false);}});
+ui['load-review'].addEventListener('click',async()=>{
+  if(busy)return;showError('');
+  if(isSidePanel){window.dispatchEvent(new CustomEvent('diffuse-load-review',{detail:{targetTabId:sourceTab?.id,windowId:sourceTab?.windowId}}));return;}
+  setBusy(true);
+  try{
+    const windowId=sourceTab?.windowId;
+    if(!Number.isInteger(windowId))throw new Error('Open Diffuse on the site you want to review.');
+    // Save the launch context before opening the drawer, which can close the popup.
+    const intent=chrome.storage.session.set({[`diffuseReviewLoader:${windowId}`]:{targetTabId:sourceTab.id,nonce:Date.now()}});
+    const drawer=openSidebar(windowId);
+    await Promise.all([intent,drawer]);finishAction();
+  }catch(error){showError(describeError(error));}finally{setBusy(false);}
+});
 ui['stop-comparison'].addEventListener('click',async()=>{if(busy)return;showError('');setBusy(true);try{await sendMessage('STOP_SESSION');session=null;await loadTabs();renderSession();window.dispatchEvent(new Event('diffuse-refresh'));}catch(error){showError(describeError(error));}finally{setBusy(false);}});
 for(const [id,type]of [['return-to-comparison','FOCUS_TARGET'],['enable-capture','ENABLE_EVIDENCE']])ui[id].addEventListener('click',async()=>{if(busy)return;showError('');setBusy(true);try{const drawer=isSidePanel?Promise.resolve():openSidebar();await Promise.all([drawer,sendMessage(type)]);finishAction();}catch(error){showError(describeError(error));}finally{setBusy(false);}});
 ui['open-side-panel']?.addEventListener('click',()=>{if(busy)return;try{openSidebar().then(()=>window.close(),error=>showError(describeError(error)));}catch(error){showError(describeError(error));}});

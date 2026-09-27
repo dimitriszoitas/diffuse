@@ -632,17 +632,42 @@ async function openSavedReview(message) {
   if (transitioning) throw new Error('Wait for the current review action to finish.');
   if (session) assertReferenceReady(session);
   const review = await reviews.getReview(message.reviewId);
-  const comment = message.commentId ? review.comments.find(item => item.id === message.commentId)
-    : review.comments.find(item => (item.context?.production?.url || item.selection?.context?.url) === review.productionUrl) || review.comments[0] || null;
-  if (message.commentId && !comment) throw new Error('This comment is no longer available.');
-  const url = comment ? savedCommentUrl(comment) : savedPageUrl(review.productionUrl || review.comments[0]?.context?.production?.url);
-  await assertPageAccess(url, chrome, 'Allow Diffuse to access this review’s site before opening it.');
+  const requestedComment = message.commentId ? review.comments.find(item => item.id === message.commentId) : null;
+  if (message.commentId && !requestedComment) throw new Error('This comment is no longer available.');
+  const defaultComment = requestedComment || review.comments.find(item => (item.context?.production?.url || item.selection?.context?.url) === review.productionUrl) || review.comments[0] || null;
+  const defaultUrl = defaultComment ? savedCommentUrl(defaultComment) : savedPageUrl(review.productionUrl);
+  const pageUrl = value => { try { return savedPageUrl(value); } catch { return null; } };
+  const matchingUrls = requestedComment ? new Set([defaultUrl]) : new Set([pageUrl(review.productionUrl), ...review.comments.map(item => {try {return savedCommentUrl(item);} catch {return null;}})].filter(Boolean));
+  const matches = tab => Number.isInteger(tab?.id) && matchingUrls.has(pageUrl(tab.url));
+  const suppliedTab = Number.isInteger(message.targetTabId) ? await chrome.tabs.get(message.targetTabId).catch(() => null) : null;
+  const windowId = Number.isInteger(message.windowId) ? message.windowId : suppliedTab?.windowId;
+  let candidate = matches(suppliedTab) ? suppliedTab : null;
+  if (!candidate) {
+    const tabs = await chrome.tabs.query(Number.isInteger(windowId) ? {windowId} : {currentWindow: true});
+    candidate = tabs.filter(matches).sort((a, b) => Number(Boolean(b.active)) - Number(Boolean(a.active)))[0] || null;
+  }
+  // A file chooser can stay open while the launch tab navigates. Recheck its
+  // URL before attaching, and never navigate an unrelated tab to the review.
+  if (candidate) {
+    const fresh = await chrome.tabs.get(candidate.id).catch(() => null);
+    candidate = matches(fresh) ? fresh : null;
+  }
+  const url = candidate ? savedPageUrl(candidate.url) : defaultUrl;
+  const comment = requestedComment || (candidate ? review.comments.find(item => {try {return savedCommentUrl(item) === url;} catch {return false;}}) || null : defaultComment);
+  try { await assertPageAccess(url, chrome, 'Allow Diffuse to access this review’s site before opening it.'); }
+  catch (error) { error.pageUrl = url; throw error; }
   if (transitioning) throw new Error('Wait for the current review action to finish.');
   if (session) assertReferenceReady(session);
   transitioning = true;
   try {
     await stopSession();
-    const tab = await chrome.tabs.create({url, active: true});
+    if (candidate) {
+      const fresh = await chrome.tabs.get(candidate.id).catch(() => null);
+      candidate = fresh && pageUrl(fresh.url) === url ? fresh : null;
+    }
+    const reusedTab = Boolean(candidate);
+    const tab = candidate || await chrome.tabs.create({url, active: true, ...(Number.isInteger(windowId) ? {windowId} : {})});
+    await focusTab(tab.id);
     const id = crypto.randomUUID();
     // The live session has its own identity. The stored review, comments and
     // evidence retain their original identity and are never copied or reset.
@@ -659,7 +684,7 @@ async function openSavedReview(message) {
     const navigationError = current.error;
     await setStatus('live', navigationError);
     await focusTab(tab.id);
-    return {ok: true, session: current, tabId: tab.id};
+    return {ok: true, session: current, tabId: tab.id, windowId: tab.windowId, reusedTab};
   } catch (error) {
     if (session?.reviewId === review.id) {session.status = 'error'; session.error = error.message; await publish().catch(() => {});}
     throw error;
@@ -1066,7 +1091,7 @@ async function handle(message, sender) {
     const section = message.type === 'OPEN_AI_SETTINGS' ? '#ai' : message.type === 'OPEN_JIRA_SETTINGS' ? '#jira' : '';
     await chrome.tabs.create({url: chrome.runtime.getURL('settings.html') + section}); return {ok: true};
   }
-  if (message.type === 'OPEN_REVIEW' && (isReport || isPopup || isPanel)) return openSavedReview(message);
+  if (message.type === 'OPEN_REVIEW' && sender.id === chrome.runtime.id && (isReport || isPopup || isPanel)) return openSavedReview(message);
   if (message.type === 'GET_AI_CONFIG' && (isAISettings || isPopup || isPanel || role === 'target')) return {ok: true, config: await readAISettings()};
   if (isAISettings && message.type === 'SAVE_AI_CONFIG') return {ok: true, config: await saveAISettings(message)};
   if (isAISettings && message.type === 'CLEAR_AI_KEY') return {ok: true, config: await clearAIKey()};
@@ -1386,7 +1411,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     } catch (error) { respond({ok: false, error: error.message}); }
     return true;
   }
-  handle(message, sender).then(respond, error => respond({ok: false, error: error.message, code: error.code}));
+  handle(message, sender).then(respond, error => respond({ok: false, error: error.message, code: error.code, ...(typeof error.pageUrl === 'string' && error.pageUrl.length <= 16384 && isReviewableUrl(error.pageUrl) ? {pageUrl: error.pageUrl} : {})}));
   return true;
 });
 
