@@ -22,7 +22,7 @@ let diffWindow = null;
 const referenceRequests = new Map();
 const viewportController = createViewportController({chromeApi: chrome, assertPageAccess,
   onOwnershipChanged: async tabs => {if(session){session.viewportDebuggerTabs=tabs;await persist();}},
-  onDetached: async () => {if(session){session.viewportPreset=null;session.viewportDebuggerTabs=[];session.viewportNotice='Viewport control ended. Both pages are back at their native size.';await publish();}}
+  onDetached: async () => {if(session){session.viewportPreset=null;delete session.viewportReplay;session.viewportDebuggerTabs=[];session.viewportNotice='Viewport control ended. Both pages are back at their native size.';await publish();}}
 });
 const PANEL_ACTIONS = new Set(['selectElement', 'selectArea', 'cancelSelection', 'openAi', 'closeAi', 'setAiFields', 'runAi', 'aiSuggestion', 'acceptAllAi', 'showAllAi', 'setCommentFields', 'evidence', 'recordComment', 'saveComment', 'cancelComment', 'record', 'stopRecording', 'retryCapture', 'settings', 'showPin', 'focusTarget', 'focusSource', 'stop', 'reconnect', 'openReport', 'openSettings', 'openDiff', 'recoverPage']);
 const ready = chrome.storage.session.get('comparison').then(async data => {
@@ -103,6 +103,7 @@ async function panelRequest(message, sender) {
     return message.type === 'PANEL_STATE' ? {ok: true, session: current, state} : {ok: false, code: state.code, error: state.message, session: current, state};
   }
   if (message.type === 'PANEL_COMMAND' && message.action === 'openDiff') return openDiff(current);
+  if (message.type === 'PANEL_COMMAND' && message.action === 'showPin') return navigateToComment(current, message.id);
   if (message.type === 'PANEL_COMMAND' && message.action === 'recoverPage') {
     if (transitioning || evidenceBusy || recordingStart || current.recording || current.aiRunning) throw new Error('Finish the capture or AI review before reconnecting.');
     // Recovery restores the existing evidence draft. It never repeats Save.
@@ -452,7 +453,7 @@ async function initializeTab(role) {
   current[role] = {title: tab.title || tab.url, url: tab.url};
   current[role === 'source' ? 'sourceViewport' : 'targetViewport'] = response.viewport;
   await publish();
-  if (role === 'target') { await syncPanelDocking({force: true}); await deliverPendingDraft(current); }
+  if (role === 'target') { await syncPanelDocking({force: true}); await deliverPendingDraft(current); await revealPendingComment(current); }
 }
 
 async function connectTarget() {
@@ -528,6 +529,143 @@ async function startAudit(message) {
   finally { transitioning = false; }
 }
 
+function savedPageUrl(value) {
+  if (typeof value !== 'string' || !isReviewableUrl(value)) throw new Error('This review has no supported page URL. Open a website or local HTML file.');
+  const url = new URL(value);
+  if (url.username || url.password) throw new Error('Review URLs must not contain a username or password.');
+  return url.href;
+}
+
+function savedCommentUrl(comment) {
+  return savedPageUrl(comment?.context?.production?.url || comment?.selection?.context?.url);
+}
+
+function savedCommentViewport(comment) {
+  const context = comment?.context?.production || comment?.selection?.context;
+  const key = context?.viewportProfile?.key;
+  if (['desktop', 'laptop', 'tablet', 'phone'].includes(key)) return key;
+  const width = context?.viewport?.width;
+  return !Number.isFinite(width) || width <= 0 ? null : width >= 1440 ? 'desktop' : width >= 1280 ? 'laptop' : width >= 768 ? 'tablet' : 'phone';
+}
+
+async function waitForReviewPage(tabId) {
+  // Query after registering the listener so a fast local page cannot finish in
+  // the gap. Same-document path/hash navigation is already complete here.
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const finish = (error, tab) => {
+      if (done) return;
+      done = true; clearTimeout(timer); chrome.tabs.onUpdated.removeListener(updated);
+      if (error) reject(error); else resolve(tab);
+    };
+    const updated = (id, change, tab) => {if (id === tabId && change.status === 'complete') finish(null, tab);};
+    const timer = setTimeout(() => finish(new Error('The review page is still loading. Return to it and click the comment again.')), 20000);
+    chrome.tabs.onUpdated.addListener(updated);
+    chrome.tabs.get(tabId).then(tab => {if (tab.status !== 'loading') finish(null, tab);}, error => finish(error));
+  });
+}
+
+async function revealPendingComment(current = session) {
+  if (!current?.pendingCommentId || session !== current) return;
+  const comment = current.comments.find(item => item.id === current.pendingCommentId);
+  if (!comment) {delete current.pendingCommentId; await persist(); return;}
+  const tab = await chrome.tabs.get(current.targetTabId);
+  if (session !== current) return;
+  if (savedPageUrl(tab.url) !== savedCommentUrl(comment)) {
+    current.error = 'This page redirected away from the saved comment. Sign in or open the recorded page, then select the comment again.';
+    await publish(); return;
+  }
+  const desired = savedCommentViewport(comment);
+  const recordedViewport = (comment.context?.production || comment.selection?.context)?.viewport;
+  if (desired && recordedViewport?.width && recordedViewport?.height) {
+    const context = await tabMessage(current.targetTabId, 'GET_CONTEXT', {sessionId: current.id});
+    const actual = context?.context?.viewport || current.targetViewport;
+    const exactSize = ['width', 'height'].every(key => Math.abs((actual?.[key] || 0) - recordedViewport[key]) < 2);
+    const activeGroup = current.viewportPreset || context?.context?.viewportProfile?.key || (actual?.width >= 1440 ? 'desktop' : actual?.width >= 1280 ? 'laptop' : actual?.width >= 768 ? 'tablet' : 'phone');
+    if (!exactSize || activeGroup !== desired) {
+      current.viewportPreset = await viewportController.applySaved(current, desired, recordedViewport);
+      current.viewportReplay = {width: Math.round(recordedViewport.width), height: Math.round(recordedViewport.height)};
+      current.viewportDebuggerTabs = viewportController.ownedTabIds();
+      current.targetViewport = (await tabMessage(current.targetTabId, 'GET_CONTEXT', {sessionId: current.id}))?.context?.viewport || current.targetViewport;
+      await publish();
+    }
+  }
+  const result = await tabMessage(current.targetTabId, 'REVEAL_COMMENT', {sessionId: current.id, commentId: comment.id});
+  if (session !== current) return;
+  if (!result?.ok) throw new Error(result?.error || 'The comment could not be shown. Select it again after the page finishes loading.');
+  delete current.pendingCommentId;
+  current.error = result.found === false ? 'The saved element is not currently visible. Reopen its recorded state, or see its captured evidence in Review reports.' : null;
+  await publish();
+}
+
+async function navigateToComment(current, commentId) {
+  assertReferenceReady(current);
+  await refreshComments(current);
+  const comment = current.comments.find(item => item.id === commentId);
+  if (!comment) throw new Error('This comment is no longer available.');
+  const url = savedCommentUrl(comment);
+  await assertPageAccess(url, chrome, 'Allow Diffuse to access the comment’s recorded site before opening it.');
+  assertReferenceReady(current);
+  transitioning = true;
+  try {
+    current.pendingCommentId = comment.id;
+    await persist();
+    const tab = await chrome.tabs.get(current.targetTabId);
+    if (savedPageUrl(tab.url) !== url) {
+      await setStatus('reconnecting');
+      await chrome.tabs.update(current.targetTabId, {url, active: true});
+      await waitForReviewPage(current.targetTabId);
+      if (session !== current) throw new Error('This review changed while the page was opening.');
+      await initializeTab('target');
+      const navigationError = current.error;
+      await connectTarget();
+      if (navigationError) await setStatus(current.status, navigationError);
+    } else {
+      await revealPendingComment(current);
+    }
+    await focusTab(current.targetTabId);
+    return {ok: true, session: current, navigating: false};
+  } finally {transitioning = false; notifyPanels();}
+}
+
+async function openSavedReview(message) {
+  if (transitioning) throw new Error('Wait for the current review action to finish.');
+  if (session) assertReferenceReady(session);
+  const review = await reviews.getReview(message.reviewId);
+  const comment = message.commentId ? review.comments.find(item => item.id === message.commentId)
+    : review.comments.find(item => (item.context?.production?.url || item.selection?.context?.url) === review.productionUrl) || review.comments[0] || null;
+  if (message.commentId && !comment) throw new Error('This comment is no longer available.');
+  const url = comment ? savedCommentUrl(comment) : savedPageUrl(review.productionUrl || review.comments[0]?.context?.production?.url);
+  await assertPageAccess(url, chrome, 'Allow Diffuse to access this review’s site before opening it.');
+  if (transitioning) throw new Error('Wait for the current review action to finish.');
+  if (session) assertReferenceReady(session);
+  transitioning = true;
+  try {
+    await stopSession();
+    const tab = await chrome.tabs.create({url, active: true});
+    const id = crypto.randomUUID();
+    // The live session has its own identity. The stored review, comments and
+    // evidence retain their original identity and are never copied or reset.
+    session = {id, reviewId: review.id, mode: 'audit', targetTabId: tab.id, target: {url, title: review.title}, comments: [], commentCount: 0,
+      status: 'starting', captureReady: false, recording: null, settings: {...DEFAULT_SETTINGS, hidden: true, linked: false}, startedAt: review.createdAt,
+      ...(comment ? {pendingCommentId: comment.id} : {})};
+    const current = session;
+    await persist();
+    await waitForReviewPage(tab.id);
+    await ensureOffscreen();
+    await mediaMessage('START_AUDIT', {sessionId: id});
+    await initializeTab('target');
+    if (session !== current) throw new Error('This review changed while opening.');
+    const navigationError = current.error;
+    await setStatus('live', navigationError);
+    await focusTab(tab.id);
+    return {ok: true, session: current, tabId: tab.id};
+  } catch (error) {
+    if (session?.reviewId === review.id) {session.status = 'error'; session.error = error.message; await publish().catch(() => {});}
+    throw error;
+  } finally {transitioning = false; notifyPanels();}
+}
+
 function referenceBusyReason(current = session, {ownTransition = false} = {}) {
   if (!current || session !== current) return 'This review is no longer active.';
   if (transitioning && !ownTransition) return 'Finish choosing the reference before changing it again.';
@@ -557,6 +695,7 @@ async function setViewportPreset(message, sender) {
   try{
     await publish();
     current.viewportPreset=await viewportController.apply(current,message.preset??null);
+    delete current.viewportReplay;
     current.viewportDebuggerTabs=viewportController.ownedTabIds();
     current.viewportNotice=current.viewportPreset?'Responsive layout size; browser identity and touch behavior are unchanged.':null;
     // Read the actual dimensions, including any browser policy constraints.
@@ -661,7 +800,7 @@ async function attachReference(message) {
     next = nextReferenceSession(current, source);
     next.referenceHandle = prepared.expectedHandle;
     next.sourceViewport = prepared.viewport;
-    if(current.viewportPreset){await viewportController.apply(next,current.viewportPreset);next.viewportDebuggerTabs=viewportController.ownedTabIds();}
+    if(current.viewportPreset){await (current.viewportReplay ? viewportController.applySaved(next,current.viewportPreset,current.viewportReplay) : viewportController.apply(next,current.viewportPreset));next.viewportDebuggerTabs=viewportController.ownedTabIds();}
     const result = await mediaMessage('COMMIT_REFERENCE', {sessionId: current.id, requestId: message.requestId, newSessionId: next.id});
     committed = true;
     if (session !== current) throw new Error('This review changed while attaching its reference.');
@@ -901,9 +1040,10 @@ async function handle(message, sender) {
   await ready;
   const isPopup = sender.url === chrome.runtime.getURL('popup.html');
   const isPanel = isSidePanel(sender);
-  const isReport = sender.url?.split('?')[0] === chrome.runtime.getURL('report.html');
+  const isReport = sender.url?.split(/[?#]/)[0] === chrome.runtime.getURL('report.html');
   const isMedia = sender.url === chrome.runtime.getURL('offscreen.html');
-  const isAISettings = sender.url === chrome.runtime.getURL('ai-settings.html');
+  const isSettings = sender.url?.split(/[?#]/)[0] === chrome.runtime.getURL('settings.html');
+  const isAISettings = isSettings || sender.url?.split(/[?#]/)[0] === chrome.runtime.getURL('ai-settings.html');
   const role = session && Number.isInteger(sender.tab?.id) ? sender.tab.id === session.targetTabId ? 'target' : sender.tab.id === session.sourceTabId ? 'source' : null : null;
   const isDiff = sender.id === chrome.runtime.id && sender.url?.split('?')[0] === chrome.runtime.getURL('diff.html');
   if (isDiff) {
@@ -922,7 +1062,11 @@ async function handle(message, sender) {
   if (message.type === 'OPEN_DIFF' && (isPopup || (role === 'target' && message.sessionId === session.id))) return openDiff();
   if (message.type === 'PANEL_STATE' || message.type === 'PANEL_COMMAND') return panelRequest(message, sender);
   if (message.type === 'VIEWPORT_PRESET') return setViewportPreset(message,sender);
-  if (message.type === 'OPEN_AI_SETTINGS' && (isPopup || isPanel || isReport || role === 'target')) { await chrome.tabs.create({url: chrome.runtime.getURL('ai-settings.html')}); return {ok: true}; }
+  if (['OPEN_SETTINGS', 'OPEN_AI_SETTINGS', 'OPEN_JIRA_SETTINGS'].includes(message.type) && (isPopup || isPanel || isReport || isSettings || role === 'target')) {
+    const section = message.type === 'OPEN_AI_SETTINGS' ? '#ai' : message.type === 'OPEN_JIRA_SETTINGS' ? '#jira' : '';
+    await chrome.tabs.create({url: chrome.runtime.getURL('settings.html') + section}); return {ok: true};
+  }
+  if (message.type === 'OPEN_REVIEW' && (isReport || isPopup || isPanel)) return openSavedReview(message);
   if (message.type === 'GET_AI_CONFIG' && (isAISettings || isPopup || isPanel || role === 'target')) return {ok: true, config: await readAISettings()};
   if (isAISettings && message.type === 'SAVE_AI_CONFIG') return {ok: true, config: await saveAISettings(message)};
   if (isAISettings && message.type === 'CLEAR_AI_KEY') return {ok: true, config: await clearAIKey()};
@@ -1002,6 +1146,9 @@ async function handle(message, sender) {
       await publish();
       return {ok: true, review: {id: saved.review.id, count: saved.review.count}};
     }
+    case 'SHOW_COMMENT':
+      if (role !== 'target' || sender.frameId !== 0) throw new Error('Open comments from the reviewed page.');
+      return navigateToComment(session, message.commentId);
     case 'GET_COMMENT': {
       if (role !== 'target') throw new Error('Open the comment on the audited page.');
       const review = await reviews.getReview(session.reviewId);
@@ -1186,7 +1333,7 @@ chrome.tabs.onUpdated.addListener((tabId, change) => {
     if (change.status === 'loading') await setStatus('reconnecting');
     if (change.status === 'complete') {
       await initializeTab(role);
-      if (role === 'target') await connectTarget();
+      if (role === 'target') {const navigationError = session?.error; await connectTarget(); if (navigationError && session) await setStatus(session.status, navigationError);}
       else {
         await mediaMessage('RESIZE_CAPTURE', {sessionId: session.id, viewport: session.sourceViewport});
         await softTabMessage(session.targetTabId, 'SYNC_NOW', {sessionId: session.id});

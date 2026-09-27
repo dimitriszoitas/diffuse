@@ -7,3 +7,24 @@
 .review-visibility-action{min-width:44px;min-height:44px;padding:8px 6px;margin-top:4px;border:1px solid transparent;border-radius:8px;background:transparent;color:#e4dbf3;font-size:14px;line-height:1.4}
 .review-visibility-action:hover{border-color:#a897be;background:#392c4d}
 @media(max-width:900px){.review-visibility-tabs,.hidden-reviews-hint{grid-column:1/-1}.review-visibility-tabs{max-width:320px;margin:0}.review-row{flex:0 0 290px;max-width:calc(100vw - 36px);margin:0}.review-row .review-item{min-height:80px}.hidden-reviews-hint{margin:0}}
+
+/* The notebook rail can make room for the evidence without hiding its way back. */
+.sidebar-top{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.sidebar-top .brand{padding:0;flex:1;min-width:0;font-size:24px}
+.sidebar-top .brand-tag{display:none}
+.sidebar-toggle{display:grid;place-items:center;width:36px;height:36px;flex:0 0 36px;border:1px solid #a897be;border-radius:8px;background:transparent;color:#e4dbf3}
+.sidebar-toggle svg,.sidebar-settings svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.sidebar-settings{display:inline-flex;gap:8px;text-decoration:none}
+.sidebar.is-collapsed{width:64px;padding:18px 14px}
+.sidebar.is-collapsed>:not(.sidebar-top):not(.sidebar-footer){display:none}
+.sidebar.is-collapsed .brand,.sidebar.is-collapsed .sidebar-footer>:not(.sidebar-settings),.sidebar.is-collapsed .sidebar-settings span{display:none}
+.sidebar.is-collapsed .sidebar-footer{margin-top:auto;border:0;padding:0}
+.sidebar.is-collapsed .sidebar-settings{min-width:36px;min-height:36px;padding:7px;margin:0}
+.sidebar.is-collapsed .sidebar-toggle svg{transform:rotate(180deg)}
+.review-sidebar-collapsed .workspace{margin-left:64px}
+.workspace-utilities{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.export-toolbar .export-actions{gap:8px}
+@media(max-width:900px){.sidebar-top{grid-column:1}.sidebar.is-collapsed{width:100%;padding:10px 18px;display:flex;flex-direction:row;justify-content:space-between}.sidebar.is-collapsed .sidebar-footer{margin:0}.review-sidebar-collapsed .workspace{margin-left:0}.workspace-utilities{gap:8px}}
+@media(max-width:640px){.workspace-utilities{width:100%;justify-content:space-between}.workspace-utilities .muted{width:auto}.sidebar-top .brand{font-size:22px}.export-actions #export-review,.export-actions #open-review{grid-column:auto}}
+
+.portable-jira-links{display:flex;flex-wrap:wrap;gap:8px 14px;margin:10px 0 0;font-size:14px;font-weight:600}

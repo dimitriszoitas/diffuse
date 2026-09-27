@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Settings · Diffuse</title>
+  <link rel="stylesheet" href="ai-settings.css"><link rel="stylesheet" href="jira-settings.css"><link rel="stylesheet" href="settings.css"><link rel="stylesheet" href="ui-chrome.css">
+  <script src="ai-settings.js" type="module"></script><script src="jira-settings.js" type="module"></script><script src="settings.js" type="module"></script><script src="select-controls.js" defer></script>
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="report.html"><span class="brand-mark" aria-hidden="true"><i></i><i></i></span>Diffuse</a><a href="report.html">Back to reviews <span aria-hidden="true">↗</span></a></header>
+  <main>
+    <section class="intro"><h1>Settings</h1><p>Your AI review, Jira accounts, and browser access in one place.</p></section>
+    <div class="settings-layout">
+      <nav class="settings-nav" aria-label="Settings sections"><a href="#ai">AI review</a><a href="#jira">Jira connections</a><a href="#browser">Browser &amp; shortcuts</a></nav>
+      <div class="settings-content">
+        <section id="ai" class="settings-section" aria-labelledby="ai-heading"><div class="settings-section-heading"><h2 id="ai-heading">AI review</h2><p>Use your Anthropic account to suggest improvements. You decide which findings become comments.</p></div>
+      <form id="ai-settings-form" aria-busy="true">
+        <div class="section-heading"><h2>Claude connection</h2><span class="key-status" id="key-status" role="status">Loading…</span></div>
+        <label for="api-key">Anthropic API key</label>
+        <div class="password-field"><input id="api-key" name="api-key" type="password" autocomplete="off" spellcheck="false" maxlength="512" placeholder="Paste your API key" aria-describedby="key-help"><button id="toggle-key" type="button" aria-label="Show entered API key" aria-controls="api-key" aria-pressed="false">Show</button></div>
+        <p class="help" id="key-help">Your saved key is never displayed. Leave this blank to keep it.</p>
+        <label class="check-row"><input id="remember-key" type="checkbox" aria-labelledby="remember-label" aria-describedby="remember-help"><span><span id="remember-label">Remember my key on this device</span><small id="remember-help">Otherwise it is kept only until Chrome closes. Remembered keys are stored in this Chrome profile, not in a password vault.</small></span></label>
+        <div class="divider"></div>
+        <label for="model">Claude model</label>
+        <input id="model" type="text" spellcheck="false" autocomplete="off" maxlength="120" value="claude-sonnet-5" required aria-describedby="model-help">
+        <p class="help" id="model-help">Use an Anthropic model ID with vision and structured output support. <a href="https://platform.claude.com/docs/en/models/overview" target="_blank" rel="noopener noreferrer">See available models ↗</a></p>
+        <div class="range-heading"><label for="threshold">Minimum issue size</label><output id="threshold-value" for="threshold">35 / 100</output></div>
+        <input id="threshold" type="range" min="0" max="100" step="1" value="35" aria-valuetext="35 out of 100" aria-describedby="threshold-help">
+        <p class="help" id="threshold-help">0 shows all findings. Higher numbers hide smaller differences; 90 shows only the largest issues. This is a display filter, not review accuracy or confidence.</p>
+        <div id="ai-feedback" role="status" aria-live="polite" tabindex="-1" hidden></div>
+        <div class="actions"><button id="save" class="primary" type="submit" disabled>Save settings <span aria-hidden="true">↗</span></button><button id="clear-key" class="text-button" type="button" disabled>Remove key</button></div>
+      </form>
+
+          <p class="section-note">AI review sends captured screenshots and your instructions to Anthropic only when you run it. Usage is billed to your Anthropic account. Your key is never included in reviews or exports.</p>
+        </section>
+        <section id="jira" class="settings-section" aria-labelledby="jira-heading"><div class="settings-section-heading"><h2 id="jira-heading">Jira connections</h2><p>Keep your personal and work accounts separate. Choose the account, site, and project when sending a review.</p></div>
+      <section class="connections" aria-labelledby="connections-heading" aria-busy="true" id="connections-section">
+        <div class="section-heading"><h2 id="connections-heading">Connected accounts</h2><span class="status" id="connection-count">Loading…</span></div>
+        <div id="jira-feedback" role="status" aria-live="polite" tabindex="-1" hidden></div>
+        <div id="account-list"></div>
+        <p class="empty-state" id="empty-state" hidden>No accounts connected yet. Sign in to Atlassian and choose the Jira site you want Diffuse to access.</p>
+        <button class="primary" id="connect" type="button" disabled>Connect Jira <span aria-hidden="true">↗</span></button>
+        <p class="help">Atlassian opens in a separate sign-in window. To add a different account, switch accounts there before approving access.</p>
+      </section>
+
+          <details class="connection-details"><summary>Connection details</summary><div class="installation"><label for="installation-id">Diffuse installation ID</label><div class="copy-field"><input id="installation-id" type="text" readonly spellcheck="false" aria-describedby="installation-help"><button id="copy-installation" type="button" disabled>Copy ID</button></div><p class="help" id="installation-help">This is an installation identifier, not a password or API key.</p></div></details>
+          <p class="section-note">Connecting an account does not send any comments or evidence. Review your tickets before creating them.</p>
+        </section>
+        <section id="browser" class="settings-section" aria-labelledby="browser-heading"><div class="settings-section-heading"><h2 id="browser-heading">Browser &amp; shortcuts</h2><p>Control access to local pages and keep the comment shortcuts nearby.</p></div>
+          <div class="settings-card"><div class="section-heading"><h3>Local HTML files</h3><span class="status" id="file-access-status" role="status">Checking…</span></div><p class="help">To review HTML files on your computer, enable “Allow access to file URLs” in Chrome’s extension settings.</p><div class="actions"><button id="browser-settings" type="button">Manage browser access <span aria-hidden="true">↗</span></button><button id="check-access" type="button">Check again</button></div><p id="browser-feedback" role="status" hidden></p></div>
+          <div class="settings-card"><h3>Comment shortcuts</h3><dl class="shortcut-list"><div><dt><kbd>C</kbd></dt><dd>Select an element and leave a comment.</dd></div><div><dt><kbd>C</kbd> + mouse drag</dt><dd>Select an area and leave a comment.</dd></div><div><dt><kbd>Esc</kbd></dt><dd>Cancel the current selection.</dd></div></dl><p class="help">Use these on the reviewed page. Shortcuts stay inactive while you type in a field.</p></div>
+        </section>
+      </div>
+    </div>
+    <footer><span>Diffuse</span><span>Your keys and account connections stay separate from shared review files.</span></footer>
+  </main>
+</body>
+</html>

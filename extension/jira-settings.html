@@ -16,7 +16,7 @@
     <div class="layout">
       <section class="connections" aria-labelledby="connections-heading" aria-busy="true" id="connections-section">
         <div class="section-heading"><h2 id="connections-heading">Connected accounts</h2><span class="status" id="connection-count">Loading…</span></div>
-        <div id="feedback" role="status" aria-live="polite" tabindex="-1" hidden></div>
+        <div id="jira-feedback" role="status" aria-live="polite" tabindex="-1" hidden></div>
         <div id="account-list"></div>
         <p class="empty-state" id="empty-state" hidden>No accounts connected yet. Sign in to Atlassian and choose the Jira site you want Diffuse to access.</p>
         <button class="primary" id="connect" type="button" disabled>Connect Jira <span aria-hidden="true">↗</span></button>
@@ -30,7 +30,7 @@
       </aside>
     </div>
     <section class="setup" aria-labelledby="setup-heading"><div><h2 id="setup-heading">Preview access</h2><p>Sign in with the account that owns Diffuse’s Atlassian app and has access to a Jira site. Other accounts can connect after app sharing is enabled. This installation ID identifies your copy of Diffuse for sign-in setup.</p></div><div class="installation"><label for="installation-id">Diffuse installation ID</label><div class="copy-field"><input id="installation-id" type="text" readonly spellcheck="false" aria-describedby="installation-help"><button id="copy-installation" type="button" disabled>Copy ID</button></div><p class="help" id="installation-help">This is an installation identifier, not a password or API key.</p></div></section>
-    <footer><span>FROM PROTOTYPE TO PRODUCTION</span><a href="ai-settings.html">AI settings <span aria-hidden="true">↗</span></a></footer>
+    <footer><span>FROM PROTOTYPE TO PRODUCTION</span><a href="settings.html#ai">AI settings <span aria-hidden="true">↗</span></a></footer>
   </main>
 </body>
 </html>

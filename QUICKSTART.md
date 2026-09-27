@@ -1,4 +1,4 @@
-# Try Diffuse 0.7.4
+# Try Diffuse 0.8.0
 
 Compare a live prototype over production or audit one page. Leave pinned comments on elements or areas, record a short silent interaction, and copy the review for your engineering team. Claude can suggest findings when you connect your own Anthropic API key.
 
@@ -6,7 +6,7 @@ Compare a live prototype over production or audit one page. Leave pinned comment
 
 For a first installation:
 
-1. Unzip **Diffuse-0.7.4.zip**. Keep the resulting **Diffuse** folder somewhere permanent.
+1. Unzip **Diffuse-0.8.0.zip**. Keep the resulting **Diffuse** folder somewhere permanent.
 2. In your normal Chrome browser, open `chrome://extensions`.
 3. Turn on **Developer mode**, then click **Load unpacked** and choose that **Diffuse** folder.
 4. Pin **Diffuse — Live design comparison** using Chrome’s extensions menu.
@@ -19,7 +19,7 @@ You do not need to sign in to a special test browser or share a password with Di
 
 1. Open the page you want to review in Chrome.
 2. Click the Diffuse extension icon, then **Start review**. Allow access to this page if requested.
-3. Use the side drawer to select an element or area, leave a comment, record an interaction, or request an AI review.
+3. Press **C** over the page to leave a comment, or hold **C** and drag to select an area. Use the side drawer for recording, AI review and reports.
 
 There is no floating toolbar. If the sidebar is closed, click the Diffuse extension icon and **Open review sidebar** to return to the controls.
 
@@ -61,7 +61,7 @@ Chrome asks for the updated extension's debugging permission and shows a notice 
 
 Starting a review from the real Chrome toolbar grants capture for that page. If Chrome needs access again—for example after starting from a persistent drawer on a newly selected tab—click the actual Diffuse icon on the reviewed page, then **Enable capture & return**. Your draft stays available.
 
-1. Click **Comment**, hover to highlight an element, and click to select it. Or choose **Area · C** and drag a dotted rectangle. You can also **hold C + left-click-drag** on the page; this shortcut is ignored while typing in editable inputs. Escape cancels.
+1. Press **C** over the page to select an element for a comment. For an area, hold **C + left-click-drag** to draw a rectangle. Shortcuts are ignored while typing in editable inputs; Escape cancels.
 2. Diffuse captures evidence before opening the form: both screens in comparison mode, or the one page in audit mode. Write your observation. **Title and expected result are optional**; an omitted title uses a short excerpt from your observation.
 3. Under **Attach evidence**, keep **Screenshot** or choose **Short recording**. Your written text and selected element or region stay attached when recording.
 4. Check the component name, label the state, choose a category and severity, and save. Categories have visible labels and distinct colors: **Design mismatch — purple**, **UX issue — amber**, and **Copy change — blue**. Comparison defaults to Design mismatch; audit defaults to UX issue.
@@ -82,7 +82,7 @@ The drawer’s **Record page** control is also available. It captures starting s
 
 ## Optional Claude review
 
-1. Open **AI settings** from the extension popup. Add your **Anthropic API key**, choose a supported Claude model, and save. The default keeps your key for the Chrome session only; you may need to enter it again after reloading the extension. **Remember my key on this device** persists it in this Chrome profile, not an encrypted password vault. **Remove key** clears it.
+1. Open **Settings → AI review** from the bottom of the sidebar. Add your **Anthropic API key**, choose a supported Claude model, and save. The default keeps your key for the Chrome session only; you may need to enter it again after reloading the extension. **Remember my key on this device** persists it in this Chrome profile, not an encrypted password vault. **Remove key** clears it.
 2. On your page, open **AI review**, add optional instructions, and set the minimum issue size. Reopen the panel after changing AI settings.
 3. Click **Run AI review**. This sends the current screenshot—or both screenshots in comparison mode—and your instructions **directly to Anthropic**. API charges apply to your account. Opening the panel does not send a request.
 4. Review pending suggestions. **Show area** previews their approximate bounds. Choose **Accept comment** to add one to your saved review, or **Dismiss**. Nothing is saved as a comment automatically.
@@ -92,6 +92,16 @@ The threshold is **0–100**, default **35**. Lower includes smaller findings; h
 Claude sees the captured screen, not hidden states or every interaction. A one-page audit has no prototype baseline and offers possible UX/copy improvements. AI errors distinguish key/model access, API credit, limits, and request problems; an HTTP status or request ID is included when available. Automated review-flow checks use local response fixtures without spending API credits.
 
 New reviews ask for one actionable issue per finding. **Current** describes the observed result; **Change to** explains the location, concrete correction, reason and a visible check. The model is instructed to quote readable before/after copy and to identify unavailable details instead of inventing measurements. The report leads with focused evidence and lets you enlarge it; a prototype close-up appears only when its area was independently identified. Full screenshots remain available under **Full screenshots**. Existing saved wording is preserved; starting a new AI review is required to generate new explanations.
+
+## Share a review with another Diffuse user
+
+Choose **Export review** in the notebook to download a `.diffuse-review.json` file. It includes every saved comment across pages and viewports, the captured URLs and anchors, written fields, screenshots, recordings and accepted AI context. Account credentials and local session identifiers are excluded.
+
+The recipient chooses **Import review** in their notebook and selects that file. The import creates a separate saved review, preserving existing reviews. **Open review page** opens the saved URL and restores the comment pins. Chrome may first ask for access to that site. Clicking a comment in the sidebar returns to its captured URL and viewport, then reveals its location.
+
+The recipient needs access to the reviewed website. An export does not include the website itself, its login session, or unsaved application state. Local files and localhost addresses must also exist on their computer; original screenshot and recording evidence remains readable in the notebook even when the page is unavailable. A live Diff reference can be connected again separately.
+
+The notebook sidebar can be collapsed and expanded using its sidebar icon. **Settings** at the bottom of the sidebar brings AI configuration, Jira accounts and page-access information together.
 
 ## Copy or download your review
 
@@ -103,13 +113,13 @@ Open **Review reports** in the drawer or extension popup. Earlier saved reviews 
 
 For a single accepted AI finding, expand **Suggested AI prompt** and choose **Copy AI prompt**. The same prompt appears in its Jira description, alongside formatted sections and numbered steps. Jira evidence remains in attachments.
 
-Comments and evidence stay locally in this Chrome profile across comparison sessions. Reload the same installed folder when upgrading. Download HTML when you want a portable copy.
+Comments and evidence stay locally in this Chrome profile across comparison sessions. Reload the same installed folder when upgrading. Use Export review when another Diffuse user needs to load the review and its page pins.
 
 Reports contain manual comments and accepted AI comments. Pending suggestions and your configured API key are never exported.
 
 ## Send one or several observations to Jira
 
-1. Open **Jira connections** and select **Connect Jira**. Sign in with the Atlassian account you want to use. Jira does not use your Anthropic key.
+1. Open **Settings → Jira connections** and select **Connect Jira**. Sign in with the Atlassian account you want to use. Jira does not use your Anthropic key.
 2. In a saved review, click **Send to Jira** on one observation. For several, check **Select for Jira**, then **Send selected to Jira**. The selected count includes any items hidden by a category filter.
 3. Pick the connected account, site, project and issue type. Fill in the required fields and review each ticket's description and saved evidence.
 4. Click **Create N tickets** to send. Each observation creates its own issue, followed by its screenshot or recording attachments. Nothing becomes a ticket merely by connecting an account or opening the preview.
@@ -130,7 +140,7 @@ Start the review on the **production** tab, then use **Diff** to choose the prot
 
 ## Keyboard and readable controls
 
-Use **Comment**, then the arrow keys and **Enter** to select an element. For a region without dragging, open **Area → Set area dimensions**, enter its position and size, and choose **Comment on this area**. **Adjust → Reveal position** also supports clicks and arrow keys. Escape closes a comment or AI panel and returns to its control.
+Press **C** on the reviewed page to start a comment. The element picker supports arrow keys and **Enter**; Escape cancels. Viewport icons have accessible names, and the information icon shows help on both hover and keyboard focus. **Adjust reference → Reveal position** supports clicks and arrow keys.
 
 ## Coming soon
 

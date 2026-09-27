@@ -28,3 +28,22 @@ test('external detach restores the other page and clears the selected preset',as
 test('restart resumes only debugger connections that still belong to the extension',async()=>{const f=fixture();await f.controller.apply({targetTabId:1,sourceTabId:2},'phone');const restarted=createViewportController({chromeApi:f.chromeApi,assertPageAccess:async()=>{}});assert.equal(await restarted.resume({targetTabId:1,sourceTabId:2,viewportPreset:'phone',viewportDebuggerTabs:[1,2]}),'phone');await restarted.restore();assert.equal(f.attached.size,0);});
 
 test('each resized page flushes its painted layout before a capture can resume',async()=>{const f=fixture();await f.controller.apply({targetTabId:1,sourceTabId:2},'laptop');const commands=f.calls.filter(([method])=>method!=='attach');assert.deepEqual(commands.map(([method,id])=>[method,id]),[['Emulation.setDeviceMetricsOverride',1],['Runtime.evaluate',1],['Emulation.setDeviceMetricsOverride',2],['Runtime.evaluate',2]]);for(const [method,id,params]of commands)if(method==='Runtime.evaluate'){assert.equal(params.awaitPromise,true);assert.equal(params.timeout,1500);assert.match(params.expression,/getBoundingClientRect/);}});
+
+
+test('saved viewport replay restores exact dimensions and survives a worker restart',async()=>{
+  const f=fixture(),size={width:1542,height:1107};
+  await f.controller.applySaved({targetTabId:1},'desktop',size);
+  assert.equal(f.metrics.get(1).width,1542);assert.equal(f.metrics.get(1).height,1107);
+  const restarted=createViewportController({chromeApi:f.chromeApi,assertPageAccess:async()=>{}});
+  await restarted.resume({targetTabId:1,viewportPreset:'desktop',viewportReplay:size,viewportDebuggerTabs:[1]});
+  assert.equal(f.metrics.get(1).width,1542);assert.equal(f.metrics.get(1).height,1107);
+  await restarted.apply({targetTabId:1},'desktop');assert.equal(f.metrics.get(1).width,1440);
+  await restarted.restore();
+});
+test('invalid saved dimensions are rejected without attaching and failed replay preserves previous size',async()=>{
+  const f=fixture();await assert.rejects(f.controller.applySaved({targetTabId:1},'phone',{width:0,height:Infinity}),/recorded viewport/);assert.equal(f.calls.length,0);
+  await f.controller.applySaved({targetTabId:1,sourceTabId:2},'desktop',{width:1542,height:1107});
+  f.fail((id,method,p)=>id===2&&p.width===390);
+  await assert.rejects(f.controller.apply({targetTabId:1,sourceTabId:2},'phone'));
+  assert.equal(f.metrics.get(1).width,1542);assert.equal(f.metrics.get(2).height,1107);
+});

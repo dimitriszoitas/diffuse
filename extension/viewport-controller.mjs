@@ -7,11 +7,15 @@ export const VIEWPORT_PRESETS = Object.freeze({
 
 // Responsive CSS viewports, deliberately without mobile UA or touch emulation.
 export function createViewportController({chromeApi, assertPageAccess, onOwnershipChanged=async()=>{}, onDetached=async()=>{}}) {
-  const owned=new Set();let selected=null,queue=Promise.resolve(),generation=0;
+  const owned=new Set();let selected=null,selectedSize=null,queue=Promise.resolve(),generation=0;
   const serial=operation=>{const result=queue.catch(()=>{}).then(operation);queue=result.catch(()=>{});return result;};
   const command=(tabId,method,params={})=>chromeApi.debugger.sendCommand({tabId},method,params);
   const save=()=>onOwnershipChanged([...owned]);
-  const metrics=preset=>({...VIEWPORT_PRESETS[preset],deviceScaleFactor:0,mobile:false,scale:1});
+  const metrics=(preset,size)=>({...VIEWPORT_PRESETS[preset],...(size||{}),deviceScaleFactor:0,mobile:false,scale:1});
+  const savedSize=viewport=>{
+    if(!viewport||!['width','height'].every(key=>Number.isFinite(viewport[key])&&viewport[key]>=200&&viewport[key]<=10000))throw new Error('The recorded viewport size is unavailable. Choose a viewport to continue.');
+    return{width:Math.round(viewport.width),height:Math.round(viewport.height)};
+  };
   async function release(tabId){
     if(!owned.delete(tabId))return;
     // Remove ownership before detach: Chrome also emits onDetach for our cleanup.
@@ -19,14 +23,14 @@ export function createViewportController({chromeApi, assertPageAccess, onOwnersh
     await chromeApi.debugger.detach({tabId}).catch(()=>{});
     await save();
   }
-  async function clear(){for(const tabId of [...owned])await release(tabId);selected=null;}
-  async function applyNow(tabs,preset){
+  async function clear(){for(const tabId of [...owned])await release(tabId);selected=null;selectedSize=null;}
+  async function applyNow(tabs,preset,size=null){
     if(preset!==null&&!Object.hasOwn(VIEWPORT_PRESETS,preset))throw new Error('Choose Desktop, Laptop, Tablet, Phone, or the native page size.');
     if(preset===null){await clear();return null;}
     if(!chromeApi.debugger)throw new Error('Reload the updated Diffuse extension to enable viewport presets.');
     const ids=[...new Set([tabs.targetTabId,tabs.sourceTabId].filter(Number.isInteger))];
     if(!ids.length)throw new Error('Start a review before choosing its viewport.');
-    const previous=selected,before=new Set(owned),epoch=generation;
+    const previous=selected,previousSize=selectedSize,before=new Set(owned),epoch=generation;
     // Validate every page before attaching to any of them.
     for(const tabId of ids)await assertPageAccess((await chromeApi.tabs.get(tabId)).url,chromeApi);
     const targets=await chromeApi.debugger.getTargets();
@@ -38,7 +42,7 @@ export function createViewportController({chromeApi, assertPageAccess, onOwnersh
           owned.add(tabId);await save();
         }
         if(generation!==epoch)throw new Error('Viewport control was disconnected. Choose the preset again.');
-        await command(tabId,'Emulation.setDeviceMetricsOverride',metrics(preset));
+        await command(tabId,'Emulation.setDeviceMetricsOverride',metrics(preset,size));
         // Hidden captured pages can report the new innerWidth while retaining
         // the old painted layout. Flush layout before their next video frame.
         await command(tabId,'Runtime.evaluate',{
@@ -48,14 +52,14 @@ export function createViewportController({chromeApi, assertPageAccess, onOwnersh
       }
       if(generation!==epoch)throw new Error('Viewport control was disconnected. Choose the preset again.');
       for(const tabId of [...owned])if(!ids.includes(tabId))await release(tabId);
-      selected=preset;return preset;
+      selected=preset;selectedSize=size;return preset;
     }catch(error){
       let restored=true;
       for(const tabId of [...owned]){
         if(!before.has(tabId)){await release(tabId);continue;}
-        try{await command(tabId,previous?'Emulation.setDeviceMetricsOverride':'Emulation.clearDeviceMetricsOverride',previous?metrics(previous):{});}catch{restored=false;}
+        try{await command(tabId,previous?'Emulation.setDeviceMetricsOverride':'Emulation.clearDeviceMetricsOverride',previous?metrics(previous,previousSize):{});}catch{restored=false;}
       }
-      if(!restored)await clear();else selected=previous;
+      if(!restored)await clear();else {selected=previous;selectedSize=previousSize;}
       throw error;
     }
   }
@@ -63,6 +67,7 @@ export function createViewportController({chromeApi, assertPageAccess, onOwnersh
     get preset(){return selected;},
     ownedTabIds:()=>[...owned],
     apply:(tabs,preset)=>serial(()=>applyNow(tabs,preset)),
+    applySaved:(tabs,preset,viewport)=>serial(()=>applyNow(tabs,preset,savedSize(viewport))),
     restore:()=>serial(clear),
     releaseTab:tabId=>serial(()=>release(tabId)),
     resume:session=>serial(async()=>{
@@ -77,7 +82,7 @@ export function createViewportController({chromeApi, assertPageAccess, onOwnersh
       const expected=[session.targetTabId,session.sourceTabId].filter(Number.isInteger);
       if(!Object.hasOwn(VIEWPORT_PRESETS,session.viewportPreset)||expected.some(id=>!owned.has(id))){await clear();return null;}
       selected=session.viewportPreset;
-      try{return await applyNow(session,selected);}catch{await clear();return null;}
+      try{selectedSize=session.viewportReplay?savedSize(session.viewportReplay):null;return await applyNow(session,selected,selectedSize);}catch{await clear();return null;}
     }),
     externalDetach:(source,reason)=>{
       if(!owned.delete(source?.tabId))return Promise.resolve(false);

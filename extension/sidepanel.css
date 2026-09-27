@@ -30,3 +30,15 @@ body[data-composer-open=true] #dock-workspace,body[data-composer-open=true] #pan
 
 /* The sidebar is the only review control surface; group its tools by purpose. */
 body{font-size:15px}.brand{font-size:23px}.brand-mark{transform:scale(.9);transform-origin:left center;width:30px;flex-basis:30px}.edition,.eyebrow{font-size:12px}.workspace-heading h1,.section-heading h2{font-size:20px}.panel-field,input,textarea,select{font-size:15px}button{font-size:14px;padding:7px 10px}.primary-button,.secondary-button,.report-button .button-label,.ai-settings-button,.jira-settings-button{font-size:14px}.panel-control-group{padding:0 0 12px;margin:0 0 12px;border-bottom:1px solid #ddd4e9}.control-group-title{font-size:14px;line-height:1.4;margin:0 0 8px;font-weight:650}.panel-control-group .tool-grid{border:0;padding:0;margin:0}.panel-control-group>p:last-child{margin-bottom:0}.panel-field{margin:10px 0}.suggestion-card p{font-size:15px}.drawer-hint{font-size:13px}.reports-access{gap:6px}
+
+/* Keep Settings outside the content scroller, at the foot of the drawer. */
+body[data-surface=sidepanel]{height:100dvh;min-height:0;overflow:hidden}
+body[data-surface=sidepanel] .popup{height:100dvh;min-height:0;display:flex;flex-direction:column;padding-bottom:0}
+.drawer-scroll{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;margin-inline:-4px;padding-inline:4px;scroll-padding-block:12px}
+.settings-access{flex-shrink:0;margin-top:0;padding:10px 0 max(10px,env(safe-area-inset-bottom));background:#f7f4fc}
+.shortcut-cheatsheet{padding:9px 0 0;color:var(--muted);font-size:12px;line-height:1.45}
+.shortcut-cheatsheet p{display:flex;gap:10px;align-items:center;margin:5px 0}
+.shortcut-cheatsheet p>span:first-child{flex-shrink:0}.shortcut-cheatsheet p>span:last-child{margin-left:auto;text-align:right}
+.shortcut-cheatsheet kbd{display:inline-flex;justify-content:center;align-items:center;width:23px;min-height:23px;border:1px solid #c4b5da;border-bottom-width:2px;border-radius:5px;background:#fff;color:var(--ink);font:600 12px inherit}
+body[data-composer-open=true] .drawer-scroll{display:flex;flex-direction:column;overflow:hidden}
+body[data-composer-open=true] .settings-access{display:none}

@@ -1,6 +1,6 @@
 # Diffuse — live design comparison and page audits
 
-**0.7.4 keeps review controls in the side drawer, supports independent scrolling, and shows a proper pending state while a review starts.** Reload handling preserves unsaved text for copying and asks you to refresh stale pages. Jira handoff supports individual or selected observations with formatted descriptions: preview the destination, text and evidence before explicitly creating tickets. The hosted service is deployed; a real account grant and ticket creation still need end-to-end verification. The current Atlassian app is private to its owner, and the service permits the existing approved extension installation.
+**0.8.0 adds portable review files, restores comments on their original page, and simplifies the review sidebar.** Settings combines AI and Jira configuration. Icon viewport controls, a shortcut cheatsheet and a collapsible notebook sidebar keep the workspace compact.
 
 Diffuse uses a native Chrome side drawer for review controls. **Start review** opens it; for an active review, click the extension icon and **Open review sidebar**. There is no floating toolbar. The webpage resizes beside Diffuse, and closing the drawer preserves the review and unfinished comment. Chrome chooses the drawer side and owns its resize handle.
 
@@ -19,7 +19,7 @@ Diffuse layers a **continuously running prototype** over a production page in Ch
 
 The extension loads directly from its files; no build step is needed. If Diffuse updates while a page is open, its old controls stop and show a refresh notice. Unsaved comment text remains available to copy before refreshing; an interrupted Save is never retried automatically. After changing extension code, choose **Reload** on its card in `chrome://extensions`, then refresh both comparison pages.
 
-**Upgrading an existing installation:** replace the extension files in the same installed folder, then choose **Reload** on the existing extension card. Do not remove and reinstall the extension or load it from a different folder path: saved reviews belong to its extension ID in this Chrome profile. Keep that installation path unchanged to preserve access to them. Download an HTML report when you want a portable copy of a review.
+**Upgrading an existing installation:** replace the extension files in the same installed folder, then choose **Reload** on the existing extension card. Do not remove and reinstall the extension or load it from a different folder path: saved reviews belong to its extension ID in this Chrome profile. Keep that installation path unchanged to preserve access to them. Use **Export review** to share a complete review that another Diffuse installation can import.
 
 ## Review a local HTML file
 
@@ -37,7 +37,7 @@ The existing divider and opacity controls appear once connected. **Hide referenc
 
 **Start review** opens the native Chrome side drawer. To reopen it during a review, click Diffuse’s extension icon and choose **Open review sidebar**. The drawer resizes the page and keeps unfinished comments when closed. Chrome controls its side and resize handle. Visit the reference once after resizing if a viewport mismatch appears: inactive tabs may retain their previous dimensions. A full reference reload clears its capture identity; choose it again through Diff. Saved comments remain intact.
 
-**Keyboard shortcuts:** `Alt+Shift+D` toggles a connected reference; `Alt+Shift+P` switches between reference and reviewed page. Hold **C + left-click-drag** to select an area; Escape cancels. The shortcut is ignored while typing. **Area · C** also offers keyboard-accessible rectangle dimensions.
+**Keyboard shortcuts:** `Alt+Shift+D` toggles a connected reference; `Alt+Shift+P` switches between reference and reviewed page. Press **C** to leave a comment; hold **C + left-click-drag** to select an area. Escape cancels. The shortcuts are ignored while typing in an editable field.
 
 Page clicks operate the reviewed page. Switch to the reference to interact with it. Scroll linking does not synchronize menus, form inputs or application state.
 
@@ -54,14 +54,14 @@ Every captured comment keeps its viewport view and exact dimensions. Pins and dr
 Starting from the reviewed page’s actual Chrome toolbar icon grants that page’s initial capture access. A persistent drawer on a newly selected tab does not grant access by itself. If needed, click Diffuse in Chrome’s toolbar on the reviewed page and choose **Enable capture & return**; a pending capture retries without discarding its draft.
 
 1. Open the page and state you want to review. If you have connected a reference through **Diff**, bring both apps into matching states and wait for the live reference.
-2. Click **Comment** and move over production to highlight an element. Click to select it; this selection click is intercepted rather than activating the page control. Press Escape to cancel.
+2. Press **C** over the reviewed element to leave a comment. Hold **C** and drag to select an area. Press Escape to cancel.
 3. Diffuse hides its interface briefly and captures the reviewed page, plus the reference when connected, **before** opening the comment form. The selected element receives a marked screenshot and a contextual crop alongside the original screenshot.
 4. Write an **Actual / comment** description. **Title and expected result are optional**; a blank title displays a short excerpt from your observation. Add reproduction steps when useful.
 5. **Save comment** stays visible at the bottom while the fields scroll. Under **Attach evidence**, keep **Screenshot** or choose **Short recording**. Check the component name, name the state, choose a category and severity, and save.
 
 If a page reload interrupts the drawer connection, **Reconnect review** restores the pending evidence and your typed fields. Save again after reconnection; recovery never silently submits a comment.
 
-For a region instead of an element, click **Area · C** and drag, or hold **C** while dragging with the left mouse button. A dotted rectangle shows the selected area. Region comments attach its bounds without claiming a component identity. Audit mode uses the same flow with one page screenshot.
+For a region instead of an element, hold **C** while dragging with the left mouse button. A dotted rectangle shows the selected area. Region comments attach its bounds without claiming a component identity. Audit mode uses the same flow with one page screenshot.
 
 Categories use visible labels and consistent colors in the composer, pins, reports, and HTML exports: **Design mismatch — purple**, **UX issue — amber**, and **Copy change — blue**. Comparison comments default to Design mismatch; audit comments default to UX issue. Category and severity are separate fields.
 
@@ -85,7 +85,7 @@ The drawer’s **Record page** control is available throughout the review. They 
 
 ## Optional AI review with your own key
 
-1. Open **AI settings** from the popup or AI review panel. Enter your **Anthropic API key**, select a vision-capable Claude model, and save. Allow the Anthropic connection if Chrome requests it.
+1. Open **Settings → AI review** from the popup or sidebar. Enter your **Anthropic API key**, select a vision-capable Claude model, and save. Allow the Anthropic connection if Chrome requests it.
 2. By default, the key is kept only for the current Chrome session and may need to be entered again after reloading the extension. **Remember my key on this device** stores it in this Chrome profile between sessions. This is local extension storage, not an encrypted password vault. Use **Remove key** to clear it. A saved key is not displayed back in the form.
 3. Return to the reviewed page and open **AI review**. Reopen the panel after changing settings so it picks up the updated connection. Add optional instructions and choose a minimum issue size.
 4. Click **Run AI review**. This explicitly sends the current production screenshot, the prototype screenshot in comparison mode, and your instructions **directly to Anthropic**. Usage is billed to your Anthropic API account. Opening the panel or changing its threshold does not run a request.
@@ -106,16 +106,26 @@ Open **Review reports** in the side drawer or extension popup. The notebook list
 Reports include your manual comments and accepted AI comments, with their categories. Pending and dismissed AI suggestions are not exported. API keys are never exported.
 
 - **Copy entire report** copies formatted text and screenshot content for pasting into a document or ticket. Image support depends on the destination; use **Copy image** or **Download image** when it strips images. A plain-text fallback is shown if rich copying is unavailable.
-- **Download HTML** saves a self-contained report with embedded screenshots and playable recordings. It opens offline and is the most complete portable copy.
+- **Download HTML** saves a self-contained report with embedded screenshots and playable recordings for reading offline.
 - **AI handoff .md ↓** exports every saved finding across all viewports in one concise Markdown file: overall task, finding IDs, Current → Change to → Verify, captured context, and evidence filenames. It omits image/video data so a coding assistant can use it efficiently. Include the HTML report or referenced evidence files for visual verification. No new AI request is made.
 
 Accepted AI findings also include a collapsible **Suggested AI prompt** with **Copy AI prompt**. Jira descriptions preserve this prompt in a copyable code block, with Current, a highlighted Change to panel, context, numbered steps, and evidence filenames. Jira uses its native styling; screenshots and recordings are uploaded as attachments.
 
 Pasting a report into another app does not preserve playable video: the copied report represents it with screenshots and a filename. Use the Jira flow below to send selected observations and attach their saved files directly.
 
+## Share a review with another Diffuse user
+
+Choose **Export review** in the notebook to download a `.diffuse-review.json` file. It includes every saved comment across pages and viewports, the captured URLs and anchors, written fields, screenshots, recordings and accepted AI context. Account credentials and local session identifiers are excluded.
+
+The recipient chooses **Import review** in their notebook and selects that file. The import creates a separate saved review, preserving existing reviews. **Open review page** opens the saved URL and restores the comment pins. Chrome may first ask for access to that site. Clicking a comment in the sidebar returns to its captured URL and viewport, then reveals its location.
+
+The recipient needs access to the reviewed website. An export does not include the website itself, its login session, or unsaved application state. Local files and localhost addresses must also exist on their computer; original screenshot and recording evidence remains readable in the notebook even when the page is unavailable. A live Diff reference can be connected again separately.
+
+The notebook sidebar can be collapsed and expanded using its sidebar icon. **Settings** at the bottom of the sidebar brings AI configuration, Jira accounts and page-access information together.
+
 ## Send selected observations to Jira
 
-1. Open **Jira connections** from Diffuse and choose **Connect Jira**. Connections keep the Atlassian account and its authorized sites separate. Jira sign-in is independent of your Anthropic key.
+1. Open **Settings → Jira connections** from Diffuse and choose **Connect Jira**. Connections keep the Atlassian account and its authorized sites separate. Jira sign-in is independent of your Anthropic key.
 2. In a saved review, use **Send to Jira** on one observation, or mark **Select for Jira** on several and choose **Send selected to Jira**. **Select visible** adds the currently visible observations; filtering does not silently clear selections, and the count identifies selected items hidden by the filter.
 3. Choose the connected account, site, project and issue type. Complete the project's required fields, then review each ticket's title, description and evidence. Field values chosen in this preview apply to every selected observation. Unsupported required field types block submission rather than being omitted.
 4. Choose **Create N tickets**. Each selected observation becomes one issue, with readable Current/Requested change text, component, state, reproduction steps, category, severity and captured page links where available. Its saved screenshots or recording upload as attachments.

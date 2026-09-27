@@ -138,6 +138,35 @@
     if(fresh) $('panel-field-comment').focus({preventScroll:true});
   }
 
+  async function openComment(item) {
+    if (pendingAction || !session?.id) return;
+    const reviewSession = session.id;
+    try {
+      let url;
+      try { url = new URL(item.context?.production?.url || item.selection?.context?.url); }
+      catch { throw new Error('This comment has no supported page URL. Open its captured evidence in Review reports.'); }
+      if (!['http:', 'https:', 'file:'].includes(url.protocol) || url.username || url.password || (url.protocol === 'file:' && url.hostname)) {
+        throw new Error('This comment has no supported page URL. Open its captured evidence in Review reports.');
+      }
+      const pattern = url.protocol === 'file:' ? 'file:///*' : `${url.protocol}//${url.hostname}/*`;
+      // Request in the click gesture, before any await. Already allowed sites
+      // return immediately; the worker still validates file access and location.
+      const access = chrome.permissions.request({origins: [pattern]});
+      pendingAction = 'showPin'; commandError = ''; notice('feedback', ''); paint();
+      if (!await access) throw new Error('Allow Diffuse to access this comment’s site to open its recorded page. Your current page has not changed.');
+      if (session?.id !== reviewSession) return;
+      await command('showPin', {id: item.id});
+    } catch (error) {
+      if (session?.id === reviewSession) {
+        commandError = describeConnectionError(error);
+        notice('feedback', commandError); $('feedback').focus();
+      }
+    } finally {
+      if (pendingAction === 'showPin') pendingAction = null;
+      paint();
+    }
+  }
+
   function paintComments() {
     const group=width=>!Number.isFinite(width)||width<=0?'unknown':width>=1440?'desktop':width>=1280?'laptop':width>=768?'tablet':'phone';
     const viewport=session?.viewportPreset||group(session?.targetViewport?.width);
@@ -150,7 +179,7 @@
     if(!comments.length){list.append(node('p','Comments for this view will appear here and as pins on the page.','muted'));return;}
     comments.forEach((item,index)=>{
       const label=item.fields?.title||item.fields?.comment||'Saved comment';
-      const entry=button('',()=>act('showPin',{id:item.id}));entry.className='saved-item';entry.dataset.category=item.fields?.category||'design-mismatch';
+      const entry=button('',()=>openComment(item));entry.className='saved-item';entry.dataset.category=item.fields?.category||'design-mismatch';
       const dot=node('i',undefined,'category-dot');dot.setAttribute('aria-hidden','true');const copy=node('span',`${all.indexOf(item)+1}. ${label.length>140?`${label.slice(0,137)}…`:label}`);copy.append(node('small',`${category(item.fields?.category)} · ${item.fields?.state||'Current state'}`));entry.append(dot,copy);list.append(entry);
     });
   }
@@ -162,7 +191,7 @@
     if(inactiveField('panel-ai-threshold'))$('panel-ai-threshold').value=String(ai.threshold??35);
     text('panel-ai-threshold-value',`${$('panel-ai-threshold').value}/100`);
     text('panel-ai-mode',Number.isInteger(session.sourceTabId)?'Compare the current page and reference screenshots.':'Review this page for UX and copy issues.');
-    text('panel-ai-config',ai.config?.hasKey?`Model: ${ai.config.model}. Your API key stays in extension settings.`:'Add your Anthropic API key in AI settings below.');
+    text('panel-ai-config',ai.config?.hasKey?`Model: ${ai.config.model}. Your API key stays in extension settings.`:'Add your Anthropic API key in Settings.');
     notice('panel-ai-error',ai.error);
     const locked=state.aiBusy||state.aiOperationBusy||session.aiRunning||pendingAction==='runAi';
     $('panel-ai-run').disabled=locked||!ai.config?.hasKey;
@@ -217,20 +246,18 @@
     $('panel-hide').disabled=Boolean(referenceToggle);
     const selecting=state.picking||state.areaArmed;
     const locked=state.captureBusy||state.commentSaving||state.recordingBusy||Boolean(state.recording)||Boolean(state.comment)||state.aiBusy||state.aiOperationBusy||session.aiRunning||Boolean(pendingAction);
-    for(const id of ['panel-comment','panel-area'])$(id).disabled=locked;
-    $('panel-comment').setAttribute('aria-pressed',String(Boolean(state.picking)));$('panel-area').setAttribute('aria-pressed',String(Boolean(state.areaArmed)));
     $('panel-ai').disabled=locked||selecting;
     $('panel-record').disabled=state.recordingBusy||state.captureBusy||state.commentSaving||Boolean(pendingAction)||(!state.recording&&(Boolean(state.comment)||selecting||state.aiBusy||session.aiRunning));
     text('panel-record',state.recording?'Stop recording':'Record page');
     $('panel-cancel-selection').hidden=!selecting;$('panel-retry').hidden=!state.pendingCaptureAction;
     notice('panel-capture-error',[state.captureDescription,state.captureError].filter(Boolean).join(' '));
     $('panel-retry').disabled=Boolean(state.captureNeedsAccess)||Boolean(pendingAction)||state.captureBusy;
-    text('panel-instruction',state.captureBusy?'Capturing your selection…':state.recording?'Interact with the page, then stop recording. The clip stops automatically after 30 seconds.':state.areaArmed?'Drag across the page to select an area. Press Escape to cancel.':state.picking?'Click an element on the page. Press Escape to cancel.':'Choose an element, or hold C and drag on the page.');
-    if(state.captureNeedsAccess)text('panel-instruction','Click the Diffuse icon in Chrome’s toolbar on this page, then Enable capture & return. Your drawer stays open.');
+    notice('panel-instruction',state.captureBusy?'Capturing your selection…':state.recording?'Interact with the page, then stop recording. The clip stops automatically after 30 seconds.':state.areaArmed?'Drag across the page to select an area. Press Escape to cancel.':state.picking?'Click an element on the page. Press Escape to cancel.':'');
+    if(state.captureNeedsAccess)notice('panel-instruction','Click the Diffuse icon in Chrome’s toolbar on this page, then Enable capture & return. Your drawer stays open.');
     paintComments();
   }
 
-  const actions={'panel-diff':'openDiff','panel-comment':'selectElement','panel-area':'selectArea','panel-cancel-selection':'cancelSelection','panel-ai':'openAi','panel-close-ai':'closeAi','panel-cancel-comment':'cancelComment','panel-retry':'retryCapture','panel-focus':'focusTarget','panel-source':'focusSource','panel-reconnect':'reconnect','panel-stop':'stop'};
+  const actions={'panel-diff':'openDiff','panel-cancel-selection':'cancelSelection','panel-ai':'openAi','panel-close-ai':'closeAi','panel-cancel-comment':'cancelComment','panel-retry':'retryCapture','panel-focus':'focusTarget','panel-source':'focusSource','panel-reconnect':'reconnect','panel-stop':'stop'};
   for(const [id,action]of Object.entries(actions))$(id).addEventListener('click',()=>act(action,action==='cancelComment'?{draftId}:undefined));
   $('panel-record').addEventListener('click',()=>act(state?.recording?'stopRecording':'record'));
   $('panel-record-comment').addEventListener('click',()=>act('recordComment',draftFields()));

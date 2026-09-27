@@ -331,7 +331,7 @@ export function createJiraExporter({onError = () => {}, clientFactory, storage =
     const project = selectField('Project', 'Choose a project');
     const issueType = selectField('Issue type', 'Choose an issue type');
     grid.append(account.label, site.label, project.label, issueType.label);
-    const settingsLink = element('a', 'Manage Jira accounts ↗');settingsLink.href = 'jira-settings.html';settingsLink.target = '_blank';settingsLink.rel = 'noopener';
+    const settingsLink = element('a', 'Manage Jira accounts ↗');settingsLink.href = 'settings.html#jira';settingsLink.target = '_blank';settingsLink.rel = 'noopener';
     const metadataStatus = element('p', 'Loading your connected accounts…', 'jira-export-status');metadataStatus.setAttribute('role', 'status');
     const extraFields = element('section', null, 'jira-required-fields');
     const error = element('p', null, 'jira-export-error');error.setAttribute('role', 'alert');error.hidden = true;

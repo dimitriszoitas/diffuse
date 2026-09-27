@@ -40,6 +40,7 @@
   let areaArmed = false;
   let areaDrag = null;
   let cHeld = false;
+  let cGestureUsed = false;
   let ignoreNextAreaClick = false;
   let pinsTimer = null;
   let openPinId = null;
@@ -487,12 +488,12 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
         for(const [key,min,max] of [['opacity',0,1],['reveal',0,100],['offsetX',-3000,3000],['offsetY',-3000,3000]])if(Number.isFinite(values[key]))partial[key]=Math.max(min,Math.min(max,values[key]));
         updateSettings(partial);break;
       }
-      case 'showPin':openPin(message.id);break;
+      case 'showPin':requireSuccess(await send('SHOW_COMMENT', {commentId: message.id}));break;
       case 'focusSource':requireSuccess(await send('FOCUS_SOURCE'));break;
       case 'stop':requireSuccess(await send('STOP_SESSION'));break;
       case 'reconnect':requireSuccess(await send('RECONNECT'));break;
       case 'openReport':requireSuccess(await send('OPEN_REPORT'));break;
-      case 'openSettings':requireSuccess(await send('OPEN_AI_SETTINGS'));break;
+      case 'openSettings':requireSuccess(await send('OPEN_SETTINGS'));break;
       default:throw new Error('Unknown drawer action.');
     }
     notifyPanel();
@@ -548,16 +549,22 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
     const options={capture:true,signal:abort.signal};
     const suppress=event=>{event.preventDefault();event.stopImmediatePropagation();};
     document.addEventListener('keydown',event=>{
-      if(event.key==='Escape'&&(areaArmed||areaDrag)){suppress(event);cancelArea();return;}
+      if(event.key==='Escape'&&(areaArmed||areaDrag||cHeld)){suppress(event);cHeld=false;cGestureUsed=true;cancelArea();return;}
       if(event.code==='KeyC'&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&!event.shiftKey&&!editableEvent(event)&&canSelect()){
+        if (!cHeld) cGestureUsed=false;
         cHeld=true;suppress(event);
       }
     },options);
-    document.addEventListener('keyup',event=>{if(event.code==='KeyC')cHeld=false;},options);
-    window.addEventListener('blur',()=>{cHeld=false;if(areaDrag)cancelArea();},{signal:abort.signal});
+    document.addEventListener('keyup',event=>{
+      if(event.code!=='KeyC')return;
+      const selectElement=cHeld&&!cGestureUsed&&!areaDrag&&!editableEvent(event)&&!isDiffuseEvent(event);
+      cHeld=false;cGestureUsed=false;
+      if(selectElement&&canSelect()){suppress(event);startPicking();}
+    },options);
+    window.addEventListener('blur',()=>{cHeld=false;cGestureUsed=false;if(areaDrag)cancelArea();},{signal:abort.signal});
     document.addEventListener('pointerdown',event=>{
       if(event.button!==0||!(areaArmed||cHeld)||!canSelect()||isDiffuseEvent(event)||editableEvent(event))return;
-      suppress(event);stopPicking(false);closePin();closeAi();
+      suppress(event);cGestureUsed=true;stopPicking(false);closePin();closeAi();
       areaArmed=true;ignoreNextAreaClick=false;
       areaDrag={startX:event.clientX,startY:event.clientY,x:event.clientX,y:event.clientY,pointerId:event.pointerId};
       el('picker-tip').hidden=true;
@@ -577,7 +584,12 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
       areaDrag.x=Math.max(0,Math.min(innerWidth,event.clientX));areaDrag.y=Math.max(0,Math.min(innerHeight,event.clientY));
       const bounds=areaBounds();areaDrag=null;areaArmed=false;ignoreNextAreaClick=true;
       el('selection-outline').hidden=true;el('selection-outline').removeAttribute('data-region');
-      if(bounds.width<4||bounds.height<4){localWarning='Drag an area at least 4 × 4 pixels, or use Comment to select an element.';paint();return;}
+      if(bounds.width<4||bounds.height<4){
+        const target=pickTarget(event);
+        if(target){selectedElement=target;selectionMetadata=globalThis.DiffuseInspector.inspect(target);captureComment();}
+        else {localWarning='Press C, then choose an element. Hold C and drag to select an area.';paint();}
+        return;
+      }
       selectedElement=null;selectionMetadata=globalThis.DiffuseInspector.region(bounds.x,bounds.y,bounds.width,bounds.height);
       captureComment();
     },options);
@@ -634,6 +646,48 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
         }
       }
     }
+  }
+
+  async function revealComment(id) {
+    const comment=session?.comments?.find(item=>item.id===id);
+    if(!comment)throw new Error('This comment is no longer available.');
+    const context=comment.context?.production||comment.selection?.context||{};
+    if(context.url!==location.href)throw new Error('The page changed before the comment could be shown. Select the comment again.');
+    if(!canSelect())throw new Error('Save or cancel the open comment before opening another.');
+    stopPicking(false);cancelArea();closePin();closeAi();
+    const sessionId=session.id;
+    // Restore the captured scrolling state first, including scrollable panels.
+    // Then find the live anchor so responsive reflow does not leave the pin at
+    // an obsolete absolute coordinate.
+    const restoreScroll=()=>{
+      const position=context.scroll||{};
+      window.scrollTo({left:Number.isFinite(position.x)?position.x:0,top:Number.isFinite(position.y)?position.y:0,behavior:'instant'});
+      const nested=context.nestedScroll||comment.selection?.scrollContainers||[];
+      for(const saved of nested){
+        const target=globalThis.DiffuseInspector.resolveSelector(saved.selector);
+        if(!target||target===document.documentElement)continue;
+        const x=saved.x??saved.scrollLeft,y=saved.y??saved.scrollTop;
+        if(Number.isFinite(x))target.scrollLeft=x;
+        if(Number.isFinite(y))target.scrollTop=y;
+      }
+    };
+    restoreScroll();
+    // Client-rendered routes can mount after Chrome reports the document loaded.
+    // Wait for the real anchor, without inventing a replacement element.
+    let rect=null;
+    for(let attempt=0;attempt<30;attempt++){
+      if(!root||session?.id!==sessionId||location.href!==context.url)throw new Error('The review page changed. Select the comment again.');
+      rect=commentRect(comment);
+      if(rect)break;
+      await new Promise(resolve=>setTimeout(resolve,100));restoreScroll();
+    }
+    if(!rect)return{ok:true,found:false};
+    const selection=comment.selection;
+    const target=globalThis.DiffuseInspector.resolveSelector(selection?.anchor?.selector||selection?.selector);
+    if(target)target.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    renderPins();openPin(id);updatePinPositions();notifyPanel();
+    return{ok:true,found:pinItems.some(item=>item.comment.id===id&&!item.button.hidden)};
   }
 
   function openPin(id) {
@@ -1523,7 +1577,7 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
     stopResources();
     stopPicking(false);
     clearInterval(pinsTimer);pinsTimer=null;
-    areaArmed=false;areaDrag=null;cHeld=false;ignoreNextAreaClick=false;openPinId=null;pinItems=[];pinsUrl='';pinsViewport='';
+    areaArmed=false;areaDrag=null;cHeld=false;cGestureUsed=false;ignoreNextAreaClick=false;openPinId=null;pinItems=[];pinsUrl='';pinsViewport='';
     aiBatch=null;aiBusy=false;aiOperationBusy=false;aiBulkAccepting=false;aiThresholdOverride=null;aiSavedThreshold=null;aiPreviewContext=null;
     clearInterval(recordingTimer); recordingTimer = null;
     recording = null; recordingBusy = false; commentSaving = false; captureBusy = false;
@@ -1592,6 +1646,7 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
     }
     if(message.type==='PANEL_STATE'&&role==='target')return{ok:true,state:panelState(message)};
     if(message.type==='PANEL_COMMAND'&&role==='target')return panelCommand(message);
+    if(message.type==='REVEAL_COMMENT'&&role==='target')return revealComment(message.commentId);
     if (message.type === 'GET_CONTEXT') return {ok: true, context: currentContext()};
     if (message.type === 'ANCHOR_SELECTION' && role === 'target') {
       const selection=message.selection, context=selection?.context, rect=selection?.rect?.viewport;

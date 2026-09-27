@@ -14,12 +14,12 @@ const send = async (type, data = {}) => {
   return result;
 };
 function feedback(message, error = false) {
-  el('feedback').setAttribute('role', error ? 'alert' : 'status');
-  el('feedback').setAttribute('aria-live', error ? 'assertive' : 'polite');
-  el('feedback').textContent = message;
-  el('feedback').dataset.error = String(error);
-  el('feedback').hidden = !message;
-  if (message && error) el('feedback').focus();
+  el('ai-feedback').setAttribute('role', error ? 'alert' : 'status');
+  el('ai-feedback').setAttribute('aria-live', error ? 'assertive' : 'polite');
+  el('ai-feedback').textContent = message;
+  el('ai-feedback').dataset.error = String(error);
+  el('ai-feedback').hidden = !message;
+  if (message && error) el('ai-feedback').focus();
 }
 function setBusy(value) {
   busy = value;
@@ -78,7 +78,7 @@ el('ai-settings-form').addEventListener('submit', async event => {
     el('toggle-key').setAttribute('aria-label', 'Show entered API key');
     el('toggle-key').setAttribute('aria-pressed', 'false');
     await load();
-    feedback('Settings saved. Return to your comparison and choose AI review when you are ready.');
+    feedback('AI settings saved.');
   } catch (error) { feedback(error.message, true); }
   finally { setBusy(false); }
 });

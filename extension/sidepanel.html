@@ -15,6 +15,7 @@
 </head>
   <body data-surface="sidepanel">
     <main class="popup" id="popup" aria-busy="true">
+      <div class="drawer-scroll">
       <header class="brand-header">
         <div class="brand">
           <span class="brand-mark" aria-hidden="true"><span></span><span></span></span>
@@ -107,8 +108,9 @@
             </div>
             </section>
             <section class="panel-control-group" aria-labelledby="capture-group-title"><h2 id="capture-group-title" class="control-group-title">Capture &amp; review</h2>
-            <div class="tool-grid"><button id="panel-comment" type="button">Select element</button><button id="panel-area" type="button">Select area · C</button><button id="panel-record" type="button">Record page</button><button id="panel-ai" type="button">AI review</button></div>
-            <p id="panel-instruction" class="muted">Choose an element, or hold C and drag on the page.</p>
+            <div class="tool-grid"><button id="panel-record" type="button">Record page</button><button id="panel-ai" type="button">AI review</button></div>
+            <div class="shortcut-cheatsheet" aria-label="Comment shortcuts"><p><kbd>C</kbd><span>Leave comment</span></p><p><span><kbd>C</kbd> + mouse drag</span><span>Select area and leave comment</span></p></div>
+            <p id="panel-instruction" class="muted" role="status" hidden></p>
             <button id="panel-cancel-selection" type="button" hidden>Cancel selection</button>
             <p id="panel-capture-error" class="feedback" role="alert" hidden></p>
             <button id="panel-retry" type="button" hidden>Retry capture</button>
@@ -157,11 +159,11 @@
           <span class="report-button-copy"><span class="button-label">Review reports</span><span class="report-count" id="report-count">Saved on this device</span></span>
           <svg class="button-arrow" width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <button class="ai-settings-button" id="ai-settings" type="button"><span>AI settings <span aria-hidden="true">↗</span></span><span>Your API key</span></button>
-        <button class="jira-settings-button" id="jira-settings" type="button"><span>Jira connections <span aria-hidden="true">↗</span></span><span>Connect your accounts</span></button>
       </div>
 
       <p class="drawer-hint">Drag Chrome’s divider to resize. To reopen this sidebar, click Diffuse in Chrome’s toolbar.</p>
+</div>
+      <div class="settings-access"><button class="settings-button" id="settings" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9.2 3-.6 2.3-2 .9-2.2-.6-2 3.5 1.7 1.7v2.4l-1.7 1.7 2 3.5 2.3-.6 2 .9.5 2.3h4l.6-2.3 2-.9 2.2.6 2-3.5-1.7-1.7v-2.4L20 9.1l-2-3.5-2.3.6-2-.9L13.2 3h-4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="11.2" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/></svg><span>Settings</span></button></div>
       <footer class="footer"><span class="footer-rule" aria-hidden="true"></span>FROM PROTOTYPE TO PRODUCTION<span class="footer-rule" aria-hidden="true"></span></footer>
     </main>
   </body>

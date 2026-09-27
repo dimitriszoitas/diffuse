@@ -1,3 +1,4 @@
+import {prepareImportedReview} from './review-transfer.mjs';
 const DB_NAME = 'diffuse-reviews';
 let database;
 
@@ -118,7 +119,7 @@ export async function getReview(id) {
     request(transaction.objectStore('comments').index('reviewId').getAll(id))
   ]);
   if (!review) throw new Error('This review is no longer available.');
-  return {...review, comments: comments.sort((a, b) => a.createdAt.localeCompare(b.createdAt))};
+  return {...review, comments: comments.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || ((a.importOrder ?? Number.MAX_SAFE_INTEGER) - (b.importOrder ?? Number.MAX_SAFE_INTEGER)))};
 }
 
 export async function updateComment(reviewId, commentId, input) {
@@ -171,4 +172,16 @@ export async function removeExpiredDrafts() {
   const cursor = transaction.objectStore('drafts').index('createdAt').openCursor(IDBKeyRange.upperBound(before));
   cursor.onsuccess = () => { const item = cursor.result; if (item) { item.delete(); item.continue(); } };
   await done;
+}
+
+// A portable review is imported atomically under fresh IDs. add() deliberately
+// refuses collisions instead of replacing any existing local review or comment.
+export async function importReview(bundle) {
+  const imported = prepareImportedReview(bundle);
+  const transaction = (await db()).transaction(['reviews', 'comments'], 'readwrite');
+  const done = completion(transaction);
+  transaction.objectStore('reviews').add(imported.review);
+  for (const comment of imported.comments) transaction.objectStore('comments').add(comment);
+  await done;
+  return imported;
 }

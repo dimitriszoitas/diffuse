@@ -27,7 +27,7 @@
         <div class="range-heading"><label for="threshold">Minimum issue size</label><output id="threshold-value" for="threshold">35 / 100</output></div>
         <input id="threshold" type="range" min="0" max="100" step="1" value="35" aria-valuetext="35 out of 100" aria-describedby="threshold-help">
         <p class="help" id="threshold-help">0 shows all findings. Higher numbers hide smaller differences; 90 shows only the largest issues. This is a display filter, not review accuracy or confidence.</p>
-        <div id="feedback" role="status" aria-live="polite" tabindex="-1" hidden></div>
+        <div id="ai-feedback" role="status" aria-live="polite" tabindex="-1" hidden></div>
         <div class="actions"><button id="save" class="primary" type="submit" disabled>Save settings <span aria-hidden="true">↗</span></button><button id="clear-key" class="text-button" type="button" disabled>Remove key</button></div>
       </form>
       <aside>
@@ -38,7 +38,7 @@
         <a class="console-link" href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener noreferrer">Manage Anthropic API keys <span aria-hidden="true">↗</span></a>
       </aside>
     </div>
-    <footer><a href="jira-settings.html">Jira connections</a><span>Diffuse</span></footer>
+    <footer><a href="settings.html#jira">Jira connections</a><span>Diffuse</span></footer>
   </main>
 </body>
 </html>

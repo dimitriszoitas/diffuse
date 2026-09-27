@@ -5,7 +5,7 @@ const client = createJiraConnectionClient();
 let busy = true;
 
 function feedback(message, error = false) {
-  const target = el('feedback');
+  const target = el('jira-feedback');
   target.textContent = message;
   target.hidden = !message;
   target.dataset.error = String(error);
