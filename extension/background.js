@@ -182,7 +182,7 @@ async function publish() {
 async function refreshComments(current = session) {
   if (!current) return;
   const review = await reviews.getReview(current.reviewId || current.id).catch(() => null);
-  current.comments = (review?.comments || []).map(({id, createdAt, fields, selection, context, ai, pinOffset}) => ({id, createdAt, fields, selection, context: {production: context?.production}, ...(ai ? {ai} : {}), ...(pinOffset ? {pinOffset} : {})}));
+  current.comments = (review?.comments || []).map(({id, createdAt, fields, selection, context, ai, pinOffset, pinSelection, pinPoint}) => ({id, createdAt, fields, selection, context: {production: context?.production}, ...(ai ? {ai} : {}), ...(pinOffset ? {pinOffset} : {}), ...(pinSelection ? {pinSelection} : {}), ...(pinPoint ? {pinPoint} : {})}));
   current.commentCount = current.comments.length;
 }
 
@@ -537,11 +537,11 @@ function savedPageUrl(value) {
 }
 
 function savedCommentUrl(comment) {
-  return savedPageUrl(comment?.context?.production?.url || comment?.selection?.context?.url);
+  return savedPageUrl(comment?.pinSelection?.context?.url || comment?.context?.production?.url || comment?.selection?.context?.url);
 }
 
 function savedCommentViewport(comment) {
-  const context = comment?.context?.production || comment?.selection?.context;
+  const context = comment?.pinSelection?.context || comment?.context?.production || comment?.selection?.context;
   const key = context?.viewportProfile?.key;
   if (['desktop', 'laptop', 'tablet', 'phone'].includes(key)) return key;
   const width = context?.viewport?.width;
@@ -576,7 +576,7 @@ async function revealPendingComment(current = session) {
     await publish(); return;
   }
   const desired = savedCommentViewport(comment);
-  const recordedViewport = (comment.context?.production || comment.selection?.context)?.viewport;
+  const recordedViewport = (comment.pinSelection?.context || comment.context?.production || comment.selection?.context)?.viewport;
   if (desired && recordedViewport?.width && recordedViewport?.height) {
     const context = await tabMessage(current.targetTabId, 'GET_CONTEXT', {sessionId: current.id});
     const actual = context?.context?.viewport || current.targetViewport;
@@ -1103,7 +1103,7 @@ async function handle(message, sender) {
   if (!session) return {ok: false, error: 'There is no active comparison.'};
   if (!isPopup && !role && !isMedia) throw new Error('This page is not part of the active comparison.');
   if (!isPopup && message.sessionId !== session.id) return {ok: false, error: 'This comparison is no longer active.'};
-  if (transitioning && ['STOP_SESSION', 'CAPTURE_COMMENT', 'ADD_COMMENT', 'UPDATE_COMMENT_PIN', 'DISCARD_DRAFT', 'START_RECORDING', 'RUN_AI_REVIEW', 'ACCEPT_AI_SUGGESTION', 'ACCEPT_AI_SUGGESTIONS', 'DISMISS_AI_SUGGESTION', 'SETTINGS', 'RECONNECT'].includes(message.type)) throw new Error('Finish choosing the reference before continuing the review.');
+  if (transitioning && ['STOP_SESSION', 'CAPTURE_COMMENT', 'ADD_COMMENT', 'UPDATE_COMMENT_PIN', 'REMAP_COMMENT', 'DISCARD_DRAFT', 'START_RECORDING', 'RUN_AI_REVIEW', 'ACCEPT_AI_SUGGESTION', 'ACCEPT_AI_SUGGESTIONS', 'DISMISS_AI_SUGGESTION', 'SETTINGS', 'RECONNECT'].includes(message.type)) throw new Error('Finish choosing the reference before continuing the review.');
   switch (message.type) {
     case 'DETACH_REFERENCE':
       if (role !== 'target') throw new Error('Remove the reference from the reviewed page.');
@@ -1170,6 +1170,50 @@ async function handle(message, sender) {
         if (session === current) await publish();
       }
       return {ok: true, pinOffset: saved.pinOffset};
+    }
+    case 'REMAP_COMMENT': {
+      if (sender.id !== chrome.runtime.id || role !== 'target' || sender.frameId !== 0) throw new Error('Remap comments on the reviewed page.');
+      const isRegion = Object.hasOwn(message, 'region');
+      let requested, position;
+      if (isRegion) {
+        if (Object.hasOwn(message, 'selector') || Object.hasOwn(message, 'position') || !message.region || typeof message.region !== 'object' || Array.isArray(message.region)) throw new Error('Choose a component or an area on the reviewed page.');
+        const {x, y, width, height} = message.region;
+        if (![x, y, width, height].every(Number.isFinite) || x < 0 || y < 0 || width <= 0 || height <= 0 || [x, y, width, height].some(value => value > 100000)) throw new Error('Choose a visible area on the reviewed page.');
+        requested = {region: {x, y, width, height}};
+      } else {
+        if (typeof message.selector !== 'string' || !message.selector.trim() || message.selector.length > 4096) throw new Error('Choose a component on the reviewed page.');
+        position = reviews.cleanPinOffset(message.position);
+        requested = {selector: message.selector};
+      }
+      const current = session;
+      const review = await reviews.getReview(current.reviewId);
+      const comment = review.comments.find(item => item.id === message.commentId);
+      if (!comment) throw new Error('This comment is no longer available.');
+      const tab = await chrome.tabs.get(current.targetTabId);
+      const context = (await tabMessage(current.targetTabId, 'GET_CONTEXT', {sessionId: current.id}))?.context;
+      if (session !== current || transitioning) throw new Error('This review changed. Remap the comment again.');
+      const url = savedCommentUrl(comment);
+      if (savedPageUrl(sender.url) !== url || savedPageUrl(tab.url) !== url || savedPageUrl(context?.url) !== url) throw new Error('Return to the comment’s original page before remapping it.');
+      const desired = savedCommentViewport(comment);
+      const actual = current.viewportPreset || savedCommentViewport({context: {production: context}});
+      if (desired && actual !== desired) throw new Error('Switch to the comment’s viewport before remapping it.');
+      // Resolve afresh in the reviewed top frame. Supplied geometry, context or
+      // evidence must never become a replacement attachment.
+      const inspected = await tabMessage(current.targetTabId, 'REFRESH_SELECTION', {sessionId: current.id, ...requested, forRemap: true});
+      if (session !== current || transitioning) throw new Error('This review changed. Remap the comment again.');
+      if (!inspected?.ok || !inspected.selection) throw new Error('The selected component is no longer available. Choose another component.');
+      const selection = reviews.cleanPinSelection(inspected.selection);
+      if (selection.kind !== (isRegion ? 'region' : 'element')) throw new Error('The selected component or area is no longer available. Choose it again.');
+      if (savedPageUrl(selection.context.url) !== url) throw new Error('Return to the comment’s original page before remapping it.');
+      const selectedViewport = current.viewportPreset || savedCommentViewport({context: {production: selection.context}});
+      if (desired && selectedViewport !== desired) throw new Error('Switch to the comment’s viewport before remapping it.');
+      selection.context.viewportProfile = {key: selectedViewport || actual, mode: current.viewportPreset ? 'preset' : 'window'};
+      const saved = await reviews.remapCommentPin(current.reviewId, comment.id, selection, position);
+      if (session === current) {
+        await refreshComments(current);
+        if (session === current) await publish();
+      }
+      return {ok: true, pinSelection: saved.pinSelection, pinPoint: saved.pinPoint || null, pinOffset: saved.pinOffset};
     }
     case 'GET_COMMENT': {
       if (role !== 'target') throw new Error('Open the comment on the audited page.');

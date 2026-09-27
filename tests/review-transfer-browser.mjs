@@ -42,11 +42,33 @@ try {
   const moved=await store.updateCommentPin('original',first.id,{x:125.5,y:-72.25,evidence:{production:'Do not replace'}});
   for(const key of ['id','reviewId','createdAt','fields','selection','context','evidence'])if(JSON.stringify(moved[key])!==JSON.stringify(first[key]))throw new Error(`Moving the pin changed ${key}`);
   if(JSON.stringify(moved.pinOffset)!==JSON.stringify({x:125.5,y:-72.25}))throw new Error('Pin display offset was not saved independently');
+  const second=original.comments[1],pinSelection={...structuredClone(second.selection),selector:'#remapped',selectorFormat:'css',tagName:'button',component:{name:'Remapped component',source:'data-component'},anchor:{version:1,kind:'element',selector:'#remapped',identity:{tag:'button',attributes:{id:'remapped'}}},context:{...structuredClone(second.selection.context),scroll:{x:0,y:920},nestedScroll:[{selector:'#activity',x:0,y:180}]}};
+  const beforeRemap=await store.getReview('original');
+  for(const [reviewId,commentId,target] of [['different-review',second.id,pinSelection],['original','missing-comment',pinSelection],['original',second.id,{}],['original',second.id,{...pinSelection,context:{...pinSelection.context,url:'https://other.example.test/'}}]]){
+   let rejected=false;try{await store.remapCommentPin(reviewId,commentId,target,{x:32.5,y:70});}catch{rejected=true;}
+   if(!rejected)throw new Error('Invalid remapping was accepted');
+  }
+  if(JSON.stringify(await store.getReview('original'))!==JSON.stringify(beforeRemap))throw new Error('Rejected remapping changed saved data');
+  await store.updateCommentPin('original',second.id,{x:80,y:20});
+  const remapped=await store.remapCommentPin('original',second.id,{...pinSelection,unknownCredential:'never save'},{x:32.5,y:70});
+  for(const key of ['id','reviewId','createdAt','fields','selection','context','evidence'])if(JSON.stringify(remapped[key])!==JSON.stringify(second[key]))throw new Error(`Remapping the pin changed ${key}`);
+  if(JSON.stringify(remapped.pinPoint)!==JSON.stringify({x:.25,y:.5})||JSON.stringify(remapped.pinOffset)!==JSON.stringify({x:0,y:0})||remapped.pinSelection.selector!=='#remapped'||remapped.pinSelection.unknownCredential)throw new Error('Remapped attachment was not stored independently and sanitized');
+  const area={schemaVersion:1,kind:'region',component:{name:'Selected area',source:'region'},rect:{viewport:{x:20,y:40,width:180,height:90},document:{x:20,y:960,width:180,height:90}},context:structuredClone(pinSelection.context)};
+  const areaSaved=await store.remapCommentPin('original',second.id,area);
+  if(areaSaved.pinSelection.kind!=='region'||Object.hasOwn(areaSaved,'pinPoint'))throw new Error('Area remapping did not replace the element attachment and clear its point');
+  for(const key of ['selection','context','fields','evidence'])if(JSON.stringify(areaSaved[key])!==JSON.stringify(second[key]))throw new Error(`Area remapping changed captured ${key}`);
+  const {createReviewBundle}=await import(chrome.runtime.getURL('review-transfer.mjs'));
+  const importedArea=await store.importReview(createReviewBundle(await store.getReview('original')));
+  const areaRoundtrip=(await store.getReview(importedArea.review.id)).comments[1];
+  if(JSON.stringify(areaRoundtrip.pinSelection)!==JSON.stringify(areaSaved.pinSelection)||Object.hasOwn(areaRoundtrip,'pinPoint'))throw new Error('Area attachment did not survive portable import');
+  await store.deleteReview(importedArea.review.id);
+  await store.remapCommentPin('original',second.id,pinSelection,{x:32.5,y:70});
   return store.getReview('original');
  });
  await page.reload();await page.waitForFunction(()=>document.querySelectorAll('.comment-card').length===2);
  assert.deepEqual(await page.evaluate(async()=>(await (await import(chrome.runtime.getURL('review-store.mjs'))).getReview('original')).comments[0].pinOffset),{x:125.5,y:-72.25});
- pass('Pin movement survives a real IndexedDB reload; wrong review/comment IDs and invalid coordinates leave all saved data unchanged');
+ assert.deepEqual(await page.evaluate(async()=>(await (await import(chrome.runtime.getURL('review-store.mjs'))).getReview('original')).comments[1].pinSelection),fixture.comments[1].pinSelection);
+ pass('Pin movement, normalized element drops and area remapping survive real IndexedDB reload/import; wrong review/comment IDs, invalid coordinates and foreign page attachments leave saved data unchanged');
  const actions=page.locator('#review-actions-toggle'),menu=page.locator('#review-actions-menu');
  assert.equal(await page.locator('.workspace h1').count(),1);
  assert.equal(await page.locator('#report-content h1').count(),0);
@@ -77,8 +99,8 @@ try {
  const bytes=await readFile(await download.path()),bundle=JSON.parse(bytes);assert.equal(bundle.review.comments.length,2);
  assert.equal(bundle.review.comments[1].context.production.url,fixture.comments[1].context.production.url);
  assert.deepEqual(bundle.review.comments[0].evidence,fixture.comments[0].evidence);assert.equal(bundle.review.id,undefined);
- assert.deepEqual(bundle.review.comments[0].pinOffset,fixture.comments[0].pinOffset);assert.equal(bundle.review.comments[1].pinOffset,undefined);
- pass('Actual Export review download retains both paths, viewport presets, anchors, moved pin position, screenshots and a real WebM recording');
+ assert.deepEqual(bundle.review.comments[0].pinOffset,fixture.comments[0].pinOffset);assert.deepEqual(bundle.review.comments[1].pinPoint,{x:.25,y:.5});assert.deepEqual(bundle.review.comments[1].pinOffset,{x:0,y:0});assert.deepEqual(bundle.review.comments[1].pinSelection,fixture.comments[1].pinSelection);
+ pass('Actual Export review download retains both paths, viewport presets, anchors, moved pin position, remapped component, screenshots and a real WebM recording');
  const htmlDownloadPromise=page.waitForEvent('download');await actions.click();await page.locator('#download-html').click();const htmlDownload=await htmlDownloadPromise;
  assert.match(htmlDownload.suggestedFilename(),/\.html$/);
  const exportedHtml=await readFile(await htmlDownload.path(),'utf8');assert.match(exportedHtml,/data:image\/png;base64,/);assert.match(exportedHtml,/data:video\/webm/);assert.match(exportedHtml,/Observation one/);
@@ -112,7 +134,7 @@ try {
  assert.deepEqual(saved.find(review=>review.id==='original'),fixture);
  for(const review of saved.filter(review=>review.id!=='original')) {
   assert.equal(review.comments.length,2);assert.equal(review.comments[0].reviewId,review.id);
-  for(let index=0;index<2;index++)for(const key of ['fields','context','selection','evidence','pinOffset'])assert.deepEqual(review.comments[index][key],fixture.comments[index][key]);
+  for(let index=0;index<2;index++)for(const key of ['fields','context','selection','evidence','pinOffset','pinSelection','pinPoint'])assert.deepEqual(review.comments[index][key],fixture.comments[index][key]);
  }
  pass('Two real IndexedDB imports create fresh IDs atomically, preserve every media byte and location, and keep the original unchanged');
  assert.match(await page.locator('#notice').textContent(),/Use Open review page to try again/);

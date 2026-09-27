@@ -39,7 +39,7 @@ The existing divider and opacity controls appear once connected. **Hide referenc
 
 **Keyboard shortcuts:** `Alt+Shift+D` toggles a connected reference; `Alt+Shift+P` switches between reference and reviewed page. Tap **C**, release it, then click an element to leave a comment; hold **C + left-click-drag** to select an area. Escape cancels. The shortcuts are ignored while typing in an editable field.
 
-Drag a numbered comment marker to reposition it while keeping the original element attached. Its saved offset follows that element through scrolling and responsive layout changes, and travels with exported reviews. Open the comment and use **Reset position** to restore it. Focus a marker and use **Alt + arrow keys** to move it 10px, or add **Shift** for 1px. Escape cancels a drag.
+Drag a numbered comment marker directly onto another component to reattach it. The highlighted element becomes its new anchor at the drop point; that position follows scrolling and responsive layout changes and travels with exported reviews. To convert the same comment to an area comment, open it, choose **Select area**, and draw a rectangle. Escape cancels without changing the attachment. Original comment text and captured evidence stay intact. Focus a marker and use **Alt + arrow keys** to move its attachment 10px, or add **Shift** for 1px. Older offset markers still support **Reset position**.
 
 Page clicks operate the reviewed page. Switch to the reference to interact with it. Scroll linking does not synchronize menus, form inputs or application state.
 

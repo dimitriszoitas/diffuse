@@ -25,6 +25,9 @@
   let modalObserver = null;
   let pickerAbort = null;
   let picking = false;
+  let remapAreaId = null;
+  const pinPendingDrops = new Map();
+  let remapBusy = false;
   let hoveredElement = null;
   let selectedElement = null;
   let selectionMetadata = null;
@@ -153,7 +156,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 #selection-outline{background:#235ed710;box-shadow:0 0 0 1px #ffffffb0}#selection-outline[data-region=true]{background:#235ed718}#selection-label,#ai-region-label{background:#235ed7;color:#fff}
 #saved-comment-bubble{border:1px solid #d4dfed;border-radius:8px;padding:14px;box-shadow:0 6px 12px #213c5b0a,0 18px 48px #213c5b20;font-size:14px;line-height:1.55}
 #saved-comment-bubble h3{font-size:17px;font-weight:600;letter-spacing:-.2px;margin:12px 0}.bubble-meta{font-size:12px}.bubble-actions{gap:6px;margin-top:12px}
-#comment-pin-connections{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;pointer-events:none;z-index:1}#comment-pin-connections line{stroke:#6a87b1;stroke-width:1.5;stroke-dasharray:3 3}#comment-pin-connections circle{fill:#fff;stroke:#6a87b1;stroke-width:1.5}.comment-pin{touch-action:none;user-select:none;cursor:grab}.comment-pin[data-dragging]{cursor:grabbing;outline:2px solid #235ed7;outline-offset:3px;box-shadow:0 4px 16px #213c5b40}#pin-drag-help{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}#pin-position-status{position:absolute;bottom:16px;left:16px;max-width:calc(100% - 32px);padding:9px 12px;border:1px solid #d4dfed;border-radius:7px;background:#fff;color:#38516f;box-shadow:0 4px 16px #213c5b18;font-size:13px;pointer-events:none;z-index:25}.bubble-actions{flex-wrap:wrap}#reset-pin-position{font-size:12px}.pin-move-hint{font-size:12px;color:var(--muted);margin:12px 0 0!important}
+#comment-pin-connections{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;pointer-events:none;z-index:1}#comment-pin-connections line{stroke:#6a87b1;stroke-width:1.5;stroke-dasharray:3 3}#comment-pin-connections circle{fill:#fff;stroke:#6a87b1;stroke-width:1.5}.comment-pin{touch-action:none;user-select:none;cursor:grab}.comment-pin[data-dragging]{cursor:grabbing;outline:2px solid #235ed7;outline-offset:3px;box-shadow:0 4px 16px #213c5b40}#pin-drag-help{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}#pin-position-status{position:absolute;bottom:16px;left:16px;max-width:calc(100% - 32px);padding:9px 12px;border:1px solid #d4dfed;border-radius:7px;background:#fff;color:#38516f;box-shadow:0 4px 16px #213c5b18;font-size:13px;pointer-events:none;z-index:25}.bubble-actions{flex-wrap:wrap}#reset-pin-position{font-size:12px}#select-pin-area{flex-basis:100%;justify-content:flex-start;color:#235ed7;background:#edf3ff;border-color:#cfddf5}#pin-attachment{font-size:12px;color:#235ed7}.pin-move-hint{font-size:12px;color:var(--muted);margin:12px 0 0!important}
 #saved-comment-category{border-radius:4px;padding:3px 7px;font-size:12px;font-weight:600}.comment-pin{box-shadow:0 2px 8px #213c5b30;font-size:14px;font-weight:650}
 #context-reload-notice{border-color:#d4dfed;border-radius:8px;padding:12px;box-shadow:0 5px 20px #213c5b20;font-size:13px}
 #picker-tip,#capture-progress{border-color:#d4dfed;border-radius:8px;padding:10px 14px;font-size:13px;box-shadow:0 5px 20px #213c5b18}
@@ -187,8 +190,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       <div id="picker-tip" hidden><span role="status">Choose an element on production. Esc to cancel.</span><button id="cancel-picker" type="button">Cancel</button><details id="area-coordinates" hidden><summary>Set area dimensions</summary><form id="area-form"><div class="area-fields"><label>Left <input id="area-x" type="number" min="0" step="1" required></label><label>Top <input id="area-y" type="number" min="0" step="1" required></label><label>Width <input id="area-width" type="number" min="4" step="1" required></label><label>Height <input id="area-height" type="number" min="4" step="1" required></label></div><button type="submit">Comment on this area</button><p id="area-error" role="alert"></p></form></details></div>
       <div id="panel-backdrop" hidden aria-hidden="true"></div>
       <div id="capture-progress" hidden role="status">Capturing both pages…</div>
-      <svg id="comment-pin-connections" aria-hidden="true"></svg><div id="comment-pins"></div><span id="pin-drag-help">Drag to reposition. Alt and arrow keys move 10 pixels; add Shift for 1 pixel. The original element stays attached.</span><div id="pin-position-status" role="status" aria-live="polite" hidden></div><div id="saved-comment-highlight" hidden aria-hidden="true"></div>
-      <section id="saved-comment-bubble" hidden role="dialog" aria-label="Saved comment"><div class="bubble-top"><span id="saved-comment-category" class="bubble-meta"></span><button id="close-saved-comment" type="button" aria-label="Close saved comment">×</button></div><h3 id="saved-comment-title"></h3><p id="saved-comment-text"></p><p id="saved-comment-expected"></p><p id="saved-comment-state" class="bubble-meta"></p><div class="bubble-actions"><button id="open-pin-report" type="button">Open in review</button><button id="reset-pin-position" type="button" disabled>Reset position</button></div><p class="pin-move-hint">Drag the numbered marker to move it. Its original element stays attached.</p></section>
+      <svg id="comment-pin-connections" aria-hidden="true"></svg><div id="comment-pins"></div><span id="pin-drag-help">Drag onto an element to attach here. Alt and arrow keys move 10 pixels; add Shift for 1 pixel.</span><div id="pin-position-status" role="status" aria-live="polite" hidden></div><div id="saved-comment-highlight" hidden aria-hidden="true"></div>
+      <section id="saved-comment-bubble" hidden role="dialog" aria-label="Saved comment"><div class="bubble-top"><span id="saved-comment-category" class="bubble-meta"></span><button id="close-saved-comment" type="button" aria-label="Close saved comment">×</button></div><h3 id="saved-comment-title"></h3><p id="saved-comment-text"></p><p id="saved-comment-expected"></p><p id="saved-comment-state" class="bubble-meta"></p><p id="pin-attachment" hidden></p><div class="bubble-actions"><button id="select-pin-area" type="button">Select area</button><button id="open-pin-report" type="button">Open in review</button><button id="reset-pin-position" type="button" disabled>Reset position</button></div><p class="pin-move-hint">Drag onto another element to reattach. Select area to mark a region.</p></section>
       <div id="ai-region-preview" hidden aria-hidden="true"><span id="ai-region-label">AI suggestion · not saved</span></div>
       <section id="ai-panel" hidden role="dialog" aria-labelledby="ai-title" aria-modal="false"><div class="composer-header"><h2 id="ai-title">AI review</h2><button id="close-ai" class="composer-close" type="button" aria-label="Close AI review">×</button></div><div class="composer-body"><p id="ai-mode-note" class="composer-note"></p><label class="composer-field"><span>Instructions <small>(optional)</small></span><textarea id="ai-instructions" maxlength="4000" placeholder="What should the review focus on?"></textarea></label><label class="composer-field"><span>Minimum issue size: <output id="ai-threshold-value">35</output>/100</span><input id="ai-threshold" type="range" min="0" max="100" value="35" aria-describedby="ai-threshold-help"><span class="threshold-ends"><small>0 · All details</small><small>100 · Largest issues only</small></span><small id="ai-threshold-help">Higher numbers hide smaller differences. This filters existing suggestions; changing it does not run AI again. Size is an estimate, separate from confidence.</small></label><p id="ai-disclosure" class="ai-disclosure">Run sends the current screenshot(s) and your instructions to Anthropic using your configured API key. API charges apply. Nothing is sent until you click Run.</p><p id="ai-config-status" class="composer-note"></p><div class="composer-actions"><button id="ai-settings" type="button">AI settings</button><button id="ai-run" type="button">Run AI review</button></div><div id="ai-error" class="composer-error" role="alert"></div><div id="ai-suggestions" tabindex="-1"></div></div></section>
       <section id="comment-panel" hidden role="dialog" aria-labelledby="composer-title" aria-modal="false">
@@ -240,10 +243,11 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     el('comment').addEventListener('pointerdown', event => event.preventDefault());
     el('area-comment').addEventListener('click', () => areaArmed ? cancelArea() : armArea());
     el('area-comment').addEventListener('pointerdown', event => event.preventDefault());
-    el('cancel-picker').addEventListener('click', () => {stopPicking(); cancelArea();});
+    el('cancel-picker').addEventListener('click', () => {stopPicking(); cancelArea(true);});
     el('area-form').addEventListener('submit',event=>{event.preventDefault();captureAreaCoordinates();});
     const dismissPin=()=>{const button=pinItems.find(item=>item.comment.id===openPinId)?.button;closePin();button?.focus({preventScroll:true});};
     el('close-saved-comment').addEventListener('click', dismissPin);
+    el('select-pin-area').addEventListener('click', () => {if(openPinId)beginPinArea(openPinId);});
     el('reset-pin-position').addEventListener('click', () => { if(openPinId) savePinOffset(openPinId, {x:0,y:0}); });
     el('open-pin-report').addEventListener('click', () => quietSend('OPEN_REPORT', {commentId:openPinId}));
     el('ai-review').addEventListener('click', openAi);
@@ -528,14 +532,14 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     return event.composedPath().some(node => node instanceof Element && (node.matches('input,textarea,select,[role="textbox"],[role="combobox"]') || node.isContentEditable));
   }
 
-  function canSelect() {return Boolean(root && !pinDrag && !captureBusy && !commentSaving && !recording && !recordingBusy && !commentDraft && !aiBusy && !aiOperationBusy && !session?.aiRunning);}
+  function canSelect() {return Boolean(root && !pinDrag && !remapBusy && !captureBusy && !commentSaving && !recording && !recordingBusy && !commentDraft && !aiBusy && !aiOperationBusy && !session?.aiRunning);}
 
-  function armArea() {
+  function armArea(remapping = null) {
     if(!canSelect()) return;
     stopPicking(false);closePin();closeAi();
-    areaArmed=true;areaDrag=null;
+    areaArmed=true;areaDrag=null;remapAreaId=remapping;
     el('comment-panel').hidden=true;
-    el('picker-tip').firstElementChild.textContent='Drag an area, or set its dimensions below. Esc to cancel.';
+    el('picker-tip').firstElementChild.textContent=remapping?'Draw the area for this comment, or set its dimensions below. Esc to cancel.':'Drag an area, or set its dimensions below. Esc to cancel.';
     el('area-coordinates').hidden=false;
     el('area-coordinates').open=false;
     el('area-error').textContent='';
@@ -549,10 +553,13 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     if(!canSelect()||!el('area-form').reportValidity())return;
     const [x,y,width,height]=['area-x','area-y','area-width','area-height'].map(id=>Number(el(id).value));
     if(![x,y,width,height].every(Number.isFinite)||x<0||y<0||width<4||height<4||x+width>innerWidth||y+height>innerHeight){el('area-error').textContent=`Keep the area inside this ${innerWidth} × ${innerHeight} page view.`;return;}
-    cancelArea();selectedElement=null;selectionMetadata=globalThis.DiffuseInspector.region(x,y,width,height);captureComment();
+    const remapping=remapAreaId;cancelArea();
+    if(remapping){remapPin(remapping,{region:{x,y,width,height}},{openAfter:true});return;}
+    selectedElement=null;selectionMetadata=globalThis.DiffuseInspector.region(x,y,width,height);captureComment();
   }
 
-  function cancelArea() {
+  function cancelArea(restoreRemap = false) {
+    const remapping=remapAreaId;remapAreaId=null;
     if(areaDrag) ignoreNextAreaClick=true;
     areaArmed=false;areaDrag=null;cHeld=false;
     if(!root)return;
@@ -561,6 +568,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     el('area-coordinates').hidden=true;
     if(!picking)el('picker-tip').hidden=true;
     paintReviewControls();
+    if(restoreRemap&&remapping){openPin(remapping);el('select-pin-area').focus({preventScroll:true});}
   }
 
   function areaBounds() {
@@ -573,10 +581,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     const options={capture:true,signal:abort.signal};
     const suppress=event=>{event.preventDefault();event.stopImmediatePropagation();};
     document.addEventListener('keydown',event=>{
-      if(event.key==='Escape'&&(areaArmed||areaDrag||cHeld)){suppress(event);cancelArea();stopPicking(false);return;}
+      if(event.key==='Escape'&&(areaArmed||areaDrag||cHeld)){suppress(event);cancelArea(true);stopPicking(false);return;}
       if(event.code==='KeyC'&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&!event.shiftKey&&!editableEvent(event)&&canSelect()){
         suppress(event);
-        if(event.repeat||cHeld)return;
+        if(remapAreaId||event.repeat||cHeld)return;
         // Arm on the initial press, independent of where focus is on release.
         // Holding C still turns the next primary pointer gesture into an area.
         startPicking();cHeld=true;
@@ -587,7 +595,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       if(cHeld)suppress(event);
       cHeld=false;
     },options);
-    window.addEventListener('blur',()=>{cHeld=false;if(areaDrag)cancelArea();},{signal:abort.signal});
+    window.addEventListener('blur',()=>{cHeld=false;if(areaDrag)cancelArea(true);},{signal:abort.signal});
     document.addEventListener('pointerdown',event=>{
       if(event.button!==0||!(areaArmed||cHeld)||!canSelect()||isDiffuseEvent(event)||editableEvent(event))return;
       suppress(event);stopPicking(false);closePin();closeAi();
@@ -608,8 +616,14 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     document.addEventListener('pointerup',event=>{
       if(!areaDrag||event.pointerId!==areaDrag.pointerId)return;suppress(event);
       areaDrag.x=Math.max(0,Math.min(innerWidth,event.clientX));areaDrag.y=Math.max(0,Math.min(innerHeight,event.clientY));
-      const bounds=areaBounds();areaDrag=null;areaArmed=false;ignoreNextAreaClick=true;
+      const bounds=areaBounds(),remapping=remapAreaId;remapAreaId=null;areaDrag=null;areaArmed=false;ignoreNextAreaClick=true;
       el('selection-outline').hidden=true;el('selection-outline').removeAttribute('data-region');
+      if(remapping){
+        el('picker-tip').hidden=true;el('area-coordinates').hidden=true;paintReviewControls();
+        if(bounds.width<4||bounds.height<4){openPin(remapping);pinStatus('Area unchanged. Drag a rectangle at least 4 × 4 pixels.');}
+        else remapPin(remapping,{region:bounds},{openAfter:true});
+        return;
+      }
       if(bounds.width<4||bounds.height<4){
         const target=pickTarget(event);
         if(target){selectedElement=target;selectionMetadata=globalThis.DiffuseInspector.inspect(target);captureComment();}
@@ -623,12 +637,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       if(isDiffuseEvent(event))return;
       if(areaDrag||ignoreNextAreaClick){suppress(event);if(name==='click')ignoreNextAreaClick=false;}
     },options);
-    document.addEventListener('pointercancel',()=>{if(areaDrag)cancelArea();},options);
+    document.addEventListener('pointercancel',()=>{if(areaDrag)cancelArea(true);},options);
     document.addEventListener('wheel',event=>{if(areaDrag)event.preventDefault();},{...options,passive:false});
   }
 
   function commentRect(comment) {
-    const selection=comment.selection;
+    const selection=comment.pinSelection||comment.selection;
     if(!selection){const scroll=comment.context?.production?.scroll||{x:0,y:0};const rect={x:scroll.x+24-scrollX,y:scroll.y+24-scrollY,width:1,height:1};return{...rect,visible:rect};}
     return globalThis.DiffuseInspector?.resolveSelection(selection) || null;
   }
@@ -658,7 +672,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
         if(session?.id!==sessionId||pinPlacements.get(id)!==placement)return;
         placement.saved=cleanPinOffset(result.pinOffset||next);
         const current=session.comments?.find(item=>item.id===id);if(current)current.pinOffset={...placement.saved};
-        if(placement.revision===revision){pinPlacements.delete(id);pinStatus(next.x||next.y?'Position saved. Original element stays attached.':'Position reset.');}
+        if(placement.revision===revision){pinPlacements.delete(id);pinStatus(next.x||next.y?'Position saved. Element attachment unchanged.':'Position reset.');}
       }catch(error){
         if(session?.id!==sessionId||pinPlacements.get(id)!==placement)return;
         if(placement.revision===revision){
@@ -668,6 +682,28 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       }
       updatePinPositions();
     });
+  }
+  function pinBasePoint(comment, rect) {
+    const point=comment.pinPoint;
+    if(point&&Number.isFinite(point.x)&&Number.isFinite(point.y)&&point.x>=0&&point.x<=1&&point.y>=0&&point.y<=1)return{x:rect.x+rect.width*point.x,y:rect.y+rect.height*point.y};
+    return{x:rect.x+Math.min(rect.width,12),y:rect.y+Math.min(rect.height,12)};
+  }
+  function pinDropTarget(x,y) {
+    const allowed=node=>node instanceof Element&&node!==host&&node!==document.documentElement&&!node.closest('[data-diffuse-ui]');
+    let target=document.elementsFromPoint(x,y).find(allowed);
+    while(target?.shadowRoot){const nested=target.shadowRoot.elementsFromPoint?.(x,y).find(node=>node!==target&&allowed(node));if(!nested)break;target=nested;}
+    return target?.isConnected?target:null;
+  }
+  function remapPinAtPoint(id, point, openAfter=false) {
+    const target=pinDropTarget(point.x,point.y);
+    if(!target){pinStatus('Drop the comment on a page element.');updatePinPositions();return;}
+    try {
+      const selection=globalThis.DiffuseInspector.inspect(target);
+      pinPendingDrops.set(id,point);
+      remapPin(id,{selector:selection.selector,position:point},{openAfter});
+    } catch {
+      pinStatus('Could not attach here. Drop the comment on another page element.');updatePinPositions();
+    }
   }
   function movedPinOffset(drag, base) {
     const x=Math.max(22,Math.min(innerWidth-22,drag.clientX-drag.grabX));
@@ -679,7 +715,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     pinDrag=null;delete drag.button.dataset.dragging;
     if(drag.button.hasPointerCapture(drag.pointerId))drag.button.releasePointerCapture(drag.pointerId);
     if(drag.moved||cancel){pinIgnoreClick=drag.id;pinTrailingRelease=drag.pointerId;}
-    if(drag.moved&&!cancel)savePinOffset(drag.id,drag.offset);
+    if(root)el('selection-outline').hidden=true;
+    if(drag.moved&&!cancel)remapPinAtPoint(drag.id,drag.dropPoint,openPinId===drag.id);
     else if(cancel&&drag.moved)pinStatus('Move cancelled.');
     if(repaint)updatePinPositions();
   }
@@ -716,7 +753,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     button.addEventListener('click',event=>{
       event.stopPropagation();
       if(pinIgnoreClick===id&&event.detail!==0){pinIgnoreClick=null;event.preventDefault();return;}
-      pinIgnoreClick=null;openPin(id);
+      pinIgnoreClick=null;if(!remapBusy)openPin(id);
     });
     button.addEventListener('pointerdown',event=>{
       if(event.button!==0||!canSelect()||pinDrag)return;
@@ -732,8 +769,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       event.preventDefault();event.stopPropagation();
       const item=pinItems.find(item=>item.comment.id===id);if(!item?.point||!item.rect)return;
       const step=event.shiftKey?1:10,dx=event.key==='ArrowLeft'?-step:event.key==='ArrowRight'?step:0,dy=event.key==='ArrowUp'?-step:event.key==='ArrowDown'?step:0;
-      const base={x:item.rect.x+Math.min(item.rect.width,12),y:item.rect.y+Math.min(item.rect.height,12)};
-      savePinOffset(id,movedPinOffset({clientX:item.point.x+dx,clientY:item.point.y+dy,grabX:0,grabY:0},base));
+      remapPinAtPoint(id,{x:Math.max(1,Math.min(innerWidth-1,item.point.x+dx)),y:Math.max(1,Math.min(innerHeight-1,item.point.y+dy))},openPinId===id);
     });
   }
   function renderPins() {
@@ -749,7 +785,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       if(!button){button=document.createElement('button');button.type='button';button.className='comment-pin';button.dataset.commentId=comment.id;wirePin(button,comment.id);el('comment-pins').append(button);}
       let link=links.get(comment.id);links.delete(comment.id);
       if(!link){link=document.createElementNS('http://www.w3.org/2000/svg','g');link.dataset.pinLink=comment.id;link.append(document.createElementNS(link.namespaceURI,'line'),document.createElementNS(link.namespaceURI,'circle'));link.lastElementChild.setAttribute('r','3');el('comment-pin-connections').append(link);}
-      colorCategory(button,comment.fields?.category);button.textContent=String(number);button.title=`${categoryLabel(comment.fields?.category)}: ${commentTitle(comment.fields)} · Drag to move`;button.setAttribute('aria-label',`Comment ${number}, ${categoryLabel(comment.fields?.category)}: ${commentTitle(comment.fields)}`);button.setAttribute('aria-describedby','pin-drag-help');button.setAttribute('aria-expanded',String(openPinId===comment.id));button.setAttribute('aria-controls','saved-comment-bubble');
+      colorCategory(button,comment.fields?.category);button.textContent=String(number);button.title=`${categoryLabel(comment.fields?.category)}: ${commentTitle(comment.fields)} · Drag to reattach`;button.setAttribute('aria-label',`Comment ${number}, ${categoryLabel(comment.fields?.category)}: ${commentTitle(comment.fields)}`);button.setAttribute('aria-describedby','pin-drag-help');button.setAttribute('aria-expanded',String(openPinId===comment.id));button.setAttribute('aria-controls','saved-comment-bubble');
       return{comment,button,link};
     });
     for(const button of existing.values())button.remove();for(const link of links.values())link.remove();
@@ -762,21 +798,22 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     if(pinsUrl!==location.href||pinsViewport!==currentViewportGroup()){finishPinDrag(true,false);renderPins();return;}
     for(const item of pinItems){
       const rect=commentRect(item.comment);item.rect=rect;
-      const base=rect?{x:rect.x+Math.min(rect.width,12),y:rect.y+Math.min(rect.height,12)}:null;
+      const base=rect?pinBasePoint(item.comment,rect):null;
       const visible=rect?.visible;
       if(pinDrag?.id===item.comment.id){
         if(!visible)finishPinDrag(true,false);
         else if(pinDrag.moved)pinDrag.offset=movedPinOffset(pinDrag,base);
       }
       const offset=pinOffset(item.comment),moved=Boolean(offset.x||offset.y);
-      const point=base?{x:base.x+offset.x,y:base.y+offset.y}:null;item.point=point;
+      const point=pinPendingDrops.get(item.comment.id)||(base?{x:base.x+offset.x,y:base.y+offset.y}:null);item.point=point;
+      if(pinDrag?.id===item.comment.id&&pinDrag.moved&&point){pinDrag.dropPoint=point;drawSelection(pinDropTarget(point.x,point.y));el('selection-label').textContent='Release to attach here';}
       // A moved marker is still tied to the original anchor, but may sit outside
       // its bounds. Hide it when that anchor or its chosen position scrolls away.
       const inView=point&&visible&&point.x>=0&&point.y>=0&&point.x<=innerWidth&&point.y<=innerHeight
         &&(moved||(point.x>=visible.x&&point.y>=visible.y&&point.x<=visible.x+visible.width&&point.y<=visible.y+visible.height));
       item.button.hidden=!inView||picking||areaArmed||Boolean(areaDrag);
       if(point){item.button.style.left=`${point.x}px`;item.button.style.top=`${point.y}px`;}
-      item.link.style.display=!item.button.hidden&&moved?'':'none';
+      item.link.style.display=!item.button.hidden&&moved&&pinDrag?.id!==item.comment.id&&!pinPendingDrops.has(item.comment.id)?'':'none';
       if(!item.button.hidden&&moved){
         const start={x:Math.max(visible.x,Math.min(visible.x+visible.width,base.x)),y:Math.max(visible.y,Math.min(visible.y+visible.height,base.y))};
         const dx=point.x-start.x,dy=point.y-start.y,distance=Math.hypot(dx,dy),trim=distance?Math.min(22,distance)/distance:0;
@@ -784,7 +821,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
         item.link.lastElementChild.setAttribute('cx',String(start.x));item.link.lastElementChild.setAttribute('cy',String(start.y));
       }
       if(item.comment.id===openPinId){
-        const show=!item.button.hidden&&!pinDrag?.moved;
+        const show=!item.button.hidden&&!pinDrag?.moved&&!pinPendingDrops.has(item.comment.id);
         el('saved-comment-bubble').hidden=!show;el('saved-comment-highlight').hidden=!show;
         el('reset-pin-position').disabled=!moved;
         if(show){
@@ -798,7 +835,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   async function revealComment(id) {
     const comment=session?.comments?.find(item=>item.id===id);
     if(!comment)throw new Error('This comment is no longer available.');
-    const context=comment.context?.production||comment.selection?.context||{};
+    const context=comment.pinSelection?.context||comment.context?.production||comment.selection?.context||{};
     if(context.url!==location.href)throw new Error('The page changed before the comment could be shown. Select the comment again.');
     if(!canSelect())throw new Error('Save or cancel the open comment before opening another.');
     stopPicking(false);cancelArea();closePin();closeAi();
@@ -809,7 +846,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     const restoreScroll=()=>{
       const position=context.scroll||{};
       window.scrollTo({left:Number.isFinite(position.x)?position.x:0,top:Number.isFinite(position.y)?position.y:0,behavior:'instant'});
-      const nested=context.nestedScroll||comment.selection?.scrollContainers||[];
+      const nested=context.nestedScroll||(comment.pinSelection||comment.selection)?.scrollContainers||[];
       for(const saved of nested){
         const target=globalThis.DiffuseInspector.resolveSelector(saved.selector);
         if(!target||target===document.documentElement)continue;
@@ -829,7 +866,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       await new Promise(resolve=>setTimeout(resolve,100));restoreScroll();
     }
     if(!rect)return{ok:true,found:false};
-    const selection=comment.selection;
+    const selection=comment.pinSelection||comment.selection;
     const target=globalThis.DiffuseInspector.resolveSelector(selection?.anchor?.selector||selection?.selector);
     if(target)target.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});
     await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
@@ -848,6 +885,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     el('saved-comment-text').textContent=fields.comment||'';
     el('saved-comment-expected').textContent=fields.expected?`Expected: ${fields.expected}`:'';
     el('saved-comment-state').textContent=[fields.component,fields.state,fields.severity].filter(Boolean).join(' · ');
+    const attachment=el('pin-attachment');attachment.hidden=!item.comment.pinSelection;
+    const component=item.comment.pinSelection?.component;
+    attachment.textContent=item.comment.pinSelection?`Remapped to ${item.comment.pinSelection.kind==='region'?'the selected area':component?.source==='data-component'||component?.source==='data-testid'?component.name:'the selected element'}. Original capture retained.`:'';
     el('saved-comment-bubble').hidden=false;el('saved-comment-highlight').hidden=false;
     for(const entry of pinItems)entry.button.setAttribute('aria-expanded',String(entry.comment.id===id));
     updatePinPositions();el('close-saved-comment').focus({preventScroll:true});
@@ -1040,6 +1080,47 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     el('selection-label').style.top = rect.top < 30 ? 'calc(100% + 4px)' : 'auto';
   }
 
+  async function beginPinArea(id) {
+    if(!canSelect()||!session?.comments?.some(comment=>comment.id===id))return;
+    const currentRoot=root,sessionId=session.id,pending=pinPlacements.get(id)?.queue;
+    if(pending){remapBusy=true;await pending;if(root!==currentRoot||session?.id!==sessionId)return;remapBusy=false;}
+    armArea(id);
+  }
+
+  async function remapPin(id, target, {openAfter=false} = {}) {
+    const sessionId=session?.id,currentRoot=root;
+    if(!sessionId)return;
+    remapBusy=true;paintReviewControls();pinStatus(target.region?'Saving comment area…':'Attaching comment here…');
+    try{
+      await pinPlacements.get(id)?.queue;
+      if(root!==currentRoot||session?.id!==sessionId)return;
+      const result=requireSuccess(await send('REMAP_COMMENT',{commentId:id,...target,sessionId}));
+      if(root!==currentRoot||session?.id!==sessionId)return;
+      if(!result.pinSelection?.rect)throw new Error('The new attachment could not be saved.');
+      const comment=session.comments?.find(item=>item.id===id);
+      if(!comment)throw new Error('The comment is no longer available.');
+      comment.pinSelection=result.pinSelection;comment.pinOffset=cleanPinOffset(result.pinOffset);
+      if(result.pinPoint)comment.pinPoint=result.pinPoint;else delete comment.pinPoint;
+      pinPlacements.delete(id);pinPendingDrops.delete(id);renderPins();
+      if(openAfter){closePin();openPin(id);}
+      pinStatus(target.region?'Comment converted to an area comment.':'Comment attached at the new position.');
+    }catch(error){
+      if(root!==currentRoot||session?.id!==sessionId)return;
+      pinPendingDrops.delete(id);renderPins();if(openAfter&&openPinId!==id)openPin(id);
+      pinStatus('Could not remap the comment. Its previous attachment was kept.');
+    }finally{
+      if(root===currentRoot&&session?.id===sessionId){remapBusy=false;paintReviewControls();notifyPanel();}
+    }
+  }
+
+  function choosePickedElement(target) {
+    try{
+      if(!globalThis.DiffuseInspector)throw new Error('The element inspector is unavailable. Reload this page and reconnect Diffuse.');
+      const selection=globalThis.DiffuseInspector.inspect(target);
+      selectionMetadata=selection;selectedElement=target;stopPicking(false);captureComment();
+    }catch(error){stopPicking();localWarning=error.message;paint();}
+  }
+
   function startPicking() {
     if (!canSelect()) return;
     cancelArea();closePin();closeAi();
@@ -1074,17 +1155,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       const target = pickTarget(event);
       if (!target) return;
       suppress(event);
-      try {
-        if (!globalThis.DiffuseInspector) throw new Error('The element inspector is unavailable. Reload this page and reconnect Diffuse.');
-        selectionMetadata = globalThis.DiffuseInspector.inspect(target);
-        selectedElement = target;
-        stopPicking(false);
-        captureComment();
-      } catch (error) {
-        stopPicking(false);
-        localWarning = error.message;
-        paint();
-      }
+      choosePickedElement(target);
     }, options);
     let keyboardIndex=-1;
     const keyboardTargets=[...document.querySelectorAll('button,a[href],input,select,textarea,h1,h2,h3,p,[data-component],[data-testid],[role]')].filter(node=>!node.closest('[data-diffuse-ui]')&&node.getClientRects().length&&getComputedStyle(node).visibility!=='hidden').slice(0,400);
@@ -1098,10 +1169,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
         const label=(hoveredElement.getAttribute('aria-label')||hoveredElement.textContent||hoveredElement.tagName).trim().replace(/\s+/g,' ').slice(0,90);
         el('picker-tip').firstElementChild.textContent=`${label}. ${keyboardIndex+1} of ${keyboardTargets.length}. Enter to comment; arrows to choose; Esc to cancel.`;
       }
-      if(event.key==='Enter'&&hoveredElement&&!isDiffuseEvent(event)){
-        event.preventDefault();event.stopImmediatePropagation();selectedElement=hoveredElement;selectionMetadata=globalThis.DiffuseInspector.inspect(hoveredElement);stopPicking(false);captureComment();
-      }else if(event.key==='Enter'&&hoveredElement&&root.activeElement===el('comment')){
-        event.preventDefault();event.stopImmediatePropagation();selectedElement=hoveredElement;selectionMetadata=globalThis.DiffuseInspector.inspect(hoveredElement);stopPicking(false);captureComment();
+      if(event.key==='Enter'&&hoveredElement&&(!isDiffuseEvent(event)||root.activeElement===el('comment'))){
+        event.preventDefault();event.stopImmediatePropagation();choosePickedElement(hoveredElement);
       }
     }, options);
     document.addEventListener('scroll', () => drawSelection(hoveredElement), {...options, passive: true});
@@ -1667,7 +1736,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 
   function stopResources() {
     clearInterval(contextTimer); contextTimer = null;
-    finishPinDrag(true,false);clearTimeout(pinStatusTimer);pinStatusTimer=null;pinPlacements.clear();pinIgnoreClick=null;pinTrailingRelease=null;
+    finishPinDrag(true,false);clearTimeout(pinStatusTimer);pinStatusTimer=null;pinPlacements.clear();pinPendingDrops.clear();pinIgnoreClick=null;pinTrailingRelease=null;
     clearInterval(pinsTimer); pinsTimer = null;
     clearInterval(recordingTimer); recordingTimer = null;
     clearTimeout(panelNotifyTimer); panelNotifyTimer = null;
@@ -1728,6 +1797,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     stopPicking(false);
     clearInterval(pinsTimer);pinsTimer=null;
     areaArmed=false;areaDrag=null;cHeld=false;ignoreNextAreaClick=false;openPinId=null;pinItems=[];pinsUrl='';pinsViewport='';
+    remapAreaId=null;remapBusy=false;pinPendingDrops.clear();
     aiBatch=null;aiBusy=false;aiOperationBusy=false;aiBulkAccepting=false;aiThresholdOverride=null;aiSavedThreshold=null;aiPreviewContext=null;
     clearInterval(recordingTimer); recordingTimer = null;
     recording = null; recordingBusy = false; commentSaving = false; captureBusy = false;
@@ -1810,7 +1880,20 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       return{ok:true,selection:{...selection,...(observed.anchor?{anchor:observed.anchor}:{})}};
     }
     if (message.type === 'REFRESH_SELECTION' && role === 'target') {
+      if(message.forRemap&&message.region){
+        const {x,y,width,height}=message.region;
+        if(![x,y,width,height].every(Number.isFinite)||x<0||y<0||width<4||height<4||x+width>innerWidth||y+height>innerHeight)return{ok:true,selection:null};
+        return{ok:true,selection:globalThis.DiffuseInspector.region(x,y,width,height)};
+      }
       const element = globalThis.DiffuseInspector.resolveSelector(message.selector);
+      if(message.forRemap){
+        for(let node=element;node;node=node.parentElement||node.getRootNode()?.host){
+          if(node===host||node.hasAttribute?.('data-diffuse-ui'))return{ok:true,selection:null};
+        }
+        if(!element?.isConnected)return{ok:true,selection:null};
+        const selection=globalThis.DiffuseInspector.inspect(element);
+        return{ok:true,selection:globalThis.DiffuseInspector.resolveSelection(selection)?.visible?selection:null};
+      }
       return {ok: true, selection: element ? globalThis.DiffuseInspector.inspect(element) : null};
     }
     if (message.type === 'PREPARE_EVIDENCE') {

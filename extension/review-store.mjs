@@ -1,4 +1,4 @@
-import {prepareImportedReview} from './review-transfer.mjs';
+import {prepareImportedReview, sanitizePinSelection} from './review-transfer.mjs';
 const DB_NAME = 'diffuse-reviews';
 let database;
 
@@ -160,6 +160,53 @@ export async function updateCommentPin(reviewId, commentId, offset) {
   const review = await request(reviews.get(reviewId));
   if (!review) { await done; throw new Error('This review is no longer available.'); }
   comment.pinOffset = pinOffset;
+  comment.updatedAt = new Date().toISOString();
+  comments.put(comment);
+  review.updatedAt = comment.updatedAt;
+  reviews.put(review);
+  await done;
+  return comment;
+}
+
+export function cleanPinSelection(selection) {
+  try {
+    const clean = sanitizePinSelection(selection);
+    // Sharing removes secret URL parameters; the local attachment must still
+    // point to the exact route that the reviewer has open.
+    clean.context.url = selection.context.url;
+    return clean;
+  } catch {
+    throw new Error('The selected component is no longer available. Choose another component.');
+  }
+}
+
+export function pinPointFromPosition(selection, position) {
+  const point = cleanPinOffset(position);
+  const rect = selection.rect.viewport;
+  // A one-pixel tolerance accommodates the inspector's rounded CSS geometry.
+  if (point.x < rect.x - 1 || point.y < rect.y - 1 || point.x > rect.x + rect.width + 1 || point.y > rect.y + rect.height + 1) {
+    throw new Error('The component moved before the comment was dropped. Drag the comment again.');
+  }
+  return {x: Math.max(0, Math.min(1, (point.x - rect.x) / rect.width)), y: Math.max(0, Math.min(1, (point.y - rect.y) / rect.height))};
+}
+
+export async function remapCommentPin(reviewId, commentId, selection, position) {
+  const pinSelection = cleanPinSelection(selection);
+  const pinPoint = pinSelection.kind === 'element' ? pinPointFromPosition(pinSelection, position) : null;
+  const transaction = (await db()).transaction(['reviews', 'comments'], 'readwrite');
+  const done = completion(transaction);
+  const comments = transaction.objectStore('comments');
+  const comment = await request(comments.get(commentId));
+  if (!comment || comment.reviewId !== reviewId) { await done; throw new Error('This comment is no longer available.'); }
+  const originalUrl = comment.context?.production?.url || comment.selection?.context?.url;
+  if (pinSelection.context.url !== originalUrl) { await done; throw new Error('Remap the comment on its original page.'); }
+  const reviews = transaction.objectStore('reviews');
+  const review = await request(reviews.get(reviewId));
+  if (!review) { await done; throw new Error('This review is no longer available.'); }
+  comment.pinSelection = pinSelection;
+  if (pinPoint) comment.pinPoint = pinPoint;
+  else delete comment.pinPoint;
+  comment.pinOffset = {x: 0, y: 0};
   comment.updatedAt = new Date().toISOString();
   comments.put(comment);
   review.updatedAt = comment.updatedAt;

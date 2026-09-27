@@ -43,6 +43,10 @@ const pinOffset = value => {
   if (!object(value) || !['x', 'y'].every(key => Object.hasOwn(value, key) && Number.isFinite(value[key]) && Math.abs(value[key]) <= 100000)) fail('a comment position is invalid.');
   return {x: value.x, y: value.y};
 };
+const pinPoint = value => {
+  if (!object(value) || !['x', 'y'].every(key => Object.hasOwn(value, key) && Number.isFinite(value[key]) && value[key] >= 0 && value[key] <= 1)) fail('a comment drop point is invalid.');
+  return {x: value.x, y: value.y};
+};
 const scrollContainer = shape({...strings('selector overflowX overflowY', 4096), ...numbers('scrollLeft scrollTop clientWidth clientHeight scrollWidth scrollHeight x y')});
 const browser = shape(strings('userAgent platform language', 2048));
 const pageContext = shape({url: portablePageUrl, title: text(2000), capturedAt: date, viewport: shape(numbers('width height dpr visualScale')), scroll,
@@ -56,6 +60,26 @@ const selection = shape({schemaVersion:enumOf([1]),kind:enumOf(['element','regio
   states:shape(Object.fromEntries('disabled checked ariaChecked indeterminate selected expanded pressed busy invalid required readOnly focused focusVisible hovered current open inputType'.split(' ').map(key=>[key,stateValue]))),
   breadcrumb:array(shape(strings('tag id role testId component',4096)),100),scrollContainers:array(scrollContainer),context:pageContext,
   anchor:shape({version:enumOf([1]),kind:enumOf(['element','region']),selector:text(4096),identity:shape({tag:text(100),text:text(1000),attributes:shape(strings('id data-testid data-component data-diffuse-scroll role aria-label',1000))}),space:enumOf(['scroll-content','relative']),offset:rect,relative:rect})});
+
+// Remapping changes the live attachment only. Its captured context stays with
+// the new anchor so reloads and shared reviews can restore nested scroll state.
+export function sanitizePinSelection(value) {
+  const result = selection(value);
+  const positiveRect = rect => rect && ['x', 'y', 'width', 'height'].every(key => Number.isFinite(rect[key])) && rect.width > 0 && rect.height > 0;
+  const element = result.kind === 'element';
+  const validAnchor = !result.anchor ? !element : result.anchor.version === 1 && result.anchor.kind === result.kind &&
+    Boolean(result.anchor.selector?.trim()) && Boolean(result.anchor.identity?.tag) &&
+    (element ? result.anchor.selector === result.selector && result.anchor.identity.tag === result.tagName :
+      (result.anchor.space === 'scroll-content' && positiveRect(result.anchor.offset)) || (result.anchor.space === 'relative' && positiveRect(result.anchor.relative)));
+  if (result.schemaVersion !== 1 || !['element', 'region'].includes(result.kind) || !validAnchor ||
+      (element && (!result.selector?.trim() || !result.tagName || ['html', 'diffuse-live-overlay'].includes(result.tagName))) ||
+      !positiveRect(result.rect?.viewport) || !positiveRect(result.rect?.document) ||
+      !result.context?.url || !(result.context.viewport?.width > 0) || !(result.context.viewport?.height > 0) ||
+      !Number.isFinite(result.context.scroll?.x) || !Number.isFinite(result.context.scroll?.y)) {
+    fail('a remapped comment attachment is invalid.');
+  }
+  return result;
+}
 
 function media(value, kind) {
   if (typeof value !== 'string' || value.length > REVIEW_TRANSFER_MAX_BYTES) fail('an attachment is too large.');
@@ -71,7 +95,7 @@ const image = shape({dataUrl:value=>media(value,'image'),annotatedDataUrl:value=
 const video = shape({dataUrl:value=>media(value,'video'),mimeType: value=>/^video\/(webm|mp4)(;codecs=[a-zA-Z0-9., _-]+)?$/.test(value)?value:fail('a recording format is invalid.'), ...numbers('durationMs bytes width height'),filename:text(255),kind:text(100),startedAt:date,stoppedAt:date,stopReason:text(100)});
 const fields = shape({...strings('title',180),...strings('comment expected steps',8000),...strings('component state',240),severity:enumOf(['minor','major','critical']),category:enumOf(['design-mismatch','ux-issue','copy-change'])});
 const issue = shape({url:webUrl,key:text(128),status:text(100),createdAt:date});
-const comment = shape({createdAt:date,updatedAt:date,mode:enumOf(['audit','comparison']),fields,selection:nullable(selection),pinOffset,
+const comment = shape({createdAt:date,updatedAt:date,mode:enumOf(['audit','comparison']),fields,selection:nullable(selection),pinOffset,pinPoint,pinSelection:sanitizePinSelection,
   context:shape({production:pageContext,prototype:pageContext,alignment:shape({...numbers('opacity reveal offsetX offsetY'),...booleans('linked hidden')}),browser}),
   evidence:shape({production:image,prototype:image,video,...numbers('captureSkewMs')}),
   ai:shape({provider:enumOf(['anthropic']),model:text(200),...numbers('mismatchScore confidence'),reason:text(8000),acceptedAt:date,mode:enumOf(['audit','comparison'])}),jiraIssues:array(issue,100)});
@@ -84,6 +108,8 @@ function validateReview(value) {
     if (!item.createdAt || !item.fields?.comment?.trim() || !item.fields?.state?.trim()) fail('an observation is missing its text, state or capture date.');
     if (!item.evidence?.production?.dataUrl) fail('an observation is missing its captured screenshot.');
     if (!item.context?.production?.url) fail('an observation is missing its original page URL.');
+    if (item.pinPoint && item.pinSelection?.kind !== 'element') fail('a comment drop point is missing its element attachment.');
+    if (item.pinSelection && item.pinSelection.context.url !== item.context.production.url) fail('a remapped comment must stay on its recorded page.');
   }
   result.count = result.comments.length;
   return result;

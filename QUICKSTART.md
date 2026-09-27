@@ -72,7 +72,7 @@ Saved comments appear as numbered pins for the current viewport. New pins follow
 
 Component names come from available page labels such as `data-component`, `data-testid`, role, or tag and can be edited. They are not detected framework source components. **Current state** is an editable label for this capture, not a claim that other states were tested. The inspector records observed layout and state details without reading form values or passwords.
 
-Drag a saved comment’s numbered marker to move it out of the way. It keeps its original element, follows scrolling, and remembers the new position. Open the comment and choose **Reset position** to put it back.
+Drag a saved comment’s numbered marker onto another component and release to attach it at that point. The target highlights while you drag. To make it an area comment instead, open the comment, choose **Select area**, and draw a rectangle. Escape cancels. Your original text and screenshots stay intact; the new attachment follows scrolling and resizing and is included in exported reviews.
 
 ## Record an interaction
 

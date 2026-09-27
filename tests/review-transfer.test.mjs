@@ -81,3 +81,45 @@ test('portable pin positions reject incomplete, non-finite and unbounded coordin
  const extra=structuredClone(bundle);extra.review.comments[0].pinOffset={x:0,y:3,selector:'untrusted',__proto__:{polluted:true}};
  assert.deepEqual(parseReviewBundle(extra).review.comments[0].pinOffset,{x:0,y:3});
 });
+
+function remapped(source=fixture()) {
+ const context={...source.comments[0].context.production,scroll:{x:0,y:760},nestedScroll:[{selector:'#sidebar',x:0,y:80}]};
+ return {schemaVersion:1,kind:'element',selector:'#remapped',selectorFormat:'css',tagName:'button',component:{name:'Updated target',source:'data-component',selector:'#remapped'},
+  anchor:{version:1,kind:'element',selector:'#remapped',identity:{tag:'button',attributes:{id:'remapped'}}},
+  rect:{viewport:{x:24,y:48,width:120,height:44},document:{x:24,y:808,width:120,height:44}},context};
+}
+test('portable remapped anchors survive fresh-ID import without changing original captured context or evidence',()=>{
+ const source=fixture();source.comments[0].pinSelection=remapped(source);source.comments[0].pinPoint={x:.25,y:.5};source.comments[0].pinOffset={x:0,y:0};
+ const bundle=createReviewBundle(source,{now:when});assert.equal(bundle.version,1);
+ let index=0;const imported=prepareImportedReview(JSON.stringify(bundle),{uuid:()=>`remap-${++index}`,now:when});
+ for(const key of ['pinSelection','pinPoint','pinOffset','selection','context','evidence','fields'])assert.deepEqual(imported.comments[0][key],source.comments[0][key]);
+ assert.equal(Object.hasOwn(parseReviewBundle(createReviewBundle(fixture(),{now:when})).review.comments[0],'pinSelection'),false);
+});
+test('portable remapped anchors validate element identity, dimensions and same-page context and drop undeclared data',()=>{
+ const source=fixture(),bundle=createReviewBundle(source,{now:when}),valid=remapped(source);
+ for(const invalid of [null,{}, {...valid,kind:'region'}, {...valid,selector:''}, {...valid,anchor:{...valid.anchor,selector:'#other'}}, {...valid,tagName:'html'}, {...valid,rect:{...valid.rect,viewport:{x:0,y:0,width:0,height:44}}}, {...valid,context:{...valid.context,url:'https://elsewhere.test/'}}]){
+  const copy=structuredClone(bundle);copy.review.comments[0].pinSelection=invalid;assert.throws(()=>parseReviewBundle(copy),/remapped|data section/);
+ }
+ const copy=structuredClone(bundle);copy.review.comments[0].pinSelection={...structuredClone(valid),credential:'secret',onclick:'bad()'};copy.review.comments[0].pinSelection.anchor.identity.attributes.onclick='bad()';
+ const parsed=parseReviewBundle(copy);assert.deepEqual(parsed.review.comments[0].pinSelection,valid);
+});
+
+test('portable normalized drop points remain bounded and require a remapped attachment',()=>{
+ const source=fixture();source.comments[0].pinSelection=remapped(source);const bundle=createReviewBundle(source,{now:when});
+ for(const point of [null,{},[],{x:0},{x:'0',y:1},{x:-.01,y:1},{x:0,y:1.01},{x:Infinity,y:0}]){
+  const copy=structuredClone(bundle);copy.review.comments[0].pinPoint=point;assert.throws(()=>parseReviewBundle(copy),/drop point/);
+ }
+ const copy=structuredClone(bundle);copy.review.comments[0].pinPoint={x:0,y:1,credential:'secret'};assert.deepEqual(parseReviewBundle(copy).review.comments[0].pinPoint,{x:0,y:1});
+ delete copy.review.comments[0].pinSelection;assert.throws(()=>parseReviewBundle(copy),/missing its element attachment/);
+});
+
+test('portable area remaps retain anchors or document fallback and never carry an element drop point',()=>{
+ for(const anchored of [true,false]) {
+  const source=fixture(),region=structuredClone(source.comments[0].selection);
+  if(!anchored)delete region.anchor;
+  source.comments[0].pinSelection=region;source.comments[0].pinOffset={x:0,y:0};
+  const bundle=createReviewBundle(source,{now:when});let index=0;const imported=prepareImportedReview(bundle,{uuid:()=>`area-${++index}`,now:when});
+  assert.deepEqual(imported.comments[0].pinSelection,region);assert.deepEqual(imported.comments[0].selection,source.comments[0].selection);assert.equal(Object.hasOwn(imported.comments[0],'pinPoint'),false);
+  bundle.review.comments[0].pinPoint={x:.5,y:.5};assert.throws(()=>parseReviewBundle(bundle),/element attachment/);
+ }
+});
