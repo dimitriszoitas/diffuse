@@ -139,6 +139,35 @@ export async function updateComment(reviewId, commentId, input) {
   return comment;
 }
 
+export function cleanPinOffset(offset) {
+  if (!offset || typeof offset !== 'object' || Array.isArray(offset) ||
+      !['x', 'y'].every(key => Object.hasOwn(offset, key) && Number.isFinite(offset[key]) && Math.abs(offset[key]) <= 100000)) {
+    throw new Error('The comment position is invalid. Drag the comment again.');
+  }
+  return {x: offset.x, y: offset.y};
+}
+
+// A pin's display offset is separate from its captured element, geometry and
+// evidence. Moving it must never rewrite what the reviewer originally saw.
+export async function updateCommentPin(reviewId, commentId, offset) {
+  const pinOffset = cleanPinOffset(offset);
+  const transaction = (await db()).transaction(['reviews', 'comments'], 'readwrite');
+  const done = completion(transaction);
+  const comments = transaction.objectStore('comments');
+  const comment = await request(comments.get(commentId));
+  if (!comment || comment.reviewId !== reviewId) { await done; throw new Error('This comment is no longer available.'); }
+  const reviews = transaction.objectStore('reviews');
+  const review = await request(reviews.get(reviewId));
+  if (!review) { await done; throw new Error('This review is no longer available.'); }
+  comment.pinOffset = pinOffset;
+  comment.updatedAt = new Date().toISOString();
+  comments.put(comment);
+  review.updatedAt = comment.updatedAt;
+  reviews.put(review);
+  await done;
+  return comment;
+}
+
 export async function deleteComment(reviewId, commentId) {
   const transaction = (await db()).transaction(['reviews', 'comments'], 'readwrite');
   const done = completion(transaction);

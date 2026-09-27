@@ -60,3 +60,24 @@ test('exports only matching Jira links, deduplicating connection receipts withou
  assert.deepEqual(linked.comments[0].jiraIssues,[{url:'https://team.atlassian.net/browse/DIF-8',key:'DIF-8',status:'complete'}]);
  const text=JSON.stringify(createReviewBundle(linked,{now:when}));assert(!text.includes('secret'));assert(!text.includes('accountId'));assert(!text.includes('connectionId'));
 });
+
+test('portable pin positions survive fresh-ID import without changing the captured element or evidence',()=>{
+ const source=fixture();source.comments[0].pinOffset={x:-142.25,y:82.5};
+ const bundle=createReviewBundle(source,{now:when});
+ assert.equal(bundle.version,1,'An optional display offset does not require a new file format');
+ const parsed=parseReviewBundle(JSON.stringify(bundle));let index=0;
+ const imported=prepareImportedReview(parsed,{uuid:()=>`fresh-${++index}`,now:when});
+ for(const key of ['pinOffset','selection','context','evidence','fields']) assert.deepEqual(imported.comments[0][key],source.comments[0][key]);
+ const legacy=createReviewBundle(fixture(),{now:when});
+ assert.equal(Object.hasOwn(parseReviewBundle(legacy).review.comments[0],'pinOffset'),false,'Older files retain their original default placement');
+});
+
+test('portable pin positions reject incomplete, non-finite and unbounded coordinates',()=>{
+ const bundle=createReviewBundle(fixture(),{now:when});
+ for(const offset of [null,[],{}, {x:2}, {y:2}, {x:'2',y:0}, {x:0,y:Infinity}, {x:NaN,y:0}, {x:100001,y:0}, {x:0,y:-100001}]) {
+   const copy=structuredClone(bundle);copy.review.comments[0].pinOffset=offset;
+   assert.throws(()=>parseReviewBundle(copy),/comment position/);
+ }
+ const extra=structuredClone(bundle);extra.review.comments[0].pinOffset={x:0,y:3,selector:'untrusted',__proto__:{polluted:true}};
+ assert.deepEqual(parseReviewBundle(extra).review.comments[0].pinOffset,{x:0,y:3});
+});

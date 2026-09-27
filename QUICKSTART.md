@@ -72,6 +72,8 @@ Saved comments appear as numbered pins for the current viewport. New pins follow
 
 Component names come from available page labels such as `data-component`, `data-testid`, role, or tag and can be edited. They are not detected framework source components. **Current state** is an editable label for this capture, not a claim that other states were tested. The inspector records observed layout and state details without reading form values or passwords.
 
+Drag a saved comment’s numbered marker to move it out of the way. It keeps its original element, follows scrolling, and remembers the new position. Open the comment and choose **Reset position** to put it back.
+
 ## Record an interaction
 
 In the comment form, choose **Short recording**, then **Start recording**. Interact with the page and click **Stop recording**, or let it stop automatically after **30 seconds**. Your text and selected element or region return with the form; the original screenshot remains its location context.

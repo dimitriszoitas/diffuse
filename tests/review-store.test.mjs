@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {cleanFields, commentDisplayTitle} from '../extension/review-store.mjs';
+import {cleanFields, commentDisplayTitle, cleanPinOffset} from '../extension/review-store.mjs';
 
 test('a review requires useful feedback and an explicit state, with title and expected result optional', () => {
   assert.throws(() => cleanFields({}), /Describe/);
@@ -53,4 +53,14 @@ test('derived display titles use concise observation text without mutating optio
   assert.ok(long.endsWith('…'));
   assert.ok(!long.endsWith(' …'));
   assert.equal(commentDisplayTitle({comment: {}}, 3), 'Observation 4');
+});
+
+test('pin offsets require two finite bounded coordinates and cannot carry edits to evidence or fields', () => {
+  const input = {x: -132.5, y: 0, fields: {comment: 'Replaced'}, evidence: {production: 'Replaced'}};
+  assert.deepEqual(cleanPinOffset(input), {x: -132.5, y: 0});
+  assert.notEqual(cleanPinOffset(input), input);
+  assert.deepEqual(cleanPinOffset({x: -100000, y: 100000}), {x: -100000, y: 100000});
+  for (const offset of [undefined, null, 1, [], {}, {x: 1}, {y: 1}, {x: '1', y: 2}, {x: 1, y: null}, {x: NaN, y: 0}, {x: Infinity, y: 0}, {x: 0, y: -100001}, Object.create({x: 1, y: 2})]) {
+    assert.throws(() => cleanPinOffset(offset), /position is invalid/);
+  }
 });

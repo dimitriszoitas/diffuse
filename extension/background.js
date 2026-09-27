@@ -182,7 +182,7 @@ async function publish() {
 async function refreshComments(current = session) {
   if (!current) return;
   const review = await reviews.getReview(current.reviewId || current.id).catch(() => null);
-  current.comments = (review?.comments || []).map(({id, createdAt, fields, selection, context, ai}) => ({id, createdAt, fields, selection, context: {production: context?.production}, ...(ai ? {ai} : {})}));
+  current.comments = (review?.comments || []).map(({id, createdAt, fields, selection, context, ai, pinOffset}) => ({id, createdAt, fields, selection, context: {production: context?.production}, ...(ai ? {ai} : {}), ...(pinOffset ? {pinOffset} : {})}));
   current.commentCount = current.comments.length;
 }
 
@@ -1103,7 +1103,7 @@ async function handle(message, sender) {
   if (!session) return {ok: false, error: 'There is no active comparison.'};
   if (!isPopup && !role && !isMedia) throw new Error('This page is not part of the active comparison.');
   if (!isPopup && message.sessionId !== session.id) return {ok: false, error: 'This comparison is no longer active.'};
-  if (transitioning && ['STOP_SESSION', 'CAPTURE_COMMENT', 'ADD_COMMENT', 'DISCARD_DRAFT', 'START_RECORDING', 'RUN_AI_REVIEW', 'ACCEPT_AI_SUGGESTION', 'ACCEPT_AI_SUGGESTIONS', 'DISMISS_AI_SUGGESTION', 'SETTINGS', 'RECONNECT'].includes(message.type)) throw new Error('Finish choosing the reference before continuing the review.');
+  if (transitioning && ['STOP_SESSION', 'CAPTURE_COMMENT', 'ADD_COMMENT', 'UPDATE_COMMENT_PIN', 'DISCARD_DRAFT', 'START_RECORDING', 'RUN_AI_REVIEW', 'ACCEPT_AI_SUGGESTION', 'ACCEPT_AI_SUGGESTIONS', 'DISMISS_AI_SUGGESTION', 'SETTINGS', 'RECONNECT'].includes(message.type)) throw new Error('Finish choosing the reference before continuing the review.');
   switch (message.type) {
     case 'DETACH_REFERENCE':
       if (role !== 'target') throw new Error('Remove the reference from the reviewed page.');
@@ -1149,6 +1149,28 @@ async function handle(message, sender) {
     case 'SHOW_COMMENT':
       if (role !== 'target' || sender.frameId !== 0) throw new Error('Open comments from the reviewed page.');
       return navigateToComment(session, message.commentId);
+    case 'UPDATE_COMMENT_PIN': {
+      if (sender.id !== chrome.runtime.id || role !== 'target' || sender.frameId !== 0) throw new Error('Move comments on the reviewed page.');
+      const current = session;
+      const offset = reviews.cleanPinOffset(message.offset);
+      const review = await reviews.getReview(current.reviewId);
+      const comment = review.comments.find(item => item.id === message.commentId);
+      if (!comment) throw new Error('This comment is no longer available.');
+      const tab = await chrome.tabs.get(current.targetTabId);
+      const context = (await tabMessage(current.targetTabId, 'GET_CONTEXT', {sessionId: current.id}))?.context;
+      if (session !== current || transitioning) throw new Error('This review changed. Move the comment again.');
+      const url = savedCommentUrl(comment);
+      if (savedPageUrl(sender.url) !== url || savedPageUrl(tab.url) !== url || savedPageUrl(context?.url) !== url) throw new Error('Return to the comment’s original page before moving it.');
+      const desired = savedCommentViewport(comment);
+      const actual = current.viewportPreset || savedCommentViewport({context: {production: context}});
+      if (desired && actual !== desired) throw new Error('Switch to the comment’s viewport before moving it.');
+      const saved = await reviews.updateCommentPin(current.reviewId, comment.id, offset);
+      if (session === current) {
+        await refreshComments(current);
+        if (session === current) await publish();
+      }
+      return {ok: true, pinOffset: saved.pinOffset};
+    }
     case 'GET_COMMENT': {
       if (role !== 'target') throw new Error('Open the comment on the audited page.');
       const review = await reviews.getReview(session.reviewId);

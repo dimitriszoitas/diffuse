@@ -46,6 +46,11 @@
   let pinItems = [];
   let pinsUrl = '';
   let pinsViewport = '';
+  let pinDrag = null;
+  let pinIgnoreClick = null;
+  let pinTrailingRelease = null;
+  let pinStatusTimer = null;
+  const pinPlacements = new Map();
   let aiConfig = {hasKey:false,model:'',threshold:35};
   let aiBatch = null;
   let aiBusy = false;
@@ -148,6 +153,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 #selection-outline{background:#235ed710;box-shadow:0 0 0 1px #ffffffb0}#selection-outline[data-region=true]{background:#235ed718}#selection-label,#ai-region-label{background:#235ed7;color:#fff}
 #saved-comment-bubble{border:1px solid #d4dfed;border-radius:8px;padding:14px;box-shadow:0 6px 12px #213c5b0a,0 18px 48px #213c5b20;font-size:14px;line-height:1.55}
 #saved-comment-bubble h3{font-size:17px;font-weight:600;letter-spacing:-.2px;margin:12px 0}.bubble-meta{font-size:12px}.bubble-actions{gap:6px;margin-top:12px}
+#comment-pin-connections{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;pointer-events:none;z-index:1}#comment-pin-connections line{stroke:#6a87b1;stroke-width:1.5;stroke-dasharray:3 3}#comment-pin-connections circle{fill:#fff;stroke:#6a87b1;stroke-width:1.5}.comment-pin{touch-action:none;user-select:none;cursor:grab}.comment-pin[data-dragging]{cursor:grabbing;outline:2px solid #235ed7;outline-offset:3px;box-shadow:0 4px 16px #213c5b40}#pin-drag-help{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}#pin-position-status{position:absolute;bottom:16px;left:16px;max-width:calc(100% - 32px);padding:9px 12px;border:1px solid #d4dfed;border-radius:7px;background:#fff;color:#38516f;box-shadow:0 4px 16px #213c5b18;font-size:13px;pointer-events:none;z-index:25}.bubble-actions{flex-wrap:wrap}#reset-pin-position{font-size:12px}.pin-move-hint{font-size:12px;color:var(--muted);margin:12px 0 0!important}
 #saved-comment-category{border-radius:4px;padding:3px 7px;font-size:12px;font-weight:600}.comment-pin{box-shadow:0 2px 8px #213c5b30;font-size:14px;font-weight:650}
 #context-reload-notice{border-color:#d4dfed;border-radius:8px;padding:12px;box-shadow:0 5px 20px #213c5b20;font-size:13px}
 #picker-tip,#capture-progress{border-color:#d4dfed;border-radius:8px;padding:10px 14px;font-size:13px;box-shadow:0 5px 20px #213c5b18}
@@ -181,8 +187,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       <div id="picker-tip" hidden><span role="status">Choose an element on production. Esc to cancel.</span><button id="cancel-picker" type="button">Cancel</button><details id="area-coordinates" hidden><summary>Set area dimensions</summary><form id="area-form"><div class="area-fields"><label>Left <input id="area-x" type="number" min="0" step="1" required></label><label>Top <input id="area-y" type="number" min="0" step="1" required></label><label>Width <input id="area-width" type="number" min="4" step="1" required></label><label>Height <input id="area-height" type="number" min="4" step="1" required></label></div><button type="submit">Comment on this area</button><p id="area-error" role="alert"></p></form></details></div>
       <div id="panel-backdrop" hidden aria-hidden="true"></div>
       <div id="capture-progress" hidden role="status">Capturing both pages…</div>
-      <div id="comment-pins"></div><div id="saved-comment-highlight" hidden aria-hidden="true"></div>
-      <section id="saved-comment-bubble" hidden role="dialog" aria-label="Saved comment"><div class="bubble-top"><span id="saved-comment-category" class="bubble-meta"></span><button id="close-saved-comment" type="button" aria-label="Close saved comment">×</button></div><h3 id="saved-comment-title"></h3><p id="saved-comment-text"></p><p id="saved-comment-expected"></p><p id="saved-comment-state" class="bubble-meta"></p><div class="bubble-actions"><button id="open-pin-report" type="button">Open in review</button></div></section>
+      <svg id="comment-pin-connections" aria-hidden="true"></svg><div id="comment-pins"></div><span id="pin-drag-help">Drag to reposition. Alt and arrow keys move 10 pixels; add Shift for 1 pixel. The original element stays attached.</span><div id="pin-position-status" role="status" aria-live="polite" hidden></div><div id="saved-comment-highlight" hidden aria-hidden="true"></div>
+      <section id="saved-comment-bubble" hidden role="dialog" aria-label="Saved comment"><div class="bubble-top"><span id="saved-comment-category" class="bubble-meta"></span><button id="close-saved-comment" type="button" aria-label="Close saved comment">×</button></div><h3 id="saved-comment-title"></h3><p id="saved-comment-text"></p><p id="saved-comment-expected"></p><p id="saved-comment-state" class="bubble-meta"></p><div class="bubble-actions"><button id="open-pin-report" type="button">Open in review</button><button id="reset-pin-position" type="button" disabled>Reset position</button></div><p class="pin-move-hint">Drag the numbered marker to move it. Its original element stays attached.</p></section>
       <div id="ai-region-preview" hidden aria-hidden="true"><span id="ai-region-label">AI suggestion · not saved</span></div>
       <section id="ai-panel" hidden role="dialog" aria-labelledby="ai-title" aria-modal="false"><div class="composer-header"><h2 id="ai-title">AI review</h2><button id="close-ai" class="composer-close" type="button" aria-label="Close AI review">×</button></div><div class="composer-body"><p id="ai-mode-note" class="composer-note"></p><label class="composer-field"><span>Instructions <small>(optional)</small></span><textarea id="ai-instructions" maxlength="4000" placeholder="What should the review focus on?"></textarea></label><label class="composer-field"><span>Minimum issue size: <output id="ai-threshold-value">35</output>/100</span><input id="ai-threshold" type="range" min="0" max="100" value="35" aria-describedby="ai-threshold-help"><span class="threshold-ends"><small>0 · All details</small><small>100 · Largest issues only</small></span><small id="ai-threshold-help">Higher numbers hide smaller differences. This filters existing suggestions; changing it does not run AI again. Size is an estimate, separate from confidence.</small></label><p id="ai-disclosure" class="ai-disclosure">Run sends the current screenshot(s) and your instructions to Anthropic using your configured API key. API charges apply. Nothing is sent until you click Run.</p><p id="ai-config-status" class="composer-note"></p><div class="composer-actions"><button id="ai-settings" type="button">AI settings</button><button id="ai-run" type="button">Run AI review</button></div><div id="ai-error" class="composer-error" role="alert"></div><div id="ai-suggestions" tabindex="-1"></div></div></section>
       <section id="comment-panel" hidden role="dialog" aria-labelledby="composer-title" aria-modal="false">
@@ -238,6 +244,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     el('area-form').addEventListener('submit',event=>{event.preventDefault();captureAreaCoordinates();});
     const dismissPin=()=>{const button=pinItems.find(item=>item.comment.id===openPinId)?.button;closePin();button?.focus({preventScroll:true});};
     el('close-saved-comment').addEventListener('click', dismissPin);
+    el('reset-pin-position').addEventListener('click', () => { if(openPinId) savePinOffset(openPinId, {x:0,y:0}); });
     el('open-pin-report').addEventListener('click', () => quietSend('OPEN_REPORT', {commentId:openPinId}));
     el('ai-review').addEventListener('click', openAi);
     el('close-ai').addEventListener('click', ()=>{closeAi();el('ai-review').focus({preventScroll:true});});
@@ -270,6 +277,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     });
     el('record').addEventListener('click', () => recording ? stopRecording() : startRecording());
     installAreaGestures();
+    installPinGestures();
     pinsTimer = setInterval(updatePinPositions, 250);
     refreshAiBatch();
     const handle = el('handle');
@@ -520,7 +528,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     return event.composedPath().some(node => node instanceof Element && (node.matches('input,textarea,select,[role="textbox"],[role="combobox"]') || node.isContentEditable));
   }
 
-  function canSelect() {return Boolean(root && !captureBusy && !commentSaving && !recording && !recordingBusy && !commentDraft && !aiBusy && !aiOperationBusy && !session?.aiRunning);}
+  function canSelect() {return Boolean(root && !pinDrag && !captureBusy && !commentSaving && !recording && !recordingBusy && !commentDraft && !aiBusy && !aiOperationBusy && !session?.aiRunning);}
 
   function armArea() {
     if(!canSelect()) return;
@@ -625,39 +633,160 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     return globalThis.DiffuseInspector?.resolveSelection(selection) || null;
   }
 
+  const cleanPinOffset = value => value && Number.isFinite(value.x) && Number.isFinite(value.y) && Math.abs(value.x)<=100000 && Math.abs(value.y)<=100000 ? {x:value.x,y:value.y} : {x:0,y:0};
+  function pinOffset(comment) {
+    if(pinDrag?.id===comment.id && pinDrag.moved)return pinDrag.offset;
+    return pinPlacements.get(comment.id)?.offset || cleanPinOffset(comment.pinOffset);
+  }
+  function pinStatus(message) {
+    const notice=el('pin-position-status');if(!notice)return;
+    clearTimeout(pinStatusTimer);notice.textContent=message;notice.hidden=false;
+    pinStatusTimer=setTimeout(()=>{if(el('pin-position-status')===notice)notice.hidden=true;},4500);
+  }
+  function savePinOffset(id, offset) {
+    const comment=session?.comments?.find(item=>item.id===id);if(!comment)return;
+    const sessionId=session.id, next=cleanPinOffset(offset);
+    let placement=pinPlacements.get(id);
+    if(!placement){placement={offset:next,saved:cleanPinOffset(comment.pinOffset),revision:0,queue:Promise.resolve()};pinPlacements.set(id,placement);}
+    placement.offset=next;const revision=++placement.revision;
+    updatePinPositions();pinStatus('Saving position…');
+    // Serialize writes per comment so a slower earlier move cannot replace a later one.
+    placement.queue=placement.queue.then(async()=>{
+      if(session?.id!==sessionId||pinPlacements.get(id)!==placement)return;
+      try{
+        const result=requireSuccess(await send('UPDATE_COMMENT_PIN',{commentId:id,offset:next,sessionId}));
+        if(session?.id!==sessionId||pinPlacements.get(id)!==placement)return;
+        placement.saved=cleanPinOffset(result.pinOffset||next);
+        const current=session.comments?.find(item=>item.id===id);if(current)current.pinOffset={...placement.saved};
+        if(placement.revision===revision){pinPlacements.delete(id);pinStatus(next.x||next.y?'Position saved. Original element stays attached.':'Position reset.');}
+      }catch(error){
+        if(session?.id!==sessionId||pinPlacements.get(id)!==placement)return;
+        if(placement.revision===revision){
+          const current=session.comments?.find(item=>item.id===id);if(current)current.pinOffset={...placement.saved};
+          pinPlacements.delete(id);pinStatus('Could not save position. The last saved position was restored.');
+        }
+      }
+      updatePinPositions();
+    });
+  }
+  function movedPinOffset(drag, base) {
+    const x=Math.max(22,Math.min(innerWidth-22,drag.clientX-drag.grabX));
+    const y=Math.max(22,Math.min(innerHeight-22,drag.clientY-drag.grabY));
+    return{x:Math.max(-100000,Math.min(100000,Math.round(x-base.x))),y:Math.max(-100000,Math.min(100000,Math.round(y-base.y)))};
+  }
+  function finishPinDrag(cancel=false, repaint=true) {
+    const drag=pinDrag;if(!drag)return;
+    pinDrag=null;delete drag.button.dataset.dragging;
+    if(drag.button.hasPointerCapture(drag.pointerId))drag.button.releasePointerCapture(drag.pointerId);
+    if(drag.moved||cancel){pinIgnoreClick=drag.id;pinTrailingRelease=drag.pointerId;}
+    if(drag.moved&&!cancel)savePinOffset(drag.id,drag.offset);
+    else if(cancel&&drag.moved)pinStatus('Move cancelled.');
+    if(repaint)updatePinPositions();
+  }
+  function installPinGestures() {
+    const options={capture:true,signal:abort.signal};
+    // Pointer capture ends on Escape/cancel before the physical button is up.
+    // Consume only that gesture's trailing release/click, never the next press.
+    document.addEventListener('pointerdown',()=>{pinTrailingRelease=null;},options);
+    for(const name of ['mouseup','click'])document.addEventListener(name,event=>{
+      if(pinTrailingRelease===null||event.button!==0||(name==='click'&&event.detail===0))return;
+      event.preventDefault();event.stopImmediatePropagation();
+      if(name==='click'){pinTrailingRelease=null;pinIgnoreClick=null;}
+    },options);
+    document.addEventListener('pointermove',event=>{
+      const drag=pinDrag;if(!drag||event.pointerId!==drag.pointerId)return;
+      drag.clientX=event.clientX;drag.clientY=event.clientY;
+      if(!drag.moved&&Math.hypot(event.clientX-drag.startX,event.clientY-drag.startY)<5)return;
+      event.preventDefault();event.stopImmediatePropagation();
+      drag.moved=true;drag.button.dataset.dragging='';updatePinPositions();
+    },options);
+    document.addEventListener('pointerup',event=>{
+      if(pinTrailingRelease===event.pointerId){event.preventDefault();event.stopImmediatePropagation();return;}
+      if(!pinDrag||event.pointerId!==pinDrag.pointerId||event.button!==0)return;
+      event.preventDefault();event.stopImmediatePropagation();finishPinDrag();
+    },options);
+    document.addEventListener('pointercancel',event=>{if(event.pointerId===pinDrag?.pointerId)finishPinDrag(true);},options);
+    document.addEventListener('keydown',event=>{
+      if(event.key==='Escape'&&pinDrag){event.preventDefault();event.stopImmediatePropagation();finishPinDrag(true);}
+    },options);
+    document.addEventListener('wheel',event=>{if(pinDrag?.moved){event.preventDefault();event.stopImmediatePropagation();}},{...options,passive:false});
+    window.addEventListener('blur',()=>finishPinDrag(true),{signal:abort.signal});
+  }
+  function wirePin(button,id) {
+    button.addEventListener('click',event=>{
+      event.stopPropagation();
+      if(pinIgnoreClick===id&&event.detail!==0){pinIgnoreClick=null;event.preventDefault();return;}
+      pinIgnoreClick=null;openPin(id);
+    });
+    button.addEventListener('pointerdown',event=>{
+      if(event.button!==0||!canSelect()||pinDrag)return;
+      const item=pinItems.find(item=>item.comment.id===id);if(!item?.point)return;
+      event.preventDefault();event.stopPropagation();pinIgnoreClick=null;
+      button.focus({preventScroll:true});
+      pinDrag={id,button,pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,clientX:event.clientX,clientY:event.clientY,grabX:event.clientX-item.point.x,grabY:event.clientY-item.point.y,offset:pinOffset(item.comment),moved:false};
+      button.setPointerCapture(event.pointerId);
+    });
+    button.addEventListener('lostpointercapture',()=>{if(pinDrag?.id===id)finishPinDrag(true);});
+    button.addEventListener('keydown',event=>{
+      if(!event.altKey||event.ctrlKey||event.metaKey||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)||!canSelect())return;
+      event.preventDefault();event.stopPropagation();
+      const item=pinItems.find(item=>item.comment.id===id);if(!item?.point||!item.rect)return;
+      const step=event.shiftKey?1:10,dx=event.key==='ArrowLeft'?-step:event.key==='ArrowRight'?step:0,dy=event.key==='ArrowUp'?-step:event.key==='ArrowDown'?step:0;
+      const base={x:item.rect.x+Math.min(item.rect.width,12),y:item.rect.y+Math.min(item.rect.height,12)};
+      savePinOffset(id,movedPinOffset({clientX:item.point.x+dx,clientY:item.point.y+dy,grabX:0,grabY:0},base));
+    });
+  }
   function renderPins() {
     if(!root)return;
     pinsUrl=location.href;pinsViewport=currentViewportGroup();
     const comments=(session?.comments||[]).filter(comment=>commentInCurrentViewport(comment)&&(comment.context?.production?.url||comment.selection?.context?.url)===location.href);
+    if(pinDrag&&!comments.some(comment=>comment.id===pinDrag.id))finishPinDrag(true,false);
     const existing=new Map([...el('comment-pins').children].map(button=>[button.dataset.commentId,button]));
-    pinItems=comments.map((comment,index)=>{
+    const links=new Map([...el('comment-pin-connections').children].map(node=>[node.dataset.pinLink,node]));
+    pinItems=comments.map(comment=>{
       const number=(session.comments||[]).findIndex(item=>item.id===comment.id)+1;
       let button=existing.get(comment.id);existing.delete(comment.id);
-      if(!button){button=document.createElement('button');button.type='button';button.className='comment-pin';button.dataset.commentId=comment.id;button.addEventListener('click',()=>openPin(comment.id));el('comment-pins').append(button);}
-      colorCategory(button,comment.fields?.category);button.textContent=String(number);button.title=`${categoryLabel(comment.fields?.category)}: ${commentTitle(comment.fields)}`;button.setAttribute('aria-label',`Comment ${number}, ${categoryLabel(comment.fields?.category)}: ${commentTitle(comment.fields)}`);button.setAttribute('aria-expanded',String(openPinId===comment.id));button.setAttribute('aria-controls','saved-comment-bubble');
-      return{comment,button};
+      if(!button){button=document.createElement('button');button.type='button';button.className='comment-pin';button.dataset.commentId=comment.id;wirePin(button,comment.id);el('comment-pins').append(button);}
+      let link=links.get(comment.id);links.delete(comment.id);
+      if(!link){link=document.createElementNS('http://www.w3.org/2000/svg','g');link.dataset.pinLink=comment.id;link.append(document.createElementNS(link.namespaceURI,'line'),document.createElementNS(link.namespaceURI,'circle'));link.lastElementChild.setAttribute('r','3');el('comment-pin-connections').append(link);}
+      colorCategory(button,comment.fields?.category);button.textContent=String(number);button.title=`${categoryLabel(comment.fields?.category)}: ${commentTitle(comment.fields)} · Drag to move`;button.setAttribute('aria-label',`Comment ${number}, ${categoryLabel(comment.fields?.category)}: ${commentTitle(comment.fields)}`);button.setAttribute('aria-describedby','pin-drag-help');button.setAttribute('aria-expanded',String(openPinId===comment.id));button.setAttribute('aria-controls','saved-comment-bubble');
+      return{comment,button,link};
     });
-    for(const button of existing.values())button.remove();
+    for(const button of existing.values())button.remove();for(const link of links.values())link.remove();
     if(openPinId&&!comments.some(comment=>comment.id===openPinId))closePin();
     updatePinPositions();
   }
 
   function updatePinPositions() {
     if(!root)return;
-    if(pinsUrl!==location.href||pinsViewport!==currentViewportGroup()){renderPins();return;}
+    if(pinsUrl!==location.href||pinsViewport!==currentViewportGroup()){finishPinDrag(true,false);renderPins();return;}
     for(const item of pinItems){
       const rect=commentRect(item.comment);item.rect=rect;
-      const point=rect?{x:rect.x+Math.min(rect.width,12),y:rect.y+Math.min(rect.height,12)}:null;
+      const base=rect?{x:rect.x+Math.min(rect.width,12),y:rect.y+Math.min(rect.height,12)}:null;
       const visible=rect?.visible;
-      // The pin belongs to one point on the page. Do not clamp it to the
-      // viewport edge when that point scrolls out of its container.
-      const inView=point&&visible&&point.x>=Math.max(0,visible.x)&&point.y>=Math.max(0,visible.y)
-        &&point.x<=Math.min(innerWidth,visible.x+visible.width)&&point.y<=Math.min(innerHeight,visible.y+visible.height);
+      if(pinDrag?.id===item.comment.id){
+        if(!visible)finishPinDrag(true,false);
+        else if(pinDrag.moved)pinDrag.offset=movedPinOffset(pinDrag,base);
+      }
+      const offset=pinOffset(item.comment),moved=Boolean(offset.x||offset.y);
+      const point=base?{x:base.x+offset.x,y:base.y+offset.y}:null;item.point=point;
+      // A moved marker is still tied to the original anchor, but may sit outside
+      // its bounds. Hide it when that anchor or its chosen position scrolls away.
+      const inView=point&&visible&&point.x>=0&&point.y>=0&&point.x<=innerWidth&&point.y<=innerHeight
+        &&(moved||(point.x>=visible.x&&point.y>=visible.y&&point.x<=visible.x+visible.width&&point.y<=visible.y+visible.height));
       item.button.hidden=!inView||picking||areaArmed||Boolean(areaDrag);
       if(point){item.button.style.left=`${point.x}px`;item.button.style.top=`${point.y}px`;}
+      item.link.style.display=!item.button.hidden&&moved?'':'none';
+      if(!item.button.hidden&&moved){
+        const start={x:Math.max(visible.x,Math.min(visible.x+visible.width,base.x)),y:Math.max(visible.y,Math.min(visible.y+visible.height,base.y))};
+        const dx=point.x-start.x,dy=point.y-start.y,distance=Math.hypot(dx,dy),trim=distance?Math.min(22,distance)/distance:0;
+        for(const [key,value]of Object.entries({x1:start.x,y1:start.y,x2:point.x-dx*trim,y2:point.y-dy*trim}))item.link.firstElementChild.setAttribute(key,String(value));
+        item.link.lastElementChild.setAttribute('cx',String(start.x));item.link.lastElementChild.setAttribute('cy',String(start.y));
+      }
       if(item.comment.id===openPinId){
-        const show=!item.button.hidden;
+        const show=!item.button.hidden&&!pinDrag?.moved;
         el('saved-comment-bubble').hidden=!show;el('saved-comment-highlight').hidden=!show;
+        el('reset-pin-position').disabled=!moved;
         if(show){
           const bubble=el('saved-comment-bubble');bubble.style.left=`${Math.max(12,Math.min(innerWidth-bubble.offsetWidth-12,point.x+23))}px`;bubble.style.top=`${Math.max(12,Math.min(innerHeight-bubble.offsetHeight-12,point.y+3))}px`;
           Object.assign(el('saved-comment-highlight').style,{left:`${visible.x}px`,top:`${visible.y}px`,width:`${visible.width}px`,height:`${visible.height}px`});
@@ -1538,6 +1667,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 
   function stopResources() {
     clearInterval(contextTimer); contextTimer = null;
+    finishPinDrag(true,false);clearTimeout(pinStatusTimer);pinStatusTimer=null;pinPlacements.clear();pinIgnoreClick=null;pinTrailingRelease=null;
     clearInterval(pinsTimer); pinsTimer = null;
     clearInterval(recordingTimer); recordingTimer = null;
     clearTimeout(panelNotifyTimer); panelNotifyTimer = null;

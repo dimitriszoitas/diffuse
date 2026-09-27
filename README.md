@@ -39,6 +39,8 @@ The existing divider and opacity controls appear once connected. **Hide referenc
 
 **Keyboard shortcuts:** `Alt+Shift+D` toggles a connected reference; `Alt+Shift+P` switches between reference and reviewed page. Tap **C**, release it, then click an element to leave a comment; hold **C + left-click-drag** to select an area. Escape cancels. The shortcuts are ignored while typing in an editable field.
 
+Drag a numbered comment marker to reposition it while keeping the original element attached. Its saved offset follows that element through scrolling and responsive layout changes, and travels with exported reviews. Open the comment and use **Reset position** to restore it. Focus a marker and use **Alt + arrow keys** to move it 10px, or add **Shift** for 1px. Escape cancels a drag.
+
 Page clicks operate the reviewed page. Switch to the reference to interact with it. Scroll linking does not synchronize menus, form inputs or application state.
 
 ## Responsive viewport views

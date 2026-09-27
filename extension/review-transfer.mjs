@@ -39,6 +39,10 @@ export function portablePageUrl(value) {
 const webUrl = value => { const url = portablePageUrl(value); if (url.startsWith('file:')) fail('a Jira link must use HTTP or HTTPS.'); return url; };
 const rect = shape(numbers('x y width height top right bottom left'));
 const scroll = shape(numbers('x y'));
+const pinOffset = value => {
+  if (!object(value) || !['x', 'y'].every(key => Object.hasOwn(value, key) && Number.isFinite(value[key]) && Math.abs(value[key]) <= 100000)) fail('a comment position is invalid.');
+  return {x: value.x, y: value.y};
+};
 const scrollContainer = shape({...strings('selector overflowX overflowY', 4096), ...numbers('scrollLeft scrollTop clientWidth clientHeight scrollWidth scrollHeight x y')});
 const browser = shape(strings('userAgent platform language', 2048));
 const pageContext = shape({url: portablePageUrl, title: text(2000), capturedAt: date, viewport: shape(numbers('width height dpr visualScale')), scroll,
@@ -67,7 +71,7 @@ const image = shape({dataUrl:value=>media(value,'image'),annotatedDataUrl:value=
 const video = shape({dataUrl:value=>media(value,'video'),mimeType: value=>/^video\/(webm|mp4)(;codecs=[a-zA-Z0-9., _-]+)?$/.test(value)?value:fail('a recording format is invalid.'), ...numbers('durationMs bytes width height'),filename:text(255),kind:text(100),startedAt:date,stoppedAt:date,stopReason:text(100)});
 const fields = shape({...strings('title',180),...strings('comment expected steps',8000),...strings('component state',240),severity:enumOf(['minor','major','critical']),category:enumOf(['design-mismatch','ux-issue','copy-change'])});
 const issue = shape({url:webUrl,key:text(128),status:text(100),createdAt:date});
-const comment = shape({createdAt:date,updatedAt:date,mode:enumOf(['audit','comparison']),fields,selection:nullable(selection),
+const comment = shape({createdAt:date,updatedAt:date,mode:enumOf(['audit','comparison']),fields,selection:nullable(selection),pinOffset,
   context:shape({production:pageContext,prototype:pageContext,alignment:shape({...numbers('opacity reveal offsetX offsetY'),...booleans('linked hidden')}),browser}),
   evidence:shape({production:image,prototype:image,video,...numbers('captureSkewMs')}),
   ai:shape({provider:enumOf(['anthropic']),model:text(200),...numbers('mismatchScore confidence'),reason:text(8000),acceptedAt:date,mode:enumOf(['audit','comparison'])}),jiraIssues:array(issue,100)});
