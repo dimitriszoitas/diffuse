@@ -17,7 +17,7 @@ try {
  const id=new URL(worker.url()).host,page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
  await page.goto(`chrome-extension://${id}/report.html`);
  await page.waitForFunction(()=>document.querySelector('#report-content').getAttribute('aria-busy')==='false');
- assert.equal(await page.locator('#import-review').isVisible(),true);assert.equal(await page.locator('.export-help').count(),0);
+ assert.equal(await page.locator('.workspace-bar, #import-review, #import-review-file, #load-review-panel').count(),0);assert.equal(await page.locator('.export-help').count(),0);
  assert.equal(await page.locator('.sidebar-settings').count(),1);assert.equal(await page.locator('.sidebar-settings').getAttribute('href'),'settings.html');
  const fixture=await page.evaluate(async()=>{
   const store=await import(chrome.runtime.getURL('review-store.mjs'));
@@ -107,26 +107,17 @@ try {
  assert.equal(await menu.isVisible(),false);assert.equal(await actions.evaluate(el=>el===document.activeElement),true);
  pass('HTML download remains available in the custom menu and retains embedded screenshots and playable recording data');
  await page.goto(`chrome-extension://${id}/report.html?load=1`);
- await page.locator('#choose-review-file').waitFor({state:'visible'});
- assert.equal(await page.locator('#choose-review-file').evaluate(el=>el===document.activeElement),true);
- const canceled=page.waitForEvent('filechooser');await page.locator('#choose-review-file').click();await (await canceled).setFiles([]);
- assert.equal(await page.locator('#load-review-panel').isVisible(),true);
- assert.equal(await page.locator('.review-row').count(),1);
- const invalid=page.waitForEvent('filechooser');await page.locator('#choose-review-file').click();await (await invalid).setFiles({name:'invalid.json',mimeType:'application/json',buffer:Buffer.from('{}')});
- await page.waitForFunction(()=>document.querySelector('#notice').dataset.type==='error');
- assert.equal(await page.locator('#load-review-panel').isVisible(),true);
- assert.equal(await page.locator('.review-row').count(),1);
- assert.equal(await page.locator('#choose-review-file').isEnabled(),true);
- await page.screenshot({path:join(artifacts,'load-review.png'),animations:'disabled'});
- pass('Load review opens a focused file loader; cancel and invalid files keep saved reviews intact and allow retry');
- // Isolate the notebook's import behavior from separate navigation tests. Simulate a recipient needing site access.
- await page.evaluate(()=>{const send=chrome.runtime.sendMessage.bind(chrome.runtime);chrome.runtime.sendMessage=message=>message?.type==='OPEN_REVIEW'?Promise.resolve({ok:false,error:'Allow Diffuse to access this page before continuing.'}):send(message);});
+ await page.waitForFunction(()=>document.querySelector('#report-content').getAttribute('aria-busy')==='false'&&document.querySelectorAll('.comment-card').length===2);
+ assert.equal(await page.locator('.workspace-bar, #import-review, #import-review-file, #load-review-panel').count(),0);
+ assert.equal(await page.locator('#export-toolbar').isVisible(),true);assert.equal(await page.locator('.review-row').count(),1);
+ pass('The report starts with its title and actions; older load links display the report without a duplicate import bar or loader');
+ // The native drawer owns file import UX. Exercise the shared portable store
+ // here, while retaining the report's real export/menu/rendering coverage.
  for(let index=0;index<2;index++) {
-  const chooser=page.waitForEvent('filechooser');await page.locator(index===0?'#choose-review-file':'#import-review').click();await (await chooser).setFiles({name:'shared.diffuse-review.json',mimeType:'application/json',buffer:bytes});
-  await page.waitForFunction(count=>document.querySelectorAll('.review-row').length===count&&document.querySelector('#notice').textContent.includes('Review imported and saved.'),index+2);
+  await page.evaluate(async data=>{const store=await import(chrome.runtime.getURL('review-store.mjs'));await store.importReview(data);},bytes.toString('utf8'));
+  await page.locator('#refresh-reviews').click();
+  await page.waitForFunction(count=>document.querySelectorAll('.review-row').length===count&&!document.querySelector('#refresh-reviews').disabled,index+2);
   await actions.click();assert.equal(await page.locator('#open-review').isVisible(),true);await page.keyboard.press('Escape');
-  assert.equal(await page.locator('#load-review-panel').isVisible(),false);
-  assert.equal(new URL(page.url()).searchParams.has('load'),false);
  }
  const saved=await page.evaluate(async()=>{const store=await import(chrome.runtime.getURL('review-store.mjs'));return Promise.all((await store.listReviews()).map(review=>store.getReview(review.id)));});
  assert.equal(saved.length,3);assert.equal(new Set(saved.map(review=>review.id)).size,3);
@@ -137,13 +128,12 @@ try {
   for(let index=0;index<2;index++)for(const key of ['fields','context','selection','evidence','pinOffset','pinSelection','pinPoint'])assert.deepEqual(review.comments[index][key],fixture.comments[index][key]);
  }
  pass('Two real IndexedDB imports create fresh IDs atomically, preserve every media byte and location, and keep the original unchanged');
- assert.match(await page.locator('#notice').textContent(),/Use Open review page to try again/);
  const bad=structuredClone(bundle);bad.review.comments[0].evidence.production.dataUrl='https://remote.example.test/track.png';
- await page.locator('#import-review-file').setInputFiles({name:'unsafe.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(bad))});
- await page.waitForFunction(()=>document.querySelector('#notice').dataset.type==='error');
+ const importError=await page.evaluate(async data=>{const store=await import(chrome.runtime.getURL('review-store.mjs'));try{await store.importReview(data);return null;}catch(error){return error.message;}},JSON.stringify(bad));
+ assert.match(importError,/attachment/i);
  assert.equal(await page.locator('.review-row').count(),3);
  assert.equal(await page.evaluate(async()=>(await (await import(chrome.runtime.getURL('review-store.mjs'))).listReviews()).length),3);
- pass('Malformed imported media is rejected before any storage change or remote request; permission fallback keeps the imported review available');
+ pass('Malformed imported media is rejected before any storage change or remote request');
  await actions.click();await page.locator('#refresh-reviews').evaluate(button=>button.click());await page.waitForFunction(()=>!document.querySelector('#refresh-reviews').disabled);
  assert.equal(await menu.isVisible(),false);assert.equal(await actions.getAttribute('aria-expanded'),'false');
  pass('Refreshing the selected review closes the menu so stale actions never remain open');
@@ -159,7 +149,7 @@ try {
   await page.keyboard.press('Escape');await page.locator('#toggle-review-sidebar').click();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.locator('#toggle-review-sidebar').click();
  }
  await page.screenshot({path:join(artifacts,'portable-review-phone.png'),animations:'disabled'});
- pass('Sidebar collapse persists, remains keyboard accessible, and import/settings controls fit desktop, tablet and narrow phones');
+ pass('Sidebar collapse persists, remains keyboard accessible, and settings/review actions fit desktop, tablet and narrow phones');
  assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
  await writeFile(join(artifacts,'verification.json'),JSON.stringify({results,errors,externalRequests:external.length},null,2));
 } finally {await context?.close();await rm(temp,{recursive:true,force:true});}

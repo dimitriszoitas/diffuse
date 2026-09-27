@@ -4,7 +4,7 @@ import {
   safePageUrl, commentTitle, evidenceImages, evidenceVideo, fileStem, formatDate, formatMarkdown, formatAiHandoffMarkdown, categoryKey, recordedFocusCrop, safeMediaUrl, commentIsAudit, reviewIsAudit,
   formatReviewHtml, formatStandaloneHtml, reviewTitle, REPORT_STYLES, categoryLabel,
 } from './report-format.mjs';
-import {getReview, listReviews, importReview} from './review-store.mjs';
+import {getReview, listReviews} from './review-store.mjs';
 import {createJiraExporter} from './jira-export.mjs';
 import {VIEWPORT_LABELS} from './viewport-profile.mjs';
 import {createReviewBundle, withPortableJiraLinks, REVIEW_TRANSFER_MAX_BYTES} from './review-transfer.mjs';
@@ -57,7 +57,6 @@ function renderReviewList() {
   ui['review-list'].replaceChildren();
   const hiddenCount = reviews.filter(review => hiddenReviewIds.has(review.id)).length;
   const visibleReviews = reviews.filter(review => hiddenReviewIds.has(review.id) === (reviewListView === 'hidden'));
-  ui['review-count'].textContent = `${reviews.length - hiddenCount} saved · ${hiddenCount} hidden`;
   for (const view of ['saved', 'hidden']) {
     const button = ui[`review-view-${view}`];
     button.textContent = `${view === 'saved' ? 'Saved' : 'Hidden'} · ${view === 'saved' ? reviews.length - hiddenCount : hiddenCount}`;
@@ -586,10 +585,10 @@ ui['toggle-review-sidebar'].addEventListener('click', async () => {
   catch (error) { notice(`The sidebar changed, but Chrome could not save this preference: ${error.message}`, 'warning'); }
 });
 
-async function openReviewPage(review, commentId, {askAccess = true} = {}) {
+async function openReviewPage(review, commentId) {
   const comment = commentId ? review.comments?.find(item => item.id === commentId) : null;
   const url = comment?.context?.production?.url || comment?.selection?.context?.url || review.productionUrl;
-  if (askAccess && !await requestPageAccess(url)) throw new Error('Allow Diffuse to access the reviewed page to show its comments.');
+  if (!await requestPageAccess(url)) throw new Error('Allow Diffuse to access the reviewed page to show its comments.');
   await request('OPEN_REVIEW', {reviewId:review.id, ...(commentId ? {commentId} : {})});
 }
 ui['open-review'].addEventListener('click', async () => {
@@ -614,56 +613,6 @@ ui['export-review'].addEventListener('click', async () => {
   } catch (error) { notice(error.message.replace('Cannot import this review:', 'Cannot export this review:'), 'error'); }
   finally { ui['export-review'].disabled = !selectedReview; }
 });
-function dismissReviewLoader() {
-  ui['load-review-panel'].hidden = true;
-  const url = new URL(location.href);
-  url.searchParams.delete('load');
-  history.replaceState(null, '', url.href);
-}
-for (const id of ['import-review', 'choose-review-file']) ui[id].addEventListener('click', () => ui['import-review-file'].click());
-ui['browse-saved-reviews'].addEventListener('click', () => {
-  dismissReviewLoader();
-  setSidebarCollapsed(false);
-  const target = ui['review-list'].querySelector('button') || ui['import-review'];
-  target.focus();
-  target.scrollIntoView({block:'nearest'});
-});
-ui['import-review-file'].addEventListener('change', async () => {
-  const file = ui['import-review-file'].files?.[0];
-  if (!file) return;
-  ui['choose-review-file'].disabled = true;
-  ui['browse-saved-reviews'].disabled = true;
-  ui['import-review'].disabled = true;
-  ui['import-review'].textContent = 'Importing…';
-  let imported;
-  try {
-    if (file.size > REVIEW_TRANSFER_MAX_BYTES) throw new Error('This review exceeds the 256 MB portable file limit.');
-    // IndexedDB is shared by extension pages; large evidence never crosses runtime messages.
-    imported = await importReview(await file.text());
-    dismissReviewLoader();
-    await loadReviews(imported.review.id);
-    notice(`Imported “${imported.review.title}” with ${imported.comments.length} observations. Opening its page…`);
-    try {
-      await openReviewPage(imported.review, null, {askAccess:false});
-      notice(`Imported “${imported.review.title}” with ${imported.comments.length} observations. Its page is open with the saved comments.`);
-    }
-    catch (error) { notice(`Review imported and saved. ${error.message} Use Open review page to try again.`, 'warning'); }
-  } catch (error) { notice(error.message, 'error'); }
-  finally {
-    ui['import-review-file'].value = '';
-    ui['choose-review-file'].disabled = false;
-    ui['browse-saved-reviews'].disabled = false;
-    ui['import-review'].disabled = false;
-    ui['import-review'].textContent = 'Import review';
-  }
-});
-
 try { setSidebarCollapsed((await chrome.storage.local.get(SIDEBAR_COLLAPSED_KEY))[SIDEBAR_COLLAPSED_KEY] === true); }
 catch { setSidebarCollapsed(false); }
 await loadReviews();
-
-if (new URL(location.href).searchParams.get('load') === '1') {
-  ui['load-review-panel'].hidden = false;
-  ui['choose-review-file'].focus();
-  ui['load-review-panel'].scrollIntoView({block:'nearest'});
-}

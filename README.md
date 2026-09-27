@@ -1,6 +1,6 @@
 # Diffuse — live design comparison and page audits
 
-**0.9.4 loads shared and saved reviews directly onto the website, with comments in the right sidebar.** Drag pins to reattach them to another component, or use **Select area** to mark a region. Shared review files retain these attachments and the original evidence.
+**0.9.5 adds a soft blue page-edge pulse while AI review runs and simplifies the report header.** Load shared reviews directly on the website with the right sidebar, drag pins to reattach them, or select an area. Shared review files retain those attachments and the original evidence.
 
 Diffuse uses a native Chrome side drawer for review controls. **Start review** opens it; for an active review, click the extension icon and **Open review sidebar**. There is no floating toolbar. The webpage resizes beside Diffuse, and closing the drawer preserves the review and unfinished comment. Chrome chooses the drawer side and owns its resize handle.
 

@@ -165,6 +165,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .ai-suggestion,.ai-disclosure,#ai-results-status{background:#f3f6fa;border-color:#d4dfed;border-radius:8px}.ai-suggestion h4,.ai-suggestion-meta,.threshold-ends small,#ai-results-status p,.ai-disclosure{color:var(--muted)}.ai-change{background:#e8efff;border-color:#94b3ef}.ai-change h4{color:#235ed7}#ai-show-all{background:#e8efff;color:#235ed7;border-color:#bac9da}#ai-accept-all{background:#235ed7;color:#fff;border-color:#235ed7}
 *{scrollbar-color:#bdcbdb transparent}*::-webkit-scrollbar-thumb{background-color:#bdcbdb}
 @media(forced-colors:active){*{scrollbar-color:auto}}
+/* A quiet activity cue at the inside edge, without covering or blocking the page. */
+#ai-review-glow{position:absolute;inset:0;z-index:3;pointer-events:none;box-shadow:inset 0 0 0 1px #82aaff66,inset 0 0 20px 3px #397bfa70,inset 0 0 56px 9px #579bff2e;opacity:.4;animation:diffuse-ai-pulse 2.6s ease-in-out infinite}
+@keyframes diffuse-ai-pulse{0%,100%{opacity:.35}50%{opacity:.95}}
+@media(prefers-reduced-motion:reduce){#ai-review-glow{animation:none;opacity:.65}}
+@media(forced-colors:active){#ai-review-glow{display:none}}
+
 
   `;
 
@@ -174,6 +180,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     root = host.attachShadow({mode: 'open'});
     root.innerHTML = `<style>${styles}</style>
       <div id="layer" aria-hidden="true"><video id="reference" autoplay muted playsinline></video></div>
+      <div id="ai-review-glow" aria-hidden="true" hidden></div>
       <div id="divider"><span class="edge-label production">Production</span><span class="edge-label prototype">Prototype</span><button id="handle" type="button" role="slider" aria-label="Prototype reveal" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">↔</button></div>
       <!-- Shared controller values for the side drawer; never shown as page controls. -->
       <div id="toolbar" hidden inert aria-hidden="true">
@@ -1470,6 +1477,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     if (contextInvalidated) return;
     if(root&&session)paintViewport();
     if (!root) return;
+    el('ai-review-glow').hidden=!(aiBusy||session?.aiRunning);
     const diffReason=diffDisabledReason();
     el('diff').disabled=Boolean(diffReason);
     el('diff').title=diffReason||(hasReference()?'Choose a different reference tab':'Choose a reference tab to compare');
