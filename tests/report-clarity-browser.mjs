@@ -203,6 +203,7 @@ try {
   pass('Viewing, crop derivation and enlargement leave saved review fields and media unchanged.');
   await report.setViewportSize({width: 1440, height: 1080});
   const downloadPromise = report.waitForEvent('download');
+  await report.locator('#review-actions-toggle').click();
   await report.locator('#download-html').click();
   const download = await downloadPromise;
   const exportPath = join(artifacts, 'illustrative-review-fixture.html');

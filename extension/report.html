@@ -30,10 +30,19 @@
       <div class="load-review-actions"><button id="choose-review-file" class="button primary" type="button">Choose review file</button><button id="browse-saved-reviews" class="button" type="button">Saved reviews</button></div>
     </section>
     <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
-    <section class="export-toolbar" id="export-toolbar" hidden>
-      <div><h2>Share review</h2><p id="handoff-description">Every observation, its evidence, and the next step.</p></div>
-      <div class="export-actions"><button id="open-review" class="button">Open review page ↗</button><button id="export-review" class="button">Export review ↓</button><button id="copy-report" class="button primary">Copy entire report <span aria-hidden="true">↗</span></button><button id="download-html" class="button">Download HTML</button><button id="download-markdown" class="button subtle">AI handoff .md ↓</button><button id="delete-review" class="button danger-subtle">Delete review</button></div>
-
+    <section class="review-header" id="export-toolbar" aria-label="Review summary and actions" hidden>
+      <div id="review-header-copy" class="review-header-copy"></div>
+      <div class="review-header-actions">
+        <button id="delete-review" class="button danger-subtle" type="button" aria-label="Delete review" title="Delete review"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7m4-7v7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Delete</span></button>
+        <button id="review-actions-toggle" class="button review-actions-toggle" type="button" aria-label="Review options" title="Review options" aria-haspopup="menu" aria-expanded="false" aria-controls="review-actions-menu"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>
+        <div id="review-actions-menu" class="review-actions-menu" role="menu" aria-label="Review options" hidden>
+          <button id="open-review" type="button" role="menuitem" tabindex="-1">Open review page <span aria-hidden="true">↗</span></button>
+          <button id="export-review" type="button" role="menuitem" tabindex="-1">Export review <span aria-hidden="true">↓</span></button>
+          <button id="copy-report" type="button" role="menuitem" tabindex="-1">Copy entire report</button>
+          <button id="download-html" type="button" role="menuitem" tabindex="-1">Download HTML <span aria-hidden="true">↓</span></button>
+          <button id="download-markdown" type="button" role="menuitem" tabindex="-1">AI handoff .md <span aria-hidden="true">↓</span></button>
+        </div>
+      </div>
     </section>
     <div id="report-content" aria-busy="true"><section class="empty-state"><span class="empty-symbol" aria-hidden="true">◧</span><h2>Getting your notebook ready.</h2><p>Your saved review evidence will appear here.</p></section></div>
   </main>

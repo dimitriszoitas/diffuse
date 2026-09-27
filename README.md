@@ -105,6 +105,8 @@ Open **Review reports** in the side drawer or extension popup. The notebook list
 
 Reports include your manual comments and accepted AI comments, with their categories. Pending and dismissed AI suggestions are not exported. API keys are never exported.
 
+The **⋯ Review options** menu beside the review title contains the sharing and download actions. **Delete** remains beside it.
+
 - **Copy entire report** copies formatted text and screenshot content for pasting into a document or ticket. Image support depends on the destination; use **Copy image** or **Download image** when it strips images. A plain-text fallback is shown if rich copying is unavailable.
 - **Download HTML** saves a self-contained report with embedded screenshots and playable recordings for reading offline.
 - **AI handoff .md ↓** exports every saved finding across all viewports in one concise Markdown file: overall task, finding IDs, Current → Change to → Verify, captured context, and evidence filenames. It omits image/video data so a coding assistant can use it efficiently. Include the HTML report or referenced evidence files for visual verification. No new AI request is made.
@@ -115,7 +117,7 @@ Pasting a report into another app does not preserve playable video: the copied r
 
 ## Share a review with another Diffuse user
 
-Choose **Export review** in the notebook to download a `.diffuse-review.json` file. It includes every saved comment across pages and viewports, the captured URLs and anchors, written fields, screenshots, recordings and accepted AI context. Account credentials and local session identifiers are excluded.
+Open the **⋯ Review options** menu beside the review title and choose **Export review** to download a `.diffuse-review.json` file. It includes every saved comment across pages and viewports, the captured URLs and anchors, written fields, screenshots, recordings and accepted AI context. Account credentials and local session identifiers are excluded.
 
 The recipient chooses **Import review** in their notebook and selects that file. The import creates a separate saved review, preserving existing reviews. **Open review page** opens the saved URL and restores the comment pins. Chrome may first ask for access to that site. Clicking a comment in the sidebar returns to its captured URL and viewport, then reveals its location.
 

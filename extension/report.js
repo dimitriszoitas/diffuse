@@ -172,6 +172,8 @@ async function selectReview(reviewId) {
 }
 
 function setExportEnabled(enabled) {
+  closeReviewActions();
+  ui['review-actions-toggle'].disabled = !enabled;
   for (const id of ['copy-report', 'download-html', 'download-markdown', 'export-review', 'open-review', 'delete-review']) ui[id].disabled = !enabled;
 }
 
@@ -296,12 +298,12 @@ function renderReview() {
   const review = selectedReview;
   if (!review) return;
   document.title = `${reviewTitle(review)} — Diffuse`;
-  const paired = !reviewIsAudit(review) && review.comments.some((comment) => comment.evidence?.production?.dataUrl && comment.evidence?.prototype?.dataUrl);
-  ui['handoff-description'].textContent = paired ? 'Every observation, both screenshots, and the context behind them.' : 'Every observation, the captured page, and the context behind it.';
   ui['export-toolbar'].hidden = false;
   setExportEnabled(true);
   // All user content, URLs, attributes, and media are validated/escaped in this pure formatter.
   ui['report-content'].innerHTML = formatReviewHtml(review);
+  const heading = ui['report-content'].querySelector('.report-heading');
+  ui['review-header-copy'].replaceChildren(heading.querySelector('h1'), heading.querySelector('.review-summary'));
   const cards = [...ui['report-content'].querySelectorAll('.comment-card')];
   const categoryLinks = [...ui['report-content'].querySelectorAll('[data-category-filter]')];
   const filterStatus = ui['report-content'].querySelector('.filter-status');
@@ -495,6 +497,49 @@ ui['copy-report'].addEventListener('click', async () => {
     notice('Only report text was copied: this browser blocked rich content. Use Copy image for screenshots, or download HTML to keep images and playable video together.', 'warning');
   } catch (error) { notice(error.message, 'error'); }
   finally { ui['copy-report'].disabled = !selectedReview; }
+});
+
+function closeReviewActions(restoreFocus = false) {
+  const wasOpen = !ui['review-actions-menu'].hidden;
+  ui['review-actions-menu'].hidden = true;
+  ui['review-actions-toggle'].setAttribute('aria-expanded', 'false');
+  if (wasOpen && restoreFocus) ui['review-actions-toggle'].focus();
+}
+function openReviewActions(last = false) {
+  if (ui['review-actions-toggle'].disabled) return;
+  ui['review-actions-menu'].hidden = false;
+  ui['review-actions-toggle'].setAttribute('aria-expanded', 'true');
+  const items = [...ui['review-actions-menu'].querySelectorAll('button:not(:disabled)')];
+  (last ? items.at(-1) : items[0])?.focus();
+}
+ui['review-actions-toggle'].addEventListener('click', () => {
+  if (ui['review-actions-menu'].hidden) openReviewActions();
+  else closeReviewActions(true);
+});
+ui['review-actions-toggle'].addEventListener('keydown', event => {
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    openReviewActions(event.key === 'ArrowUp');
+  }
+});
+ui['review-actions-menu'].addEventListener('keydown', event => {
+  if (event.key === 'Escape') { event.preventDefault(); closeReviewActions(true); return; }
+  if (event.key === 'Tab') { closeReviewActions(true); return; }
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+  event.preventDefault();
+  const items = [...ui['review-actions-menu'].querySelectorAll('button:not(:disabled)')];
+  const index = items.indexOf(document.activeElement);
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+  items[next]?.focus();
+});
+ui['review-actions-menu'].addEventListener('click', event => {
+  if (event.target.closest('[role="menuitem"]')) closeReviewActions(true);
+});
+document.addEventListener('pointerdown', event => {
+  if (!event.target.closest('#review-actions-toggle, #review-actions-menu')) closeReviewActions();
+});
+document.addEventListener('focusin', event => {
+  if (!event.target.closest('#review-actions-toggle, #review-actions-menu')) closeReviewActions();
 });
 
 ui['download-html'].addEventListener('click', () => {

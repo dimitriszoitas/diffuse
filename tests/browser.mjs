@@ -302,6 +302,7 @@ try {
   record('Review edits preserve the original capture and recorded evidence');
 
   await reportPage.bringToFront();
+  await reportPage.locator('#review-actions-toggle').click();
   await reportPage.locator('#copy-report').click();
   await until(() => reportPage.locator('#notice').textContent().then(text => text.includes('Report copied with screenshots')), 'rich clipboard export');
   await context.grantPermissions(['clipboard-read']);
@@ -317,6 +318,7 @@ try {
   record('Copy entire report writes rich HTML and plain text, with embedded screenshots and clip references');
 
   const downloadPromise = reportPage.waitForEvent('download');
+  await reportPage.locator('#review-actions-toggle').click();
   await reportPage.locator('#download-html').click();
   const download = await downloadPromise;
   const exportedPath = join(artifacts, 'example-review.html');

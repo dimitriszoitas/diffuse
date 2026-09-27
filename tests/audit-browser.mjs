@@ -258,7 +258,7 @@ try {
   const report = await reportPromise; await report.waitForLoadState();
   await until(() => report.locator('.comment-card').count().then(count => count === 4), 'audit report');
   assert.match(await report.locator('#report-content').textContent(), /Copy change/);
-  const downloadPromise = report.waitForEvent('download'); await report.locator('#download-html').click();
+  const downloadPromise = report.waitForEvent('download'); await report.locator('#review-actions-toggle').click(); await report.locator('#download-html').click();
   const download = await downloadPromise; const path = join(artifacts, 'example-audit.html'); await download.saveAs(path);
   const exported = await readFile(path, 'utf8'); assert.match(exported, /data:image\/png/); assert.match(exported, /data:video\/webm/); assert.equal(exported.includes(fakeKey), false); assert.equal(exported.includes('Small spacing inconsistency'), false); assert.match(exported, /85/);
   pass('Audit report exports categories, only accepted AI findings, screenshots and video without credentials');

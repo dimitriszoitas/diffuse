@@ -95,7 +95,7 @@ New reviews ask for one actionable issue per finding. **Current** describes the 
 
 ## Share a review with another Diffuse user
 
-Choose **Export review** in the notebook to download a `.diffuse-review.json` file. It includes every saved comment across pages and viewports, the captured URLs and anchors, written fields, screenshots, recordings and accepted AI context. Account credentials and local session identifiers are excluded.
+Open the **⋯ Review options** menu beside the review title and choose **Export review** to download a `.diffuse-review.json` file. It includes every saved comment across pages and viewports, the captured URLs and anchors, written fields, screenshots, recordings and accepted AI context. Account credentials and local session identifiers are excluded.
 
 The recipient chooses **Import review** in their notebook and selects that file. The import creates a separate saved review, preserving existing reviews. **Open review page** opens the saved URL and restores the comment pins. Chrome may first ask for access to that site. Clicking a comment in the sidebar returns to its captured URL and viewport, then reveals its location.
 
@@ -106,6 +106,8 @@ The notebook sidebar can be collapsed and expanded using its sidebar icon. **Set
 ## Copy or download your review
 
 Open **Review reports** in the drawer or extension popup. Earlier saved reviews remain in the notebook. Use **Hide** beside a review to clear it from the list; find it under **Hidden** and choose **Restore** when needed. Hiding preserves its comments and evidence.
+
+The **⋯ Review options** menu beside the review title contains the sharing and download actions. **Delete** remains beside it.
 
 - **Copy entire report** copies formatted text and screenshots. If the destination drops images, use **Copy image** or **Download image** for each screenshot.
 - **Download HTML** keeps embedded screenshots and playable recordings together in one file that opens offline.

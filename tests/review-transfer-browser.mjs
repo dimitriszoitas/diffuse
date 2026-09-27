@@ -36,12 +36,42 @@ try {
   return store.getReview('original');
  });
  await page.reload();await page.waitForFunction(()=>document.querySelectorAll('.comment-card').length===2);
- const downloadPromise=page.waitForEvent('download');await page.locator('#export-review').click();const download=await downloadPromise;
+ const actions=page.locator('#review-actions-toggle'),menu=page.locator('#review-actions-menu');
+ assert.equal(await page.locator('.workspace h1').count(),1);
+ assert.equal(await page.locator('#report-content h1').count(),0);
+ assert.equal(await page.locator('#review-header-copy h1').textContent(),fixture.title);
+ assert.match(await page.locator('#review-header-copy .review-summary').textContent(),/2 observations/);
+ assert.equal(await page.getByRole('heading',{name:'Share review',exact:true}).count(),0);
+ assert.equal(await page.locator('#export-toolbar #delete-review').isVisible(),true);
+ assert.equal(await page.locator('#export-toolbar #review-actions-toggle').isVisible(),true);
+ assert.equal(await menu.isVisible(),false);assert.equal(await actions.getAttribute('aria-expanded'),'false');
+ await actions.click();
+ assert.equal(await menu.getAttribute('role'),'menu');assert.equal(await actions.getAttribute('aria-expanded'),'true');
+ const actionIds=['open-review','export-review','copy-report','download-html','download-markdown'];
+ assert.deepEqual(await menu.getByRole('menuitem').evaluateAll(items=>items.map(item=>item.id)),actionIds);
+ for(const actionId of actionIds)assert.equal(await menu.locator(`#${actionId}`).isVisible(),true);
+ await page.keyboard.press('Escape');assert.equal(await menu.isVisible(),false);
+ assert.equal(await actions.evaluate(el=>el===document.activeElement),true);
+ await page.keyboard.press('ArrowDown');assert.equal(await page.locator('#open-review').evaluate(el=>el===document.activeElement),true);
+ await page.keyboard.press('ArrowDown');assert.equal(await page.locator('#export-review').evaluate(el=>el===document.activeElement),true);
+ await page.keyboard.press('End');assert.equal(await page.locator('#download-markdown').evaluate(el=>el===document.activeElement),true);
+ await page.keyboard.press('Home');assert.equal(await page.locator('#open-review').evaluate(el=>el===document.activeElement),true);
+ await page.keyboard.press('ArrowUp');assert.equal(await page.locator('#download-markdown').evaluate(el=>el===document.activeElement),true);
+ await page.keyboard.press('Tab');assert.equal(await menu.isVisible(),false);assert.equal(await actions.getAttribute('aria-expanded'),'false');
+ await actions.click();await page.locator('#review-header-copy h1').click();assert.equal(await menu.isVisible(),false);
+ pass('Review title, summary, Delete and one actions trigger share a single header; all five menu actions support arrow keys, Home/End, Escape, Tab and outside dismissal');
+ const downloadPromise=page.waitForEvent('download');await actions.click();await page.locator('#export-review').click();const download=await downloadPromise;
+ assert.equal(await menu.isVisible(),false);assert.equal(await actions.evaluate(el=>el===document.activeElement),true);
  assert.match(download.suggestedFilename(),/\.diffuse-review\.json$/);
  const bytes=await readFile(await download.path()),bundle=JSON.parse(bytes);assert.equal(bundle.review.comments.length,2);
  assert.equal(bundle.review.comments[1].context.production.url,fixture.comments[1].context.production.url);
  assert.deepEqual(bundle.review.comments[0].evidence,fixture.comments[0].evidence);assert.equal(bundle.review.id,undefined);
  pass('Actual Export review download retains both paths, viewport presets, anchors, screenshots and a real WebM recording');
+ const htmlDownloadPromise=page.waitForEvent('download');await actions.click();await page.locator('#download-html').click();const htmlDownload=await htmlDownloadPromise;
+ assert.match(htmlDownload.suggestedFilename(),/\.html$/);
+ const exportedHtml=await readFile(await htmlDownload.path(),'utf8');assert.match(exportedHtml,/data:image\/png;base64,/);assert.match(exportedHtml,/data:video\/webm/);assert.match(exportedHtml,/Observation one/);
+ assert.equal(await menu.isVisible(),false);assert.equal(await actions.evaluate(el=>el===document.activeElement),true);
+ pass('HTML download remains available in the custom menu and retains embedded screenshots and playable recording data');
  await page.goto(`chrome-extension://${id}/report.html?load=1`);
  await page.locator('#choose-review-file').waitFor({state:'visible'});
  assert.equal(await page.locator('#choose-review-file').evaluate(el=>el===document.activeElement),true);
@@ -60,7 +90,7 @@ try {
  for(let index=0;index<2;index++) {
   const chooser=page.waitForEvent('filechooser');await page.locator(index===0?'#choose-review-file':'#import-review').click();await (await chooser).setFiles({name:'shared.diffuse-review.json',mimeType:'application/json',buffer:bytes});
   await page.waitForFunction(count=>document.querySelectorAll('.review-row').length===count&&document.querySelector('#notice').textContent.includes('Review imported and saved.'),index+2);
-  assert.equal(await page.locator('#open-review').isVisible(),true);
+  await actions.click();assert.equal(await page.locator('#open-review').isVisible(),true);await page.keyboard.press('Escape');
   assert.equal(await page.locator('#load-review-panel').isVisible(),false);
   assert.equal(new URL(page.url()).searchParams.has('load'),false);
  }
@@ -80,13 +110,20 @@ try {
  assert.equal(await page.locator('.review-row').count(),3);
  assert.equal(await page.evaluate(async()=>(await (await import(chrome.runtime.getURL('review-store.mjs'))).listReviews()).length),3);
  pass('Malformed imported media is rejected before any storage change or remote request; permission fallback keeps the imported review available');
+ await actions.click();await page.locator('#refresh-reviews').evaluate(button=>button.click());await page.waitForFunction(()=>!document.querySelector('#refresh-reviews').disabled);
+ assert.equal(await menu.isVisible(),false);assert.equal(await actions.getAttribute('aria-expanded'),'false');
+ pass('Refreshing the selected review closes the menu so stale actions never remain open');
  await page.locator('#toggle-review-sidebar').click();assert.equal(await page.locator('#toggle-review-sidebar').getAttribute('aria-expanded'),'false');assert.equal(await page.locator('#review-list').isVisible(),false);
  assert.equal(await page.locator('.sidebar-settings').isVisible(),true);
  await page.reload();await page.waitForFunction(()=>document.body.classList.contains('review-sidebar-collapsed'));
  assert.equal(await page.locator('#toggle-review-sidebar').getAttribute('aria-label'),'Expand review sidebar');
  await page.locator('#toggle-review-sidebar').focus();await page.keyboard.press('Enter');assert.equal(await page.locator('#review-list').isVisible(),true);
  await page.screenshot({path:join(artifacts,'portable-review-desktop.png'),animations:'disabled'});
- for(const width of [768,390,320]) {await page.setViewportSize({width,height:900});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.locator('#toggle-review-sidebar').click();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.locator('#toggle-review-sidebar').click();}
+ for(const width of [768,390,320]) {
+  await page.setViewportSize({width,height:900});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await actions.click();const bounds=await menu.boundingBox();assert.ok(bounds&&bounds.x>=0&&bounds.x+bounds.width<=width+1,`Actions menu fits ${width}px without clipping`);assert.ok(bounds.y>=0&&bounds.y+bounds.height<=900,`Actions menu remains within the ${width}px viewport`);
+  await page.keyboard.press('Escape');await page.locator('#toggle-review-sidebar').click();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.locator('#toggle-review-sidebar').click();
+ }
  await page.screenshot({path:join(artifacts,'portable-review-phone.png'),animations:'disabled'});
  pass('Sidebar collapse persists, remains keyboard accessible, and import/settings controls fit desktop, tablet and narrow phones');
  assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
