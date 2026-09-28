@@ -49,6 +49,8 @@ Fresh-profile Chrome checks verify the 0.10.2 shared identity from different fol
 
 On **2026-09-28**, production deployment `dpl_5Nj7NdsfSCKttdxFnvsmxrisxYAf` enabled the hourly privacy-reporting schedule. The authorized live check completed successfully for the stored account, applied Atlassian's erasure response, and reported zero failures. The reporting endpoint rejected an unauthenticated request with HTTP 401. No Jira issues were created or deleted by this check.
 
+Atlassian's developer console now confirms **Distribution status: Sharing**, with vendor, support and policy links configured and the implemented reporting declaration confirmed. The service accepts the official shared ID and both supported legacy IDs; unrelated extension and website origins remain rejected.
+
 The packaged 0.10.2 extension passed five Chrome identity/migration checks. In a fresh Chrome test profile, its real **Connect Jira** action received HTTP 200 from the hosted OAuth-start endpoint and a validated Atlassian authorization URL. The test cancelled before provider navigation; it did not complete consent or save a connection. The native site-permission dialog was preapproved in the disposable test profile. All 429 automated tests and syntax checks passed.
 
 To finish end-to-end coverage, authorize a non-owner account from the official ZIP, verify its sites/projects and required fields, then explicitly create a test issue with screenshot and recording evidence. Confirm that ticket and its attachments in Jira.
