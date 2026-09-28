@@ -1,18 +1,19 @@
-# Jira integration — 0.7.0
+# Jira integration — 0.10.2
 
-Individual and bulk-selected review handoff is implemented. The hosted backend, database, callback and extension allowlist are configured. **A real Atlassian account grant and live ticket creation have not yet been tested.** Automated provider tests do not establish that end-to-end result.
+Individual and bulk-selected review handoff is implemented. Official ZIP installations from 0.10.2 share an approved client identity. **A complete non-owner account sign-in and live ticket creation remain outside the automated verification below.** Provider fixtures do not establish that end-to-end result.
 
 ## Current rollout
 
-- OAuth app: **Diffuse**, registered as a resource-level app. It is still **private to its owner**; enable Atlassian app sharing separately before other accounts can authorize it.
+- OAuth app: **Diffuse**, registered as a resource-level app. Public distribution uses Atlassian's Sharing setting, vendor/privacy details and implemented Personal Data Reporting API.
 - Jira scopes: `read:jira-work`, `read:jira-user`, `write:jira-work`, plus `offline_access` in the authorization request. No project administration, configuration, webhook or development-data scopes are requested.
 - Backend: `https://diffuse-jira-api.vercel.app`.
 - Registered callback: `https://diffuse-jira-api.vercel.app/oauth/jira/callback`.
 - Database: isolated `diffuse-jira-db`, using the existing Neon Launch subscription managed by Vercel, connected to this backend's Production environment.
-- Approved existing extension ID: `golpalifffajniiianpkpfmmijmcdmeh`. Update its existing installed folder and reload it to preserve its identity and saved reviews. A fresh installation ID needs an explicit server allowlist update.
+- Official shared extension ID: `gdoidkknjbnfmeikloaafdohpjlafgbj`, derived from the public manifest key. The two existing legacy IDs remain approved. New official downloads require no individual ID registration.
+- Moving from an older unkeyed installation requires exporting reviews, installing separately and importing. Keep the old folder intact; replacing its files does not migrate Chrome storage.
 - The client secret and token-encryption key are sensitive server environment variables. No secret or database URL belongs in extension files, reports or source control.
 
-The connection UI supports separate Atlassian accounts and sites. App sharing is an additional rollout prerequisite, not something creating another local connection can bypass. The Anthropic key is unrelated to Jira authorization.
+The connection UI supports separate Atlassian accounts and sites. The Anthropic key is unrelated to Jira authorization. Site administrators can still restrict third-party apps, and users retain their ordinary Jira permissions.
 
 ## Review-to-ticket flow
 
@@ -44,7 +45,13 @@ On **2026-09-26**, the authentication, rate-limit and delivery schemas were expl
 
 Production deployment `dpl_GxRTSzghzCtc3HiippqM7vmmV364` passed public health, authenticated delivery-route, rejected foreign-origin and allowlisted OAuth-start checks at the production URL. The returned authorization URL used the registered callback. These checks establish deployed service readiness, not a real account grant or ticket delivery.
 
-Authorize the owner account from the approved installation, verify its sites/projects and required fields, then explicitly create a test issue with screenshot and recording evidence. Confirm the ticket and attachments in Jira. Other-account authorization needs a separate check after app sharing is configured.
+Fresh-profile Chrome checks verify the 0.10.2 shared identity from different folders and preserve review text and screenshot bytes through export/import. Automated OAuth tests verify separate-account isolation, callback replay protection, rejected foreign origins and token refresh. The privacy-reporting suite covers stored cycle/retry rules and provider-directed cleanup.
+
+On **2026-09-28**, production deployment `dpl_5Nj7NdsfSCKttdxFnvsmxrisxYAf` enabled the hourly privacy-reporting schedule. The authorized live check completed successfully for the stored account, applied Atlassian's erasure response, and reported zero failures. The reporting endpoint rejected an unauthenticated request with HTTP 401. No Jira issues were created or deleted by this check.
+
+The packaged 0.10.2 extension passed five Chrome identity/migration checks. In a fresh Chrome test profile, its real **Connect Jira** action received HTTP 200 from the hosted OAuth-start endpoint and a validated Atlassian authorization URL. The test cancelled before provider navigation; it did not complete consent or save a connection. The native site-permission dialog was preapproved in the disposable test profile. All 429 automated tests and syntax checks passed.
+
+To finish end-to-end coverage, authorize a non-owner account from the official ZIP, verify its sites/projects and required fields, then explicitly create a test issue with screenshot and recording evidence. Confirm that ticket and its attachments in Jira.
 
 ## Official references
 

@@ -105,11 +105,11 @@ el('copy-installation').disabled = !client.installationId;
 el('copy-installation').addEventListener('click', async () => {
   try {
     await navigator.clipboard.writeText(client.installationId);
-    feedback('Installation ID copied.');
+    feedback('Extension ID copied.');
   } catch {
     el('installation-id').focus();
     el('installation-id').select();
-    feedback('Select and copy the installation ID from the field below.');
+    feedback('Select and copy the extension ID from the field below.');
   }
 });
 

@@ -6,6 +6,8 @@ import {createPostgresStore} from './store.mjs';
 import {createJiraApiClient} from './jira-api.mjs';
 import {createDeliveryService} from './delivery-service.mjs';
 import {createPostgresDeliveryStore} from './delivery-store.mjs';
+import {createPostgresPrivacyReportingStore} from './privacy-reporting-store.mjs';
+import {createPrivacyReportingService} from './privacy-reporting.mjs';
 import {HttpError} from './http.mjs';
 
 export const allowedExtensionIds = (process.env.ALLOWED_EXTENSION_IDS || '').split(',').map(value => value.trim()).filter(Boolean);
@@ -23,7 +25,8 @@ export function getServices() {
   const jira = createJiraApiClient();
   const deliveryStore = createPostgresDeliveryStore({pool: pool()});
   const delivery = createDeliveryService({store: deliveryStore, jira, oauth});
-  services = {oauth, store, auth, jira, delivery, deliveryStore};
+  const privacy = createPrivacyReportingService({store: createPostgresPrivacyReportingStore({pool: pool()}), connectionStore: store, oauth, cryptoKey: process.env.TOKEN_ENCRYPTION_KEY});
+  services = {oauth, store, auth, jira, delivery, deliveryStore, privacy};
   return services;
 }
 

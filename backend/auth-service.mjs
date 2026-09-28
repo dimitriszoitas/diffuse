@@ -82,7 +82,8 @@ export function createAuthService({ store, oauth, cryptoKey, allowedExtensionIds
 
   return Object.freeze({
     start: run(async ({ challenge, extensionId } = {}) => {
-      if (!isChallenge(challenge) || !extensionIds.has(extensionId)) failAuth('invalid_request');
+      if (!isChallenge(challenge) || typeof extensionId !== 'string' || !EXTENSION_ID.test(extensionId)) failAuth('invalid_request');
+      if (!extensionIds.has(extensionId)) failAuth('installation_not_allowed');
       const state = randomSecret();
       const authorizationUrl = oauth.authorizationUrl({ state });
       await store.putState({ stateHash: secretHash(state), challenge, extensionId, expiresAt: now() + STATE_TTL });

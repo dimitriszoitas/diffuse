@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Diffuse — Live design comparison",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "description": "Live comparison and page audits with comment pins, region evidence, exportable reports, and optional Anthropic review.",
   "minimum_chrome_version": "116",
   "permissions": ["activeTab", "tabs", "scripting", "storage", "tabCapture", "offscreen", "clipboardWrite", "sidePanel", "identity", "debugger"],
@@ -10,5 +10,6 @@
   "icons": {"16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png"},
   "action": {"default_title": "Review this page with Diffuse", "default_popup": "popup.html", "default_icon": {"16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png"}},
   "options_ui": {"page": "settings.html", "open_in_tab": true},
-  "side_panel": {"default_path": "sidepanel.html"}
+  "side_panel": {"default_path": "sidepanel.html"},
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvE8OCRLJH9KvALxmAZQadtmy5qNt8nlyIGADqKCzgYxgnG38T/Jrpxu8Zat8RjJShraPpWMNNO2yoW/6TFTtP09RZn8kqvFDybD4BS03dbGnBrONNFvuyk3zHrckwxj3K7oWTUJ+1lhQDbJJPR1kwuXSypwCzgMY1jyUdlQOCuzw+ARv1KlPeFKxLg5p3KRcH9Lkl066DkrXAr21jOnqAv0tMfKExksiZ0oEZZc6EtcY3VBmeBS4F6b7uTSTMHGmWaYjrW/Bw4UpkYzjamvCUpGTYuBI4qK2XqGpQm91HEWu5ocQ3wD6ZXTgGS8fXgTSwuIVly0xB1AHzG8c9HjjtQIDAQAB"
 }

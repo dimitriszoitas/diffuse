@@ -9,7 +9,8 @@ const MAX_RESPONSE_BYTES = 128 * 1024;
 const HANDSHAKE_TTL = 10 * 60 * 1000;
 const messages = Object.freeze({
   setup_pending: 'The Jira connection service is still being configured. Try again after setup is complete.',
-  invalid_request: 'This Diffuse installation is not ready to connect. Share the installation ID below with the person setting up Jira.',
+  invalid_request: 'The Jira sign-in request could not be verified. Reload Diffuse and try connecting again.',
+  installation_not_allowed: 'This copy of Diffuse cannot connect to Jira. Install the latest official Diffuse release and follow its upgrade instructions to keep your saved reviews.',
   permission_denied: 'Allow Diffuse to reach its Jira connection service, then try again.',
   cancelled: 'Sign-in was cancelled. No account was added.',
   busy: 'Finish the open Jira sign-in before starting another.',
@@ -185,6 +186,7 @@ function publicPayload(value, depth = 0) {
 export function createJiraConnectionClient({chromeApi = globalThis.chrome, fetchImpl = globalThis.fetch, cryptoImpl = globalThis.crypto, timeoutMs = 20_000} = {}) {
   let initialized;
   let connecting = false;
+  const revokedConnections = new Set();
   const id = chromeApi?.runtime?.id;
   const local = chromeApi?.storage?.local;
   const session = chromeApi?.storage?.session;
@@ -233,7 +235,11 @@ export function createJiraConnectionClient({chromeApi = globalThis.chrome, fetch
       } finally { reader.releaseLock(); }
       let body;
       try { body = JSON.parse(text); } catch { fail('invalid_response'); }
-      if (!response.ok) fail(errorCode(body, response.status));
+      if (!response.ok) {
+        const error = new JiraConnectionError(errorCode(body, response.status));
+        error.status = response.status;
+        throw error;
+      }
       if (!plain(body)) fail('invalid_response');
       return body;
     })();
@@ -247,11 +253,24 @@ export function createJiraConnectionClient({chromeApi = globalThis.chrome, fetch
 
   async function getStored(connectionId) {
     await initialize();
-    if (!UUID.test(connectionId)) fail('unauthorized');
+    if (!UUID.test(connectionId) || revokedConnections.has(connectionId)) fail('unauthorized');
     const key = CONNECTION_PREFIX + connectionId;
     const entries = await storage(() => local.get(key));
     if (!entries?.[key]) fail('unauthorized');
     return storedConnection(entries[key]);
+  }
+
+  async function authenticatedRequest(saved, path, options = {}) {
+    try { return await request(path, {...options, credential: saved.credential}); }
+    catch (error) {
+      // An authoritative revocation must also remove cached account metadata.
+      // Temporary failures and saved review/delivery records are unaffected.
+      if (error instanceof JiraConnectionError && error.code === 'unauthorized' && error.status === 401) {
+        revokedConnections.add(saved.id);
+        await storage(() => local.remove(CONNECTION_PREFIX + saved.id));
+      }
+      throw error;
+    }
   }
 
   return Object.freeze({
@@ -316,11 +335,12 @@ export function createJiraConnectionClient({chromeApi = globalThis.chrome, fetch
 
     async refresh(connectionId) {
       const saved = await getStored(connectionId);
-      const result = await request('/v1/connection', {credential: saved.credential});
+      const result = await authenticatedRequest(saved, '/v1/connection');
       const current = publicConnection(result.connection);
       if (current.id !== saved.id || current.accountId !== saved.accountId) fail('invalid_response');
-      const siteResult = await request('/v1/sites', {credential: saved.credential});
+      const siteResult = await authenticatedRequest(saved, '/v1/sites');
       current.sites = publicSites(siteResult.sites);
+      if (revokedConnections.has(saved.id)) fail('unauthorized');
       await storage(() => local.set({[CONNECTION_PREFIX + saved.id]: {...current, credential: saved.credential}}));
       return current;
     },
@@ -328,7 +348,7 @@ export function createJiraConnectionClient({chromeApi = globalThis.chrome, fetch
     async request(connectionId, path, {method = 'GET', body} = {}) {
       const captured = allowedRequest(path, method, body);
       const saved = await getStored(connectionId);
-      const result = await request(captured.path, {method, data: captured.body, credential: saved.credential, responseLimit: 2 * 1024 * 1024});
+      const result = await authenticatedRequest(saved, captured.path, {method, data: captured.body, responseLimit: 2 * 1024 * 1024});
       return publicPayload(result);
     },
 
@@ -336,6 +356,7 @@ export function createJiraConnectionClient({chromeApi = globalThis.chrome, fetch
       const saved = await getStored(connectionId);
       try { await request('/v1/connection', {method: 'DELETE', credential: saved.credential}); }
       catch (error) { if (!(error instanceof JiraConnectionError) || error.code !== 'unauthorized') throw error; }
+      revokedConnections.add(saved.id);
       await storage(() => local.remove(CONNECTION_PREFIX + saved.id));
       return {disconnected: true};
     }

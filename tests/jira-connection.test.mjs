@@ -222,6 +222,68 @@ test('refresh refuses to replace an existing account identity', async () => {
   assert.deepEqual(localData[key(firstId)], first);
 });
 
+test('authoritative revocation clears only the affected cached connection during validation or delivery requests', async () => {
+  const another = {...first, id: secondId, credential: `${secondId}.${secret}`, accountId: 'account-two'};
+  const retained = {
+    [key(secondId)]: another,
+    diffuseJiraDelivery: {deliveryId: secondId, connectionId: firstId, issueKey: 'DEMO-1'},
+    unrelatedSetting: 'preserved'
+  };
+  for (const path of ['/v1/connection', '/v1/sites', '/v1/projects']) {
+    const {client, localData, calls} = setup({
+      localData: {[key(firstId)]: first, ...retained},
+      fetchImpl: async request => new URL(request.url).pathname === path
+        ? json({code: 'unauthorized', error: `Private revoked account ${secret}`}, 401)
+        : json({connection: first})
+    });
+    await rejectsCode(path === '/v1/projects' ? client.request(firstId, `/v1/projects?site=${site.id}`) : client.refresh(firstId), 'unauthorized');
+    assert.deepEqual(localData, retained);
+    assert.deepEqual(calls.filter(([name]) => name === 'local.remove'), [['local.remove', key(firstId)]]);
+    assert.deepEqual((await client.listConnections()).map(connection => connection.id), [secondId]);
+  }
+});
+
+test('temporary service failures and non-authoritative unauthorized codes retain cached account data', async () => {
+  const another = {...first, id: secondId, credential: `${secondId}.${secret}`, accountId: 'account-two'};
+  const initial = {[key(firstId)]: first, [key(secondId)]: another};
+  for (const operation of ['refresh', 'request']) {
+    for (const [fetchImpl, code] of [
+      [async () => json({error: 'Temporary outage'}, 503), 'setup_pending'],
+      [async () => json({error: 'Try later'}, 429), 'rate_limited'],
+      [async () => { throw new Error('Network unavailable'); }, 'unavailable'],
+      [async () => json({code: 'unauthorized'}, 400), 'unauthorized'],
+      [async () => new Response('Unverified gateway response', {status: 401}), 'unavailable']
+    ]) {
+      const {client, localData, calls} = setup({localData: initial, fetchImpl});
+      await rejectsCode(operation === 'refresh' ? client.refresh(firstId) : client.request(firstId, `/v1/projects?site=${site.id}`), code);
+      assert.deepEqual(localData, initial);
+      assert.ok(!calls.some(([name]) => name === 'local.remove'));
+    }
+  }
+});
+
+test('an earlier refresh response cannot restore account data after the same client observes revocation', async () => {
+  let releaseSites;
+  let sitesStarted;
+  const pendingSites = new Promise(resolve => { releaseSites = resolve; });
+  const atSites = new Promise(resolve => { sitesStarted = resolve; });
+  const {client, localData} = setup({
+    localData: {[key(firstId)]: first},
+    fetchImpl: async request => {
+      const path = new URL(request.url).pathname;
+      if (path === '/v1/connection') return json({connection: first});
+      if (path === '/v1/sites') { sitesStarted(); return pendingSites; }
+      return json({code: 'unauthorized'}, 401);
+    }
+  });
+  const refreshing = client.refresh(firstId);
+  await atSites;
+  await rejectsCode(client.request(firstId, `/v1/projects?site=${site.id}`), 'unauthorized');
+  releaseSites(json({sites: [site]}));
+  await rejectsCode(refreshing, 'unauthorized');
+  assert.deepEqual(localData, {});
+});
+
 test('disconnect removes only the selected connection after backend revocation', async () => {
   const another = {...first, id: secondId, credential: `${secondId}.${secret}`};
   const {client, calls, localData} = setup({localData: {[key(firstId)]: first, [key(secondId)]: another}});
@@ -253,6 +315,41 @@ test('setup errors, response size limits and timeouts never expose raw service t
     assert.deepEqual(sessionData, {});
     assert.deepEqual(localData, {});
   }
+});
+
+test('an unapproved installation gives setup guidance before sign-in and preserves existing accounts', async () => {
+  const {client, calls, sessionData, localData} = setup({
+    localData: {[key(firstId)]: first},
+    fetchImpl: async () => json({code: 'installation_not_allowed', error: `Private diagnostic ${secret}`}, 403)
+  });
+  await assert.rejects(client.connect(), error => {
+    assert.ok(error instanceof JiraConnectionError);
+    assert.equal(error.code, 'installation_not_allowed');
+    assert.match(error.message, /latest official Diffuse release/);
+    assert.match(error.message, /keep your saved reviews/);
+    assert.doesNotMatch(error.message, /copy.*installation ID|person setting up/i);
+    assert.ok(!error.message.includes(secret));
+    return true;
+  });
+  assert.ok(!calls.some(([name]) => name === 'launch'));
+  assert.equal(calls.filter(([name]) => name === 'fetch').length, 1);
+  assert.deepEqual(sessionData, {});
+  assert.deepEqual(localData, {[key(firstId)]: first});
+});
+
+test('unrecognized access failures are not misreported as an unapproved installation', async () => {
+  for (const response of [
+    json({error: `Private firewall diagnostic ${secret}`}, 403),
+    json({code: 'unknown_error', error: `Private diagnostic ${secret}`}, 403),
+    new Response('Private gateway denial', {status: 403}),
+  ]) {
+    const {client, sessionData} = setup({fetchImpl: async () => response});
+    await rejectsCode(client.connect(), 'unavailable');
+    assert.deepEqual(sessionData, {});
+  }
+  const {client, sessionData} = setup({fetchImpl: async () => { throw new Error(`Private network failure ${secret}`); }});
+  await rejectsCode(client.connect(), 'unavailable');
+  assert.deepEqual(sessionData, {});
 });
 
 test('damaged local entries are excluded without exposing unrelated settings', async () => {

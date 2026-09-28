@@ -51,7 +51,7 @@ function one(params, name, required = true) {
 function safeFailure(error) {
   if (error instanceof HttpError) return {status: error.status, message: error.message};
   if (error instanceof JiraAuthError || error instanceof JiraOAuthError) {
-    const status = ['unauthorized', 'access_denied', 'authorization_rejected'].includes(error.code) ? 401
+    const status = error.code === 'installation_not_allowed' ? 403 : ['unauthorized', 'access_denied', 'authorization_rejected', 'grant_revoked'].includes(error.code) ? 401
       : error.code === 'rate_limited' ? 429
         : ['unavailable', 'timeout', 'invalid_configuration'].includes(error.code) ? 503 : 400;
     return {status, message: error.message, code: error.code};
@@ -75,7 +75,10 @@ export function createHttpHandler({getServices, allowedExtensionIds = [], rateLi
     res.setHeader('Vary', 'Origin');
     const origin = req.headers.origin;
     const originId = typeof origin === 'string' && /^chrome-extension:\/\/[a-p]{32}$/.test(origin) ? origin.slice(19) : null;
-    if (origin && (!originId || !extensions.has(originId))) return json(res, 403, {error: 'Open this action from Diffuse.'});
+    if (origin && (!originId || !extensions.has(originId))) return json(res, 403, {
+      error: originId ? 'This Diffuse installation is not approved for Jira. Install the current official release.' : 'Open this action from Diffuse.',
+      ...(originId ? {code: 'installation_not_allowed'} : {})
+    });
     if (origin) res.setHeader('Access-Control-Allow-Origin', origin);
     try {
       const url = new URL(req.url, 'https://diffuse.invalid');

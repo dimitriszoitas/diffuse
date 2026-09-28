@@ -2,7 +2,7 @@
 
 Server-only OAuth and Jira delivery service for Diffuse 0.7.0, deployed independently of the Chrome extension. Keep environment files, credentials, database URLs and `.vercel` out of source control and extension ZIPs.
 
-**Current status:** the hosted backend and callback are configured. Real account authorization and live ticket creation remain unverified. The Atlassian app is private to its owner, and the server currently allows the existing approved extension installation. Other accounts require Atlassian app sharing; other installations require an allowlist update.
+Official extension releases from 0.10.2 share the approved ID `gdoidkknjbnfmeikloaafdohpjlafgbj`, so users do not need individual installation approval. Atlassian distribution must be set to Sharing for external users. See `../docs/jira-integration.md` for the production verification record and remaining live-account coverage.
 
 ## Setup
 
@@ -14,8 +14,17 @@ Run `npm ci` in this directory. Use `.env.example` as the template for an ignore
 - `ATLASSIAN_CLIENT_SECRET`: sensitive server secret.
 - `TOKEN_ENCRYPTION_KEY`: sensitive canonical base64 encoding of 32 cryptographically random bytes.
 - `ALLOWED_EXTENSION_IDS`: comma-separated approved Diffuse installation IDs.
+- `CRON_SECRET`: a separate random server secret of at least 32 characters for the scheduled privacy-reporting endpoint. Never distribute it in extension files.
 
 Register `${PUBLIC_ORIGIN}/oauth/jira/callback` in Atlassian. Use `read:jira-work`, `read:jira-user`, `write:jira-work` and request `offline_access`. Configure distribution separately before people other than the app owner connect.
+
+Keep the public manifest key unchanged between releases. Preserve any legacy IDs that are still supported; never replace the origin allowlist with a wildcard. A Chrome extension ID identifies the client, not an individual account: each account still needs its own OAuth grant and private connection credential.
+
+## Account-data reporting
+
+The explicit migration also adds the privacy reporting schedule and job state. Vercel calls `/internal/privacy-report` hourly with `CRON_SECRET`; unauthenticated requests are rejected. The service reports due account IDs and their oldest collection time to Atlassian's Personal Data Reporting API. Persisted cycle periods and retry delays prevent repeated early reporting; overlapping runs are serialized and each run is bounded.
+
+Atlassian `closed` or `updated` responses remove the account's stored connections and associated delivery records. A confirmed revoked refresh grant removes its affected connection. Temporary failures preserve data and record a safe failure status for operators. Chrome removes a revoked connection's cached details on its next authenticated validation; offline profiles cannot be remotely cleared. No review is automatically deleted from the local notebook.
 
 Run `node --env-file=.env.production.local migrate.mjs` explicitly to apply the authentication, rate-limit and delivery schemas. Requests never create or alter tables. Database connections use verified TLS; URL options cannot disable verification. Rotating the encryption key without migrating encrypted tokens makes existing connections unreadable.
 
@@ -37,4 +46,4 @@ From the parent directory, run `npm test` and `npm run check`. Provider and deli
 
 On **2026-09-26**, all three schemas were explicitly applied to the hosted PostgreSQL database. The authorized `node smoke-postgres.mjs` check passed handoff/replay protection, concurrent token refresh, required ADF textarea fields, delivery deduplication, chunk storage, concurrent issue/attachment claims, receipts and synthetic-record cleanup. It used fake OAuth/Jira providers: no real Atlassian grant or Jira write occurred. The script creates temporary database records and deletes only the records it generated; this check does not verify a new deployment.
 
-Complete a real owner-account grant from the approved extension, then explicitly create a test ticket and verify its screenshot and recording in Jira before calling the integration end-to-end verified. See `../docs/jira-integration.md` for the deployment and rollout details.
+Verify a fresh official ZIP with a non-owner account and its sites/projects, then explicitly create a test ticket and verify its screenshot and recording in Jira before calling the integration end-to-end verified. See `../docs/jira-integration.md` for the deployment and rollout details.

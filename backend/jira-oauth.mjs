@@ -19,6 +19,7 @@ const MESSAGES = Object.freeze({
   invalid_input: 'The Jira connection request is invalid.',
   access_denied: 'Jira access was denied. Connect the account again.',
   authorization_rejected: 'Jira could not complete authorization. Connect the account again.',
+  grant_revoked: 'This Jira grant is no longer usable. Connect the account again.',
   insufficient_scope: 'Jira did not grant the permissions required by Diffuse. Connect the account again.',
   unavailable_resource: 'This Jira site is not available to the selected connection.',
   invalid_response: 'Jira returned an unexpected response. Try connecting again.',
@@ -156,7 +157,16 @@ export function createJiraOAuthClient({
           redirect: 'error', credentials: 'omit', cache: 'no-store', signal: controller.signal
         });
         if (response.status === 401 || response.status === 403) fail('access_denied');
-        if (response.status === 400 && url === TOKEN_URL) fail('authorization_rejected');
+        if (response.status === 400 && url === TOKEN_URL) {
+          // Only an explicit invalid_grant during refresh proves that this
+          // stored grant can no longer be used. Never infer revocation from a
+          // network error, permissions failure, invalid client or opaque 400.
+          if (body?.grant_type === 'refresh_token') {
+            const detail = await readJson(response, controller.signal);
+            if (record(detail) && detail.error === 'invalid_grant') fail('grant_revoked');
+          }
+          fail('authorization_rejected');
+        }
         if (response.status === 429) fail('rate_limited');
         if (response.status >= 500) fail('unavailable');
         if (response.status !== 200 || response.redirected) fail('invalid_response');

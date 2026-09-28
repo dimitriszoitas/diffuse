@@ -40,6 +40,7 @@ test('foreign web origins and unknown extension origins cannot invoke auth or re
     const response = await request('/v1/oauth/start', {method: 'POST', headers: {origin, 'content-type': 'application/json'}, body: {extensionId}});
     assert.equal(response.statusCode, 403);
     assert.equal(response.headers['Access-Control-Allow-Origin'], undefined);
+    assert.equal(JSON.parse(response.body).code, origin.startsWith('chrome-extension://') ? 'installation_not_allowed' : undefined);
   }
   assert.equal(calls.length, 0);
 });

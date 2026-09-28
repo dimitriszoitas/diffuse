@@ -112,7 +112,9 @@ test('start binds an unpredictable hashed state to a verifier challenge and allo
   });
   assert.ok(!JSON.stringify([...app.states.values()]).includes(state));
   assert.ok(!JSON.stringify([...app.states.values()]).includes(verifier));
-  for (const request of [undefined, {}, { challenge: verifierChallenge(verifier), extensionId: OTHER_EXTENSION },
+  await assert.rejects(app.service.start({ challenge: verifierChallenge(verifier), extensionId: OTHER_EXTENSION }), hasCode('installation_not_allowed'));
+  assert.equal(app.states.size, 1, 'Rejected installations must not create an OAuth state');
+  for (const request of [undefined, {},
     { challenge: 'wrong', extensionId: EXTENSION }, { challenge: verifierChallenge(verifier), extensionId: `${EXTENSION}.evil.example` }]) {
     await assert.rejects(app.service.start(request), hasCode('invalid_request'));
   }

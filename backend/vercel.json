@@ -2,6 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "regions": ["fra1"],
-  "functions": {"api/index.mjs": {"maxDuration": 60}},
-  "rewrites": [{"source": "/(.*)", "destination": "/api/index"}]
+  "functions": {"api/index.mjs": {"maxDuration": 60}, "api/privacy-cron.mjs": {"maxDuration": 300}},
+  "crons": [{"path": "/internal/privacy-report", "schedule": "17 * * * *"}],
+  "rewrites": [{"source": "/internal/privacy-report", "destination": "/api/privacy-cron"}, {"source": "/(.*)", "destination": "/api/index"}]
 }

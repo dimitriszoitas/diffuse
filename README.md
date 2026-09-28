@@ -1,6 +1,8 @@
 # Diffuse — live design comparison and page audits
 
-**0.10.1 adds optional dark mode across Diffuse.** Choose Light, Dark, or System in **Settings → Appearance**. The sidebar, popup, review notebook, settings, and on-page comment controls change together. The website being reviewed keeps its own appearance. Native, read-only Figma MCP references remain available for AI audits.
+**[Download Diffuse 0.10.2 for Chrome](https://github.com/dimitriszoitas/diffuse/releases/download/v0.10.2/Diffuse-0.10.2.zip).** This release gives every official installation the same approved Jira identity. Install the ZIP, open **Settings → Jira connections → Connect Jira**, and sign in with your own Atlassian account. No installation-ID registration, API token, or personal server is required.
+
+Light, Dark, and System appearance and optional read-only Figma MCP references remain included. See the [release notes](docs/releases/0.10.2.md), [privacy policy](docs/PRIVACY.md), and [terms](docs/TERMS.md).
 
 Diffuse uses a native Chrome side drawer for review controls. **Start review** opens it; for an active review, click the extension icon and **Open review sidebar**. There is no floating toolbar. The webpage resizes beside Diffuse, and closing the drawer preserves the review and unfinished comment. Chrome chooses the drawer side and owns its resize handle.
 
@@ -12,14 +14,14 @@ Diffuse layers a **continuously running prototype** over a production page in Ch
 
 ## Install in Chrome
 
-1. Use Chrome 116 or later.
+1. Use Chrome 116 or later and unzip the [current release](https://github.com/dimitriszoitas/diffuse/releases/download/v0.10.2/Diffuse-0.10.2.zip). Keep the resulting **Diffuse** folder somewhere permanent.
 2. Open `chrome://extensions` and enable **Developer mode**.
-3. Choose **Load unpacked** and select the **`extension` folder inside this project**. Do not select the project folder itself.
+3. Choose **Load unpacked** and select the unzipped **Diffuse** folder. If developing from a source checkout instead, select its **`extension` folder**.
 4. Pin **Diffuse — Live design comparison** in Chrome’s extensions menu.
 
 The extension loads directly from its files; no build step is needed. If Diffuse updates while a page is open, its old controls stop and show a refresh notice. Unsaved comment text remains available to copy before refreshing; an interrupted Save is never retried automatically. After changing extension code, choose **Reload** on its card in `chrome://extensions`, then refresh both comparison pages.
 
-**Upgrading an existing installation:** replace the extension files in the same installed folder, then choose **Reload** on the existing extension card. Do not remove and reinstall the extension or load it from a different folder path: saved reviews belong to its extension ID in this Chrome profile. Keep that installation path unchanged to preserve access to them. Use **Export review** to share a complete review that another Diffuse installation can import.
+**Moving from 0.10.1 or earlier:** export the reviews you want to keep using **⋯ → Export review** before upgrading. Leave the old extension and its folder intact, install 0.10.2 from a separate folder, then use **Load review** to import those files. Disable the old copy after checking your reviews in the new one. The new stable identity has its own storage, so reconnect Jira and any optional AI/Figma settings. Replacing the old files does not transfer old storage. For subsequent official releases with the same identity, update the installed folder and choose **Reload** without uninstalling.
 
 ## Choose an appearance
 
@@ -164,7 +166,7 @@ The notebook sidebar can be collapsed and expanded using its sidebar icon. **Set
 
 A confirmed rejection can be retried explicitly. If Jira may have accepted a request but the response was lost, Diffuse requires a manual check in Jira and blocks another automatic write. It does not treat missing evidence as a fully successful delivery. Files are limited to 20 MiB each, 40 MiB per observation and the site's own attachment limit; evidence is validated before creating the issue.
 
-**Current rollout:** the backend is configured, but real Atlassian authorization and live ticket creation have not yet been verified. The Atlassian app currently allows its owner only. Enabling other accounts requires app sharing to be configured separately; new Diffuse installation IDs also require server approval. The connection UI supports separate accounts once those access requirements are met.
+Jira access follows the permissions of the account and sites you authorize. Your organization may require an administrator to allow third-party apps. Atlassian may show an unreviewed-app notice. Separate accounts remain separate connections; connecting an account does not send review content or create tickets. See [deployment verification](docs/jira-integration.md) for the checks performed and remaining live-account coverage.
 
 ## Try the included demo
 

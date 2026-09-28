@@ -3,6 +3,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEq
 const MESSAGES = Object.freeze({
   invalid_configuration: 'Jira connection settings are invalid.',
   invalid_request: 'The Jira connection request is invalid.',
+  installation_not_allowed: 'This Diffuse installation is not approved for Jira. Install the current official release.',
   invalid_state: 'This Jira sign-in has expired or has already been used. Start again.',
   access_denied: 'Jira access was not approved. Connect the account again.',
   invalid_handoff: 'This Jira connection could not be completed. Start again.',

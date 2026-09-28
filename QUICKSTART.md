@@ -1,4 +1,4 @@
-# Try Diffuse 0.10.1
+# Try Diffuse 0.10.2
 
 Compare a live prototype over production or audit one page. Leave pinned comments on elements or areas, record a short silent interaction, and copy the review for your engineering team. Claude can suggest findings when you connect your own Anthropic API key.
 
@@ -6,12 +6,12 @@ Compare a live prototype over production or audit one page. Leave pinned comment
 
 For a first installation:
 
-1. Unzip **Diffuse-0.10.1.zip**. Keep the resulting **Diffuse** folder somewhere permanent.
+1. Unzip **Diffuse-0.10.2.zip**. Keep the resulting **Diffuse** folder somewhere permanent.
 2. In your normal Chrome browser, open `chrome://extensions`.
 3. Turn on **Developer mode**, then click **Load unpacked** and choose that **Diffuse** folder.
 4. Pin **Diffuse — Live design comparison** using Chrome’s extensions menu.
 
-**Already installed?** Replace the files inside your existing Diffuse folder, keeping its path unchanged, then click **Reload** on the existing extension card. Do not remove the extension or load it from a different folder: your saved reviews belong to its extension ID in this Chrome profile. Refresh both comparison pages after reloading.
+**Upgrading from 0.10.1 or earlier?** First export the reviews you want to keep with **⋯ → Export review**. Keep the old extension and folder intact. Install 0.10.2 from a separate folder, import your files using **Load review**, and reconnect Jira and optional AI/Figma settings. Disable the old copy after checking the imported reviews. This release introduces a shared extension identity, so replacing old files does not transfer their stored reviews. Future official releases with that identity can be updated in place using **Reload**, without uninstalling.
 
 You do not need to sign in to a special test browser or share a password with Diffuse.
 
@@ -135,7 +135,7 @@ Reports contain manual comments and accepted AI comments. Pending suggestions an
 
 Selected ticket text and evidence pass through the hosted Diffuse service to Jira. Files must fit both Diffuse's limits (20 MiB per file, 40 MiB per observation) and the site's attachment policy. Unfinished temporary evidence expires after seven days.
 
-**Setup status:** the backend is configured, but a real account grant and live ticket creation have not yet been tested. The Atlassian app is currently private to its owner, and the backend allows the existing approved extension installation. Other accounts need Atlassian app sharing enabled separately; another installation needs its ID approved. Separate account connections are supported once access is enabled.
+The official ZIP is configured for the hosted Jira connection service. You do not need to submit an installation ID, create an API token, or run a server. Your Jira permissions and your organization's app policy still apply. Atlassian may show an unreviewed-app notice. Each account you connect keeps its own authorized sites.
 
 ## Local demo
 
@@ -152,7 +152,7 @@ Tap **C**, release it, then click on the reviewed page to start a comment. The e
 
 ## Coming soon
 
-**Asana** and **ClickUp** integrations are planned. Jira handoff is included in 0.7.0 with the rollout limits above.
+**Asana** and **ClickUp** integrations are planned. Jira handoff is included.
 
 To open a shared review, click **Load review** in the Diffuse popup, then **Choose review file** in the right sidebar. Choose a saved review there to resume it. The website stays visible while its comments load.
 
