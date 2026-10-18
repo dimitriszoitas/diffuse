@@ -1,8 +1,8 @@
 # Diffuse — live design comparison and page audits
 
-**[Download Diffuse 0.10.2 for Chrome](https://github.com/dimitriszoitas/diffuse/releases/download/v0.10.2/Diffuse-0.10.2.zip).** This release gives every official installation the same approved Jira identity. Install the ZIP, open **Settings → Jira connections → Connect Jira**, and sign in with your own Atlassian account. No installation-ID registration, API token, or personal server is required.
+**[Download Diffuse 0.11.0 for Chrome](https://github.com/dimitriszoitas/diffuse/releases/download/v0.11.0/Diffuse-0.11.0.zip).** Comment directly on the page with a compact popover, and prepare AI-suggested Jira titles from your feedback. Official installations keep the same approved Jira identity. Install the ZIP, open **Settings → Jira connections → Connect Jira**, and sign in with your own Atlassian account. No installation-ID registration, API token, or personal server is required.
 
-Light, Dark, and System appearance and optional read-only Figma MCP references remain included. See the [release notes](docs/releases/0.10.2.md), [privacy policy](docs/PRIVACY.md), and [terms](docs/TERMS.md).
+Light, Dark, and System appearance and optional read-only Figma MCP references remain included. See the [release notes](docs/releases/0.11.0.md), [privacy policy](docs/PRIVACY.md), and [terms](docs/TERMS.md).
 
 Diffuse uses a native Chrome side drawer for review controls. **Start review** opens it; for an active review, click the extension icon and **Open review sidebar**. There is no floating toolbar. The webpage resizes beside Diffuse, and closing the drawer preserves the review and unfinished comment. Chrome chooses the drawer side and owns its resize handle.
 
@@ -14,14 +14,14 @@ Diffuse layers a **continuously running prototype** over a production page in Ch
 
 ## Install in Chrome
 
-1. Use Chrome 116 or later and unzip the [current release](https://github.com/dimitriszoitas/diffuse/releases/download/v0.10.2/Diffuse-0.10.2.zip). Keep the resulting **Diffuse** folder somewhere permanent.
+1. Use Chrome 116 or later and unzip the [current release](https://github.com/dimitriszoitas/diffuse/releases/download/v0.11.0/Diffuse-0.11.0.zip). Keep the resulting **Diffuse** folder somewhere permanent.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Choose **Load unpacked** and select the unzipped **Diffuse** folder. If developing from a source checkout instead, select its **`extension` folder**.
 4. Pin **Diffuse — Live design comparison** in Chrome’s extensions menu.
 
 The extension loads directly from its files; no build step is needed. If Diffuse updates while a page is open, its old controls stop and show a refresh notice. Unsaved comment text remains available to copy before refreshing; an interrupted Save is never retried automatically. After changing extension code, choose **Reload** on its card in `chrome://extensions`, then refresh both comparison pages.
 
-**Moving from 0.10.1 or earlier:** export the reviews you want to keep using **⋯ → Export review** before upgrading. Leave the old extension and its folder intact, install 0.10.2 from a separate folder, then use **Load review** to import those files. Disable the old copy after checking your reviews in the new one. The new stable identity has its own storage, so reconnect Jira and any optional AI/Figma settings. Replacing the old files does not transfer old storage. For subsequent official releases with the same identity, update the installed folder and choose **Reload** without uninstalling.
+**Moving from 0.10.1 or earlier:** export the reviews you want to keep using **⋯ → Export review** before upgrading. Leave the old extension and its folder intact, install 0.11.0 from a separate folder, then use **Load review** to import those files. Disable the old copy after checking your reviews in the new one. The new stable identity has its own storage, so reconnect Jira and any optional AI/Figma settings. Replacing the old files does not transfer old storage. For subsequent official releases with the same identity, update the installed folder and choose **Reload** without uninstalling.
 
 ## Choose an appearance
 
@@ -72,9 +72,9 @@ Starting from the reviewed page’s actual Chrome toolbar icon grants that page�
 
 1. Open the page and state you want to review. If you have connected a reference through **Diff**, bring both apps into matching states and wait for the live reference.
 2. Tap **C**, release it, then click the reviewed element to leave a comment. Hold **C** and drag to select an area. Press Escape to cancel.
-3. Diffuse hides its interface briefly and captures the reviewed page, plus the reference when connected, **before** opening the comment form. The selected element receives a marked screenshot and a contextual crop alongside the original screenshot.
-4. Write an **Actual / comment** description. **Title and expected result are optional**; a blank title displays a short excerpt from your observation. Add reproduction steps when useful.
-5. **Save comment** stays visible at the bottom while the fields scroll. Under **Attach evidence**, keep **Screenshot** or choose **Short recording**. Check the component name, name the state, choose a category and severity, and save.
+3. A pin and compact comment popover open beside your selection, with the comment field focused. Start typing while Diffuse captures the page and any connected reference. Its interface is briefly hidden from the screenshot.
+4. Write your **Comment** and an optional expected result. Category and severity are small dropdown badges at the top right. Expand **Steps to reproduce** when needed. There are no title, component, or state fields to fill in.
+5. **Save comment** stays visible at the bottom while the fields scroll. Expand **Screenshot attached** to inspect the evidence or choose **Short recording**. Save, or press **Command/Ctrl + Enter**. The sidebar keeps the review controls and offers **Return to comment**.
 
 If a page reload interrupts the drawer connection, **Reconnect review** restores the pending evidence and your typed fields. Save again after reconnection; recovery never silently submits a comment.
 
@@ -205,7 +205,7 @@ Diffuse requests access to the reviewed site when you start a review and to the 
 
 The prototype video travels locally inside Chrome using an offscreen extension document and a local WebRTC connection. Saved reviews, screenshots, metadata, and recordings are stored in the extension’s local **IndexedDB** database in this Chrome profile and persist across comparison sessions. They are not synced to another profile or device. Removing the extension or clearing its data can remove them; keep the same installation folder and use **Reload** for upgrades.
 
-Manual comparison and saved reviews remain local until you explicitly share them. Jira connections use the hosted Diffuse service: it stores encrypted Atlassian grants and durable delivery snapshots/receipts, and receives only the observations and evidence selected for submission. Evidence bytes are deleted after successful attachment upload; unfinished evidence expires after seven days. The service sends the selected ticket text and files to Jira. Connection credentials stay in trusted extension contexts, not inspected-page scripts or reports. There is no analytics service. Optional AI review sends the explicitly requested screenshots, instructions, and linked Figma reference context directly to Anthropic using your configured key; Anthropic’s API usage is billed to your account. The key is available only to trusted extension contexts, with session storage by default and optional local persistence as described above. The underlying apps continue to make their own normal network requests. Copying, downloading, and sharing reports are explicit actions you take.
+Manual comparison and saved reviews remain local until you explicitly share them. Jira connections use the hosted Diffuse service: it stores encrypted Atlassian grants and durable delivery snapshots/receipts, and receives only the observations and evidence selected for submission. Evidence bytes are deleted after successful attachment upload; unfinished evidence expires after seven days. The service sends the selected ticket text and files to Jira. Connection credentials stay in trusted extension contexts, not inspected-page scripts or reports. There is no analytics service. Optional AI review sends the explicitly requested screenshots, instructions, and linked Figma reference context directly to Anthropic using your configured key; Anthropic’s API usage is billed to your account. The Jira export preview also uses this key to suggest titles from selected comment text, expected results, and reproduction steps, without screenshots or page URLs. Saving a comment does not call AI. The key is available only to trusted extension contexts, with session storage by default and optional local persistence as described above. The underlying apps continue to make their own normal network requests. Copying, downloading, and sharing reports are explicit actions you take.
 
 Chrome can retain previously granted site permissions. Manage or revoke them in the extension’s **Details → Site access** settings.
 

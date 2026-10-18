@@ -3,24 +3,18 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const fields = ['title','comment','expected','component','state','steps','severity','category'];
   let panelWindowId, port, attached = false, state = null, refreshRunning = false, refreshAgain = false;
-  let draftId = null, evidenceKey = null, evidence = null, commentsKey = '', aiKey = '';
+  let draftId = null, evidenceKey = null, commentsKey = '', aiKey = '';
   let pendingAction = null, commandError = '', stopped = false, connectionLost = false;
   let referenceToggle = null;
-  let fieldVersion = 0, acknowledgedVersion = 0;
   let lastSessionId = null;
-  const editorId = crypto.randomUUID();
-  const isImage = value => typeof value === 'string' && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(value);
-  const isVideo = value => typeof value === 'string' && /^data:video\/webm(?:;codecs=[a-z0-9,]+)?;base64,[A-Za-z0-9+/=]+$/i.test(value);
   const category = value => ({'design-mismatch':'Design mismatch','ux-issue':'UX issue','copy-change':'Copy change'}[value] || 'Design mismatch');
+  const severity = value => ({minor:'Minor',major:'Major',critical:'Critical'}[value] || 'Minor');
   const text = (id,value) => { $(id).textContent = value || ''; };
   function notice(id,value) { text(id,value); $(id).hidden = !value; }
   function node(tag,content,className) { const item = document.createElement(tag); if(content !== undefined) item.textContent = content; if(className)item.className=className; return item; }
   function button(label,action,disabled=false) { const item=node('button',label); item.type='button'; item.disabled=disabled; item.addEventListener('click',action); return item; }
-  function values() { return Object.fromEntries(fields.map(key => [key,$(`panel-field-${key}`).value])); }
-  function draftFields() { return {draftId,fields:values(),editorId,fieldRevision:fieldVersion}; }
-  function clearDraft() { draftId=null;evidenceKey=null;evidence=null;fieldVersion=0;acknowledgedVersion=0; }
+  function clearDraft() { draftId=null;evidenceKey=null; }
 
   async function panelRequest(type, payload) {
     const result = await chrome.runtime.sendMessage({namespace:'diffuse', target:'worker', type, ...payload});
@@ -30,7 +24,7 @@
   function describeConnectionError(error) {
     if (error.code === 'PANEL_PAGE_DISCONNECTED' || /receiving end does not exist|could not establish connection|message port closed|message channel closed/i.test(error.message || '')) {
       connectionLost = true;
-      return 'The page connection was interrupted. Your text is still in this drawer. Reconnect the review, then save again.';
+      return 'The page connection was interrupted. Reconnect the review to continue your comment on the page.';
     }
     return error.message;
   }
@@ -52,12 +46,6 @@
     }
   }
   const act=(action,data) => command(action,data).catch(()=>{});
-  function syncFields() {
-    if(!draftId)return;
-    const version=++fieldVersion;
-    if(connectionLost)return;
-    command('setCommentFields',draftFields(),true).then(result=>{if(result)acknowledgedVersion=Math.max(acknowledgedVersion,version);}).catch(()=>{});
-  }
   function connect() {
     if(stopped)return;
     attached=false;
@@ -82,12 +70,12 @@
         if(!draftId){state=result.state;connectionLost=false;commandError='';}
       } else if(result.state?.code==='PANEL_PAGE_DISCONNECTED') {
         connectionLost=true;commandError=result.state.message;
-        // A failed connection must not replace the locally edited draft with an empty view.
+        // Keep the last page snapshot available for reconnecting an unfinished comment.
         if(!draftId||!state?.comment)state=result.state;
-      } else if(!connectionLost||!draftId){state=result.state || null;if(connectionLost){connectionLost=false;commandError='';}}
+      } else {state=result.state || null;if(connectionLost){connectionLost=false;commandError='';}}
       if(referenceToggle&&(nextSession?.id!==referenceToggle.sessionId
         ||(referenceToggle.commandDone&&Boolean(nextSession.settings?.hidden)===referenceToggle.hidden)))referenceToggle=null;
-      if(state?.comment?.evidenceIncluded){evidence=state.comment.evidence||null;evidenceKey=state.comment.evidenceKey;}
+      if(state?.comment?.evidenceIncluded)evidenceKey=state.comment.evidenceKey;
       renderSession();paint();
       if(!commandError)notice('feedback','');
     } catch(error) {
@@ -98,48 +86,21 @@
     }
   }
 
-  function paintEvidence(comment) {
-    const container=$('panel-evidence');container.replaceChildren();
-    for(const [side,label] of [['production',Number.isInteger(session?.sourceTabId)?'Production':'Page'],['prototype','Reference']]){
-      const src=evidence?.[side]?.dataUrl;if(!isImage(src))continue;
-      const figure=node('figure'),img=node('img');img.src=src;img.alt=`${label} at capture`;figure.append(img,node('figcaption',label));container.append(figure);
-    }
-    const recording=comment.evidenceChoice==='recording';
-    $('panel-evidence-screenshot').setAttribute('aria-pressed',String(!recording));
-    $('panel-evidence-recording').setAttribute('aria-pressed',String(recording));
-    $('panel-recording-choice').hidden=!recording;
-    const video=$('panel-recording-preview');const url=evidence?.video?.dataUrl;
-    if(recording&&isVideo(url)){if(video.getAttribute('src')!==url)video.src=url;video.hidden=false;}
-    else{video.pause();video.removeAttribute('src');video.hidden=true;}
-    text('panel-record-comment',isVideo(url)?'Record again':'Start recording');
+  function paintComment(comment) {
+    draftId=comment?.id||null;
+    const recording=Boolean(state.recording), preparing=Boolean(state.recordingBusy);
+    text('panel-composer-title',state.commentSaving?'Saving comment…':recording?'Recording in progress':'Comment on the page');
+    notice('panel-comment-status',state.commentSaving?'Saving your feedback and evidence.':preparing?'Preparing your recording…':recording?'Interact with the page, then stop the recording below to finish your comment.':state.captureBusy?'Capturing evidence for your comment…':state.pendingCaptureAction==='comment'?'Your comment is on the page. Retry its capture there, or cancel the comment.':'Write and save your feedback in the comment bubble on the page.');
+    notice('panel-comment-error',commandError||comment?.error);
+    $('panel-return-comment').disabled=connectionLost||state.commentSaving||preparing||recording||state.captureBusy||Boolean(pendingAction);
+    $('panel-recover-comment').hidden=!connectionLost||!draftId;
+    $('panel-recover-comment').disabled=Boolean(pendingAction);
   }
 
-  function paintComment(comment) {
-    const fresh=draftId!==comment.id;
-    const changedEvidence=$('panel-evidence').dataset.key!==String(comment.evidenceKey);
-    draftId=comment.id;
-    if(fresh){fieldVersion=0;acknowledgedVersion=0;}
-    const isEditing=$('panel-comment-form').contains(document.activeElement);
-    const currentRevision=fieldVersion===0||Number(comment.fieldRevisions?.[editorId])>=fieldVersion;
-    if(fresh||(!isEditing&&fieldVersion===acknowledgedVersion&&currentRevision))for(const key of fields)$(`panel-field-${key}`).value=comment.fields?.[key]||'';
-    text('panel-composer-title',comment.evidenceChoice==='recording'?'Add a recording comment':'Add a comment');
-    text('panel-selection',comment.selectionSummary);text('panel-component-hint',comment.componentHint);
-    notice('panel-comment-error',commandError||comment.error);
-    $('panel-recover-comment').hidden=!connectionLost;
-    $('panel-recover-comment').disabled=Boolean(pendingAction);
-    if(fresh||changedEvidence||$('panel-evidence').dataset.choice!==comment.evidenceChoice){
-      paintEvidence(comment);$('panel-evidence').dataset.key=String(comment.evidenceKey);$('panel-evidence').dataset.choice=comment.evidenceChoice;
-    }
-    const locked=state.commentSaving||state.recordingBusy||Boolean(state.recording)||['saveComment','recordComment','recoverPage'].includes(pendingAction);
-    for(const control of $('panel-comment-form').elements)control.disabled=locked;
-    for(const id of ['panel-cancel-comment','panel-evidence-screenshot','panel-evidence-recording','panel-record-comment'])$(id).disabled=locked;
-    $('panel-save-comment').disabled=locked||connectionLost;
-    text('panel-save-comment',locked?'Please wait…':'Save comment');
-    if(fresh) $('panel-field-comment').focus({preventScroll:true});
-  }
+  const commentNavigationLocked = () => Boolean(pendingAction || state?.commentOpen || state?.comment || state?.captureBusy || state?.commentSaving || state?.recordingBusy || state?.recording);
 
   async function openComment(item) {
-    if (pendingAction || !session?.id) return;
+    if (commentNavigationLocked() || !session?.id) return;
     const reviewSession = session.id;
     try {
       let url;
@@ -172,15 +133,16 @@
     const viewport=session?.viewportPreset||group(session?.targetViewport?.width);
     const all=session?.comments||[];
     const comments=all.filter(item=>{const context=item.context?.production||item.selection?.context;const saved=context?.viewportProfile?.key;const key=['desktop','laptop','tablet','phone'].includes(saved)?saved:group(context?.viewport?.width);return key==='unknown'||key===viewport;});
-    const key=JSON.stringify([viewport,comments.map(item=>[item.id,item.fields])]);if(key===commentsKey)return;commentsKey=key;
+    const locked=commentNavigationLocked();
+    const key=JSON.stringify([viewport,locked,comments.map(item=>[item.id,item.fields])]);if(key===commentsKey)return;commentsKey=key;
     const label={desktop:'Desktop',laptop:'Laptop',tablet:'Tablet',phone:'Phone'}[viewport]||'This view';
     const list=$('panel-comments');list.replaceChildren();list.append(node('h2',`${label} comments · ${comments.length}`));
     if(all.length>comments.length)list.append(node('p',`${all.length-comments.length} comments are in other viewport views. All remain in Review reports.`,'muted'));
     if(!comments.length){list.append(node('p','Comments for this view will appear here and as pins on the page.','muted'));return;}
     comments.forEach((item,index)=>{
       const label=item.fields?.title||item.fields?.comment||'Saved comment';
-      const entry=button('',()=>openComment(item));entry.className='saved-item';entry.dataset.category=item.fields?.category||'design-mismatch';
-      const dot=node('i',undefined,'category-dot');dot.setAttribute('aria-hidden','true');const copy=node('span',`${all.indexOf(item)+1}. ${label.length>140?`${label.slice(0,137)}…`:label}`);copy.append(node('small',`${category(item.fields?.category)} · ${item.fields?.state||'Current state'}`));entry.append(dot,copy);list.append(entry);
+      const entry=button('',()=>openComment(item),locked);entry.className='saved-item';entry.dataset.category=item.fields?.category||'design-mismatch';
+      const dot=node('i',undefined,'category-dot');dot.setAttribute('aria-hidden','true');const copy=node('span',`${all.indexOf(item)+1}. ${label.length>140?`${label.slice(0,137)}…`:label}`);copy.append(node('small',`${category(item.fields?.category)} · ${severity(item.fields?.severity)}`));entry.append(dot,copy);list.append(entry);
     });
   }
 
@@ -223,7 +185,6 @@
   }
 
   function paint() {
-    document.body.dataset.composerOpen='false';
     $('dock-workspace').hidden=!session;
     window.dispatchEvent(new CustomEvent('diffuse-panel-state',{detail:{session,state,busy:Boolean(pendingAction)}}));
     if(!session){clearDraft();return;}
@@ -239,9 +200,9 @@
     $('panel-stop').disabled=starting||(Boolean(pendingAction)&&pendingAction!=='runAi')||Boolean(state?.recordingBusy);
     if(away)return;
     const view=state.view==='comment'&&!state.comment?'controls':state.view||'controls';
-    $('panel-controls').hidden=view!=='controls';$('panel-composer').hidden=view!=='comment';$('panel-ai-view').hidden=view!=='ai';
+    $('panel-controls').hidden=view==='ai';$('panel-composer').hidden=!(state.commentOpen||state.comment);$('panel-ai-view').hidden=view!=='ai';
     if(!state.comment)clearDraft();
-    if(view==='comment'&&state.comment){document.body.dataset.composerOpen='true';paintComment(state.comment);}
+    if(state.commentOpen||state.comment)paintComment(state.comment);
     if(view==='ai')paintAi(state.ai);
     $('panel-comparison-controls').hidden=!hasReference;
     $('panel-diff').disabled=Boolean(state.diffDisabledReason)||Boolean(pendingAction);
@@ -252,9 +213,9 @@
     text('panel-opacity-value',`${$('panel-opacity').value}%`);text('panel-reveal-value',`${$('panel-reveal').value}%`);$('panel-linked').checked=settings.linked!==false;$('panel-hide').setAttribute('aria-pressed',String(Boolean(settings.hidden)));text('panel-hide',settings.hidden?'Show reference':'Hide reference');
     $('panel-hide').disabled=Boolean(referenceToggle);
     const selecting=state.picking||state.areaArmed;
-    const locked=state.captureBusy||state.commentSaving||state.recordingBusy||Boolean(state.recording)||Boolean(state.comment)||state.aiBusy||state.aiOperationBusy||session.aiRunning||Boolean(pendingAction);
+    const locked=state.captureBusy||state.commentSaving||state.recordingBusy||Boolean(state.recording)||Boolean(state.commentOpen||state.comment)||state.aiBusy||state.aiOperationBusy||session.aiRunning||Boolean(pendingAction);
     $('panel-ai').disabled=locked||selecting;
-    $('panel-record').disabled=state.recordingBusy||state.captureBusy||state.commentSaving||Boolean(pendingAction)||(!state.recording&&(Boolean(state.comment)||selecting||state.aiBusy||session.aiRunning));
+    $('panel-record').disabled=state.recordingBusy||state.captureBusy||state.commentSaving||Boolean(pendingAction)||(!state.recording&&(Boolean(state.commentOpen||state.comment)||selecting||state.aiBusy||session.aiRunning));
     text('panel-record',state.recording?'Stop recording':'Record page');
     $('panel-cancel-selection').hidden=!selecting;$('panel-retry').hidden=!state.pendingCaptureAction;
     notice('panel-capture-error',[state.captureDescription,state.captureError].filter(Boolean).join(' '));
@@ -264,16 +225,11 @@
     paintComments();
   }
 
-  const actions={'panel-diff':'openDiff','panel-cancel-selection':'cancelSelection','panel-ai':'openAi','panel-close-ai':'closeAi','panel-cancel-comment':'cancelComment','panel-retry':'retryCapture','panel-focus':'focusTarget','panel-source':'focusSource','panel-reconnect':'reconnect','panel-stop':'stop'};
-  for(const [id,action]of Object.entries(actions))$(id).addEventListener('click',()=>act(action,action==='cancelComment'?{draftId}:undefined));
+  const actions={'panel-diff':'openDiff','panel-cancel-selection':'cancelSelection','panel-ai':'openAi','panel-close-ai':'closeAi','panel-return-comment':'focusComment','panel-retry':'retryCapture','panel-focus':'focusTarget','panel-source':'focusSource','panel-reconnect':'reconnect','panel-stop':'stop'};
+  for(const [id,action]of Object.entries(actions))$(id).addEventListener('click',()=>act(action,action==='focusComment'?{draftId}:undefined));
   $('panel-record').addEventListener('click',()=>act(state?.recording?'stopRecording':'record'));
-  $('panel-record-comment').addEventListener('click',()=>act('recordComment',draftFields()));
   $('panel-recover-page').addEventListener('click',()=>act('recoverPage'));
-  $('panel-recover-comment').addEventListener('click',()=>act('recoverPage',{...draftFields(),evidenceChoice:state?.comment?.evidenceChoice==='recording'?'video':'screenshot'}));
-  $('panel-comment-form').addEventListener('input',syncFields);
-  $('panel-comment-form').addEventListener('change',syncFields);
-  $('panel-comment-form').addEventListener('submit',event=>{event.preventDefault();if(event.currentTarget.reportValidity())act('saveComment',draftFields());});
-  for(const choice of ['screenshot','recording'])$(`panel-evidence-${choice}`).addEventListener('click',()=>act('evidence',{choice,...draftFields()}));
+  $('panel-recover-comment').addEventListener('click',()=>act('recoverPage',{draftId,fields:state?.comment?.fields,evidenceChoice:state?.comment?.evidenceChoice==='recording'?'video':'screenshot'}));
   const aiFields=()=>({instructions:$('panel-ai-instructions').value,referenceUrl:$('panel-ai-reference-url').value.trim(),threshold:Number($('panel-ai-threshold').value)});
   $('panel-ai-instructions').addEventListener('input',()=>command('setAiFields',aiFields(),true).catch(()=>{}));
   $('panel-ai-reference-url').addEventListener('input',()=>{paintAi(state?.ai);command('setAiFields',aiFields(),true).catch(()=>{});});

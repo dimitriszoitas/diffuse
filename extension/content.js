@@ -67,6 +67,9 @@
   let panelNotifyTimer = null;
   let draftEvidenceRevision = 0;
   let commentFieldRevisions = new Map();
+  let composerPoint = null;
+  let composerResizeObserver = null;
+  let reselectFields = null;
 
   const viewport = () => ({width: innerWidth, height: innerHeight, dpr: devicePixelRatio});
   const reloadMessage = 'Diffuse was updated. Refresh this page, then reopen Diffuse.';
@@ -108,8 +111,8 @@
 
   const styles = `
 :host{all:initial!important;position:fixed!important;inset:0!important;display:block!important;z-index:2147483647!important;pointer-events:none!important;color-scheme:dark!important;contain:layout style!important;--ink:#211a35;--panel:#241c35;--raised:#342844;--text:#fcfaff;--muted:#d2c7df;--line:#9381ae;--accent:#c9adff;--coral:#ff9b85;font:400 16px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important}
-:host::backdrop{background:transparent!important;pointer-events:none!important}:host([data-evidence-hidden]){visibility:hidden!important}
-:host([data-docked]) #comment-panel,:host([data-docked]) #ai-panel,:host([data-docked]) #panel-backdrop{display:none!important}
+:host::backdrop{background:transparent!important;pointer-events:none!important}:host([data-evidence-hidden]){opacity:0!important}
+:host([data-docked]) #ai-panel,:host([data-docked]) #panel-backdrop{display:none!important}
 *{box-sizing:border-box}[hidden]{display:none!important}button,input,textarea,select,summary{font:inherit}button,summary{cursor:pointer}button,input,textarea,select,summary{scroll-margin:84px 12px 20px}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:3px;box-shadow:0 0 0 2px #211a35}button:disabled{opacity:.55;cursor:default}
 button,summary{min-height:44px;min-width:44px;display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:9px 13px;background:var(--raised);color:var(--text);font-size:16px;line-height:1.4;white-space:normal}button:hover,summary:hover{background:#49365f}input,textarea,select{color:var(--text);background:#171122;border:1px solid var(--line);border-radius:9px;padding:10px 12px;min-height:44px;min-width:0}input::placeholder,textarea::placeholder{color:#bbb0ca;opacity:1}input[type=range]{padding:0;accent-color:var(--accent);border:0;background:transparent;min-width:80px}input[type=checkbox]{accent-color:var(--accent);width:22px;height:22px;min-height:22px;padding:0;margin:0;flex-shrink:0}
 #layer{position:absolute;inset:0;overflow:hidden;pointer-events:none}#reference{position:absolute;top:0;left:0;max-width:none;max-height:none;object-fit:fill;pointer-events:none}#divider{position:absolute;top:0;bottom:0;width:2px;background:var(--accent);box-shadow:0 0 0 1px #211a3580;pointer-events:none}#handle{position:absolute;top:38%;left:-23px;width:48px;height:64px;border:2px solid #fff;border-radius:24px;background:var(--accent);color:var(--ink);font-size:25px;pointer-events:auto;cursor:ew-resize;touch-action:none;box-shadow:0 4px 18px #211a3555}
@@ -172,6 +175,43 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 @media(prefers-reduced-motion:reduce){#ai-review-glow{animation:none;opacity:.65}}
 @media(forced-colors:active){#ai-review-glow{display:none}}
 
+/* The composer lives beside its page anchor, including with a native sidebar. */
+#comment-panel{width:408px;max-width:calc(100% - 24px);max-height:calc(100% - 24px);right:auto;border-radius:10px;box-shadow:0 12px 40px #182d4d26,0 2px 8px #182d4d12;font-size:14px}
+#comment-panel .composer-header{padding:10px 12px;gap:8px;border-bottom:0;align-items:center}
+#comment-panel .composer-header h2{font-size:14px;font-weight:650;letter-spacing:-.2px;flex:1;white-space:nowrap}
+.composer-badges{display:flex;align-items:center;gap:6px;margin-left:auto;min-width:0}
+.composer-badge{display:block;min-width:0}
+.composer-badge .df-select-trigger{min-height:30px!important;height:30px!important;padding:4px 7px!important;gap:5px!important;font-size:11px!important;border-radius:5px!important;background:var(--raised)!important;border-color:transparent!important}
+.composer-badge .df-select-chevron{width:12px!important;height:12px!important;flex-basis:12px}
+.composer-badge [data-diffuse-select-for=comment-category] .df-select-trigger{background:color-mix(in srgb,var(--category-color,#ffd28a) 24%,var(--panel))!important;color:var(--text)!important}
+.composer-badge[data-severity=major] .df-select-trigger{background:color-mix(in srgb,#e4ad48 18%,var(--panel))!important}
+.composer-badge[data-severity=critical] .df-select-trigger{background:color-mix(in srgb,#e26783 18%,var(--panel))!important}
+#comment-panel .composer-close{width:30px;min-width:30px;min-height:30px;height:30px;border:0;background:transparent;font-size:21px;color:var(--muted)}
+#comment-panel>.composer-body{padding:4px 14px 12px;scroll-padding:12px}
+#comment-panel .composer-field{margin-bottom:12px;gap:6px}
+#comment-panel .composer-field>span{font-size:12px;font-weight:550;color:var(--muted)}
+#comment-panel textarea{font-size:14px;min-height:70px;line-height:1.55;padding:10px 11px;background:var(--panel);border-color:color-mix(in srgb,var(--line) 55%,var(--panel))}
+#comment-panel #comment-actual{min-height:118px;resize:vertical}
+#comment-panel .composer-footer{padding:10px 14px;background:var(--panel);border-color:color-mix(in srgb,var(--line) 35%,var(--panel))}
+#comment-panel .composer-actions{align-items:center;justify-content:space-between;gap:8px}
+#comment-panel .composer-actions button{min-height:34px;padding:6px 12px;font-size:12px}
+#cancel-comment{border-color:transparent;background:transparent;color:var(--muted)}
+#comment-panel .composer-note{font-size:11px;line-height:1.5;margin:7px 0;color:var(--muted)}
+#comment-details>summary,#comment-evidence>summary{border:0;border-radius:0;background:transparent;padding:7px 0;min-height:34px;justify-content:flex-start;font-size:12px;color:var(--muted);width:100%;gap:7px}
+#comment-details>summary:after,#comment-evidence>summary:after{font-size:14px;margin-left:auto}
+#comment-details,#comment-evidence{border-top:1px solid color-mix(in srgb,var(--line) 28%,var(--panel))}
+#comment-details .composer-field{margin-top:5px}
+#comment-panel .evidence-choice{margin:7px 0 10px}
+#comment-panel .evidence-choice legend{position:absolute;width:1px;height:1px;clip-path:inset(50%);overflow:hidden}
+#comment-panel .evidence-options button{min-height:32px;font-size:12px;padding:6px 9px}
+#comment-panel .evidence-preview{gap:8px;margin-bottom:8px}
+#comment-panel .evidence-preview img{height:88px;background:var(--raised)}
+#comment-panel .evidence-preview figcaption{font-size:11px;padding:5px 8px}
+#comment-panel #selection-summary{font-size:11px;margin:6px 0;color:var(--muted)}
+#comment-draft-pin{position:absolute;transform:translate(-50%,-50%);z-index:21;cursor:pointer;width:34px;height:34px;min-width:34px;min-height:34px;padding:0;font-size:17px;font-weight:650;border:2px solid #fff;border-radius:50% 50% 50% 6px;background:var(--category-color,#ffd28a);color:var(--category-ink,#5e3908);box-shadow:0 2px 8px #182d4d30;pointer-events:auto}
+#comment-draft-outline{position:absolute;z-index:1;border:1px dashed var(--category-color,#ffd28a);background:color-mix(in srgb,var(--category-color,#ffd28a) 5%,transparent);pointer-events:none}
+#comment-capture-status{font-size:11px;line-height:1.5;color:var(--muted);margin:0 0 10px}
+@media(max-width:430px){#comment-panel{max-width:calc(100% - 16px)}#comment-panel .composer-header{padding:10px;gap:4px}.composer-badges{gap:3px}.composer-badge .df-select-trigger{padding:4px 5px!important;font-size:10px!important}#comment-panel .composer-header h2{font-size:12px}}
 
   `;
 
@@ -202,23 +242,26 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       <section id="saved-comment-bubble" hidden role="dialog" aria-label="Saved comment"><div class="bubble-top"><span id="saved-comment-category" class="bubble-meta"></span><button id="close-saved-comment" type="button" aria-label="Close saved comment">×</button></div><h3 id="saved-comment-title"></h3><p id="saved-comment-text"></p><p id="saved-comment-expected"></p><p id="saved-comment-state" class="bubble-meta"></p><p id="pin-attachment" hidden></p><div class="bubble-actions"><button id="select-pin-area" type="button">Select area</button><button id="open-pin-report" type="button">Open in review</button><button id="reset-pin-position" type="button" disabled>Reset position</button></div><p class="pin-move-hint">Drag onto another element to reattach. Select area to mark a region.</p></section>
       <div id="ai-region-preview" hidden aria-hidden="true"><span id="ai-region-label">AI suggestion · not saved</span></div>
       <section id="ai-panel" hidden role="dialog" aria-labelledby="ai-title" aria-modal="false"><div class="composer-header"><h2 id="ai-title">AI review</h2><button id="close-ai" class="composer-close" type="button" aria-label="Close AI review">×</button></div><div class="composer-body"><p id="ai-mode-note" class="composer-note"></p><label class="composer-field"><span>Instructions <small>(optional)</small></span><textarea id="ai-instructions" maxlength="4000" placeholder="What should the review focus on?"></textarea></label><label class="composer-field"><span>Figma frame <small>(optional)</small></span><input id="ai-reference-url" type="url" maxlength="2048" placeholder="https://www.figma.com/design/…?node-id=…"><small>Uses the Figma MCP connection in Settings. Keep the matching file open in Figma desktop.</small></label><label class="composer-field"><span>Minimum issue size: <output id="ai-threshold-value">35</output>/100</span><input id="ai-threshold" type="range" min="0" max="100" value="35" aria-describedby="ai-threshold-help"><span class="threshold-ends"><small>0 · All details</small><small>100 · Largest issues only</small></span><small id="ai-threshold-help">Higher numbers hide smaller differences. This filters existing suggestions; changing it does not run AI again. Size is an estimate, separate from confidence.</small></label><p id="ai-disclosure" class="ai-disclosure">Run sends the current screenshot(s), your instructions, and any linked Figma design context to Anthropic using your configured API key. API charges apply. Nothing is sent until you click Run.</p><p id="ai-config-status" class="composer-note"></p><div class="composer-actions"><button id="ai-settings" type="button">AI settings</button><button id="ai-run" type="button">Run AI review</button></div><div id="ai-error" class="composer-error" role="alert"></div><div id="ai-suggestions" tabindex="-1"></div></div></section>
+      <div id="comment-draft-outline" hidden aria-hidden="true"></div>
+      <button id="comment-draft-pin" hidden type="button" aria-label="Return to your comment" aria-controls="comment-panel">+</button>
       <section id="comment-panel" hidden role="dialog" aria-labelledby="composer-title" aria-modal="false">
-        <div class="composer-header"><h2 id="composer-title">Add a comment</h2><button id="close-comment" class="composer-close" type="button" aria-label="Close comment">×</button></div>
+        <div class="composer-header"><h2 id="composer-title">Comment</h2><div class="composer-badges">
+          <label class="composer-badge" id="comment-category-badge"><select id="comment-category" form="comment-form" aria-label="Category" required><option value="design-mismatch">Design mismatch</option><option value="ux-issue">UX issue</option><option value="copy-change">Copy change</option></select></label>
+          <label class="composer-badge" id="comment-severity-badge"><select id="comment-severity" form="comment-form" aria-label="Severity" data-presentation="dropdown"><option value="minor">Minor</option><option value="major">Major</option><option value="critical">Critical</option></select></label>
+        </div><button id="close-comment" class="composer-close" type="button" aria-label="Close comment">×</button></div>
         <div class="composer-body">
           <div id="capture-retry" hidden><p id="capture-retry-description"></p><button id="retry-capture" type="button">Retry capture</button><button id="choose-another" type="button">Choose another element</button></div>
           <form id="comment-form" hidden>
+            <p id="comment-capture-status" role="status" hidden>Attaching screenshot… You can start typing.</p>
+            <label class="composer-field"><span class="df-select-label">Comment</span><textarea id="comment-actual" required maxlength="6000" placeholder="What needs attention?"></textarea></label>
+            <label class="composer-field"><span>Expected <small>(optional)</small></span><textarea id="comment-expected" maxlength="6000" placeholder="What should happen instead?"></textarea></label>
+            <details id="comment-details"><summary>Steps to reproduce <small>(optional)</small></summary><label class="composer-field"><span class="df-select-label">Steps to reproduce</span><textarea id="comment-steps" maxlength="6000" placeholder="How did you reach this state?"></textarea></label></details>
+            <details id="comment-evidence"><summary id="comment-evidence-summary">Screenshot attached</summary>
             <fieldset class="evidence-choice"><legend>Attach evidence</legend><div class="evidence-options"><button id="evidence-screenshot" type="button" aria-pressed="true">Screenshot</button><button id="evidence-recording" type="button" aria-pressed="false">Short recording</button></div></fieldset>
             <div id="recording-choice" hidden><p id="recording-choice-note" class="composer-note">Record an interaction for up to 30 seconds, without audio. Your comment and selected area will be kept.</p><video id="recording-preview" controls muted playsinline preload="metadata" hidden></video><button id="comment-record" type="button">Start recording</button></div>
             <div class="evidence-preview" id="evidence-preview"><figure><img id="production-preview" alt="Captured production screen"><figcaption>Production</figcaption></figure><figure><img id="prototype-preview" alt="Captured prototype screen"><figcaption>Prototype</figcaption></figure></div>
             <p id="selection-summary"></p>
-            <label class="composer-field"><span>Title <small>(optional)</small></span><input id="comment-title" type="text" maxlength="160" placeholder="Add a short title, if helpful"></label>
-            <label class="composer-field"><span>Actual / comment</span><textarea id="comment-actual" required maxlength="6000" placeholder="Describe the discrepancy you see."></textarea></label>
-            <label class="composer-field"><span>Expected <small>(optional)</small></span><textarea id="comment-expected" maxlength="6000" placeholder="Describe the intended result."></textarea></label>
-            <label class="composer-field"><span>Category</span><select id="comment-category" required><option value="design-mismatch">Design mismatch</option><option value="ux-issue">UX issue</option><option value="copy-change">Copy change</option></select></label>
-            <label class="composer-field"><span>Component</span><input id="comment-component" type="text" maxlength="160"><small id="component-hint">Verify the component name before saving.</small></label>
-            <div class="composer-row"><label class="composer-field"><span>State</span><input id="comment-state" type="text" required maxlength="160" value="Current state"></label><label class="composer-field"><span>Severity</span><select id="comment-severity"><option value="minor">Minor</option><option value="major">Major</option><option value="critical">Critical</option></select></label></div>
-            <label class="composer-field"><span>Steps to reproduce <small>(optional)</small></span><textarea id="comment-steps" maxlength="6000" placeholder="How did you reach this state?"></textarea></label>
-            <p class="composer-note" id="evidence-note"></p><p class="composer-note">State names describe this capture. Other states have not been checked.</p>
+            <p class="composer-note" id="evidence-note"></p></details>
           </form>
         </div>
         <div class="composer-footer"><div id="comment-error" class="composer-error" role="alert"></div><div class="composer-actions"><button id="cancel-comment" type="button">Cancel</button><button id="save-comment" type="submit" form="comment-form">Save comment</button></div></div>
@@ -275,7 +318,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     el('saved-comment-bubble').addEventListener('keydown', event => {if(event.key==='Escape'){event.preventDefault();dismissPin();}event.stopPropagation();});
     el('close-comment').addEventListener('click', closeComment);
     el('cancel-comment').addEventListener('click', closeComment);
-    el('choose-another').addEventListener('click', startPicking);
+    el('choose-another').addEventListener('click',()=>{
+      const fields=readCommentFields(false);closeComment();reselectFields=fields;startPicking();
+    });
     el('retry-capture').addEventListener('click', retryCapture);
     el('comment-form').addEventListener('submit', saveComment);
     el('comment-form').addEventListener('input', rememberCommentFields);
@@ -285,9 +330,13 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     el('evidence-screenshot').addEventListener('click', () => chooseEvidence('screenshot'));
     el('evidence-recording').addEventListener('click', () => chooseEvidence('recording'));
     el('comment-record').addEventListener('click', startComposerRecording);
-    el('comment-category').addEventListener('change', () => colorCategory(el('comment-category'), el('comment-category').value));
+    for(const id of ['comment-category','comment-severity'])el(id).addEventListener('change',()=>{paintCommentBadges();rememberCommentFields();});
+    el('comment-draft-pin').addEventListener('click',focusComment);
+    for(const id of ['comment-details','comment-evidence'])el(id).addEventListener('toggle',positionComment);
+    composerResizeObserver=new ResizeObserver(positionComment);
+    composerResizeObserver.observe(el('comment-panel'));
     el('comment-panel').addEventListener('keydown', event => {
-      trapPanelFocus(event,el('comment-panel'));
+      if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();saveComment();}
       if (event.key === 'Escape' && !commentSaving) { event.preventDefault(); closeComment(); }
       event.stopPropagation();
     });
@@ -371,10 +420,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   function updatePanelState() {
     if (contextInvalidated) return;
     if(!root)return;
-    const open=!docked&&['comment-panel','ai-panel'].some(id=>!el(id).hidden);
+    const open=!docked&&!el('ai-panel').hidden;
     el('panel-backdrop').hidden=!open;
     el('saved-comment-bubble').inert=open;
-    for(const id of ['comment-panel','ai-panel'])el(id).setAttribute('aria-modal',String(!docked&&!el(id).hidden));
+    el('comment-panel').setAttribute('aria-modal','false');
+    el('ai-panel').setAttribute('aria-modal',String(open));
+    positionComment();
     notifyPanel();
   }
 
@@ -434,14 +485,14 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     const failureVisible=!el('capture-retry').hidden&&!el('comment-panel').hidden;
     return {
       view:recording||recordingBusy?'controls':!el('comment-panel').hidden?'comment':!el('ai-panel').hidden?'ai':'controls',
-      docked,picking,areaArmed,captureBusy,commentSaving,recordingBusy,aiBusy:aiBusy||Boolean(session?.aiRunning),aiOperationBusy,aiBulkAccepting,
+      docked,picking,areaArmed,captureBusy,commentOpen:hasCommentComposer(),commentSaving,recordingBusy,aiBusy:aiBusy||Boolean(session?.aiRunning),aiOperationBusy,aiBulkAccepting,
       recording,warning:[session?.error,session?.warning,localWarning].filter(Boolean).join(' · '),pendingCaptureAction,diffDisabledReason:diffDisabledReason(),
       captureError:failureVisible?el('comment-error').textContent:'',
       captureDescription:failureVisible?el('capture-retry-description').textContent:'',
       captureNeedsAccess:failureVisible&&el('composer-title').textContent==='Allow capture on this tab',
       comment:commentDraft?{
         id:commentDraft.id,fields:readCommentFields(false),selectionSummary:el('selection-summary').textContent,
-        componentHint:el('component-hint').textContent,evidenceChoice,error:el('comment-error').textContent,fieldRevisions:Object.fromEntries(commentFieldRevisions),
+        evidenceChoice,error:el('comment-error').textContent,fieldRevisions:Object.fromEntries(commentFieldRevisions),
         evidenceKey,evidenceIncluded,...(evidenceIncluded?{evidence:commentDraft.evidence||{}}:{}),
       }:null,
       ai:{config:{hasKey:Boolean(aiConfig.hasKey),model:aiConfig.model||'',threshold:aiConfig.threshold,mcp:aiConfig.mcp||{enabled:false}},instructions:el('ai-instructions').value,referenceUrl:el('ai-reference-url').value,threshold:Number(el('ai-threshold').value),batch:aiBatch,error:el('ai-error').textContent},
@@ -457,7 +508,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   function diffDisabledReason() {
     if(recording||recordingBusy)return 'Stop the recording before choosing a reference.';
     if(captureBusy)return 'Wait for the screenshot capture before choosing a reference.';
-    if(commentDraft||commentSaving)return 'Save or cancel your comment before choosing a reference.';
+    if(hasCommentComposer()||commentSaving)return 'Save or cancel your comment before choosing a reference.';
     if(aiBusy||aiOperationBusy||session?.aiRunning)return 'Finish the AI review before choosing a reference.';
     return '';
   }
@@ -477,13 +528,13 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       if(!commentFieldRevisions.has(message.editorId)&&commentFieldRevisions.size>=8)commentFieldRevisions.delete(commentFieldRevisions.keys().next().value);
       commentFieldRevisions.set(message.editorId,message.fieldRevision);
     }
-    for(const [key,id] of [['title','title'],['comment','actual'],['expected','expected'],['component','component'],['state','state'],['steps','steps'],['severity','severity'],['category','category']]) {
+    for(const [key,id] of [['comment','actual'],['expected','expected'],['steps','steps'],['severity','severity'],['category','category']]) {
       if(typeof fields[key]!=='string')continue;
       const node=el(`comment-${id}`);
       if(node instanceof HTMLSelectElement){if([...node.options].some(option=>option.value===fields[key]))node.value=fields[key];}
       else node.value=fields[key].slice(0,node.maxLength>0?node.maxLength:6000);
     }
-    colorCategory(el('comment-category'),el('comment-category').value);
+    paintCommentBadges();
     rememberCommentFields();
   }
 
@@ -523,6 +574,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       case 'recordComment':applyCommentFields(fields,message);await startComposerRecording();break;
       case 'saveComment':applyCommentFields(fields,message);await saveComment();break;
       case 'cancelComment':closeComment();break;
+      case 'focusComment':focusComment();break;
       case 'record':await startRecording();break;
       case 'stopRecording':await stopRecording();break;
       case 'retryCapture':await retryCapture();break;
@@ -548,12 +600,14 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     return event.composedPath().some(node => node instanceof Element && (node.matches('input,textarea,select,[role="textbox"],[role="combobox"]') || node.isContentEditable));
   }
 
-  function canSelect() {return Boolean(root && !pinDrag && !remapBusy && !captureBusy && !commentSaving && !recording && !recordingBusy && !commentDraft && !aiBusy && !aiOperationBusy && !session?.aiRunning);}
+  function hasCommentComposer() {return Boolean(commentDraft||(root&&!el('comment-panel')?.hidden&&!el('comment-form')?.hidden));}
+  function canSelect() {return Boolean(root && !pinDrag && !remapBusy && !captureBusy && !commentSaving && !recording && !recordingBusy && !hasCommentComposer() && !aiBusy && !aiOperationBusy && !session?.aiRunning);}
 
   function armArea(remapping = null) {
     if(!canSelect()) return;
     stopPicking(false);closePin();closeAi();
     areaArmed=true;areaDrag=null;remapAreaId=remapping;
+    composerPoint=null;
     el('comment-panel').hidden=true;
     el('picker-tip').firstElementChild.textContent=remapping?'Draw the area for this comment, or set its dimensions below. Esc to cancel.':'Drag an area, or set its dimensions below. Esc to cancel.';
     el('area-coordinates').hidden=false;
@@ -642,7 +696,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       }
       if(bounds.width<4||bounds.height<4){
         const target=pickTarget(event);
-        if(target){selectedElement=target;selectionMetadata=globalThis.DiffuseInspector.inspect(target);captureComment();}
+        if(target){selectedElement=target;selectionMetadata=globalThis.DiffuseInspector.inspect(target);setComposerPoint(selectionMetadata,{x:event.clientX,y:event.clientY});captureComment();}
         else {localWarning='Press C, then choose an element. Hold C and drag to select an area.';paint();}
         return;
       }
@@ -811,6 +865,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 
   function updatePinPositions() {
     if(!root)return;
+    positionComment();
     if(pinsUrl!==location.href||pinsViewport!==currentViewportGroup()){finishPinDrag(true,false);renderPins();return;}
     for(const item of pinItems){
       const rect=commentRect(item.comment);item.rect=rect;
@@ -891,16 +946,18 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   }
 
   function openPin(id) {
+    if(hasCommentComposer()||captureBusy){focusComment();return;}
     if(openPinId===id){closePin();return;}
     const item=pinItems.find(item=>item.comment.id===id);if(!item)return;
     closeAi();openPinId=id;
     const fields=item.comment.fields||{};
     el('saved-comment-category').textContent=categoryLabel(fields.category)+(item.comment.ai?' · AI assisted':'');
     for(const id of ['saved-comment-category','saved-comment-highlight','saved-comment-bubble'])colorCategory(el(id),fields.category);
-    el('saved-comment-title').textContent=commentTitle(fields);
+    el('saved-comment-title').textContent=fields.title||'';
+    el('saved-comment-title').hidden=!fields.title;
     el('saved-comment-text').textContent=fields.comment||'';
     el('saved-comment-expected').textContent=fields.expected?`Expected: ${fields.expected}`:'';
-    el('saved-comment-state').textContent=[fields.component,fields.state,fields.severity].filter(Boolean).join(' · ');
+    el('saved-comment-state').textContent=fields.severity||'Minor';
     const attachment=el('pin-attachment');attachment.hidden=!item.comment.pinSelection;
     const component=item.comment.pinSelection?.component;
     attachment.textContent=item.comment.pinSelection?`Remapped to ${item.comment.pinSelection.kind==='region'?'the selected area':component?.source==='data-component'||component?.source==='data-testid'?component.name:'the selected element'}. Original capture retained.`:'';
@@ -926,7 +983,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   }
 
   async function openAi() {
-    if(!root||commentDraft||captureBusy||recording)return;
+    if(!root||hasCommentComposer()||captureBusy||recording)return;
     stopPicking(false);cancelArea();closePin();
     el('ai-panel').hidden=false;el('ai-error').textContent='';updatePanelState();if(!docked)el('ai-instructions').focus({preventScroll:true});
     el('ai-mode-note').textContent=isAudit()?'Review this page for potential UX and copy issues. Add a reference with Diff to compare designs.':'Review the current page and reference screenshots for potential mismatches.';
@@ -1021,7 +1078,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   }
 
   async function runAi() {
-    if(!root||aiBusy||aiOperationBusy||recording||captureBusy||commentDraft)return;
+    if(!root||aiBusy||aiOperationBusy||recording||captureBusy||hasCommentComposer())return;
     if(!aiConfig.hasKey){el('ai-error').textContent='Add your API key in AI settings, then reopen this panel.';return;}
     const sessionId=session?.id;aiBusy=true;pendingCaptureAction=null;el('ai-error').textContent='';aiPreviewContext=currentContext();
     const instructions=el('ai-instructions').value.trim();const threshold=Number(el('ai-threshold').value);
@@ -1129,11 +1186,11 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     }
   }
 
-  function choosePickedElement(target) {
+  function choosePickedElement(target, point) {
     try{
       if(!globalThis.DiffuseInspector)throw new Error('The element inspector is unavailable. Reload this page and reconnect Diffuse.');
       const selection=globalThis.DiffuseInspector.inspect(target);
-      selectionMetadata=selection;selectedElement=target;stopPicking(false);captureComment();
+      selectionMetadata=selection;selectedElement=target;setComposerPoint(selection,point);stopPicking(false);captureComment();
     }catch(error){stopPicking();localWarning=error.message;paint();}
   }
 
@@ -1150,6 +1207,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     hoveredElement = null;
     selectedElement = null;
     selectionMetadata = null;
+    composerPoint = null;
     pickerAbort = new AbortController();
     const options = {capture: true, signal: pickerAbort.signal};
     el('area-coordinates').hidden=true;
@@ -1171,7 +1229,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       const target = pickTarget(event);
       if (!target) return;
       suppress(event);
-      choosePickedElement(target);
+      choosePickedElement(target,{x:event.clientX,y:event.clientY});
     }, options);
     let keyboardIndex=-1;
     const keyboardTargets=[...document.querySelectorAll('button,a[href],input,select,textarea,h1,h2,h3,p,[data-component],[data-testid],[role]')].filter(node=>!node.closest('[data-diffuse-ui]')&&node.getClientRects().length&&getComputedStyle(node).visibility!=='hidden').slice(0,400);
@@ -1211,7 +1269,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     if (!root) return;
     pendingCaptureAction = action;
     el('comment-panel').hidden = false;
-    el('comment-form').hidden = true;
+    el('comment-form').hidden = action !== 'comment';
+    el('comment-capture-status').hidden=true;
     el('capture-retry').hidden = false;
     const accessNeeded = error.code === 'NEEDS_CAPTURE_ACCESS';
     el('composer-title').textContent = accessNeeded ? 'Allow capture on this tab' : 'Capture needs attention';
@@ -1220,17 +1279,32 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       : error.message;
     el('comment-error').textContent = accessNeeded ? '' : 'Your comment has not been saved. Retry to attach its evidence.';
     el('choose-another').hidden = action === 'record';
-    if(!docked)el('retry-capture').focus({preventScroll: true});
+    positionComment();el('retry-capture').focus({preventScroll: true});
   }
 
   async function captureComment() {
     if (!root || captureBusy || !selectionMetadata) return;
     const sessionId = session?.id;
+    const retry=pendingCaptureAction==='comment';
     pendingCaptureAction = null;
     captureBusy = true;
-    el('comment-panel').hidden = true;
+    if(!retry){el('comment-form').reset();el('comment-details').open=false;el('comment-evidence').open=false;for(const id of ['production-preview','prototype-preview']){el(id).removeAttribute('src');el(id).hidden=true;}}
+    el('comment-category').value=retry?el('comment-category').value:isAudit()?'ux-issue':'design-mismatch';
+    if(!retry&&reselectFields){
+      for(const [key,id] of [['comment','actual'],['expected','expected'],['steps','steps'],['severity','severity'],['category','category']])el(`comment-${id}`).value=reselectFields[key]||el(`comment-${id}`).value;
+      reselectFields=null;
+    }
+    el('composer-title').textContent='Comment';
+    el('capture-retry').hidden=true;
+    el('comment-error').textContent='';
+    el('comment-capture-status').hidden=false;
+    el('comment-panel').hidden = false;
+    el('comment-form').hidden=false;
+    el('comment-evidence-summary').textContent='Attaching screenshot…';
+    paintCommentBadges();positionComment();
+    el('comment-actual').focus({preventScroll:true});
     el('capture-progress').textContent = isAudit()?'Capturing this page…':'Capturing both pages…';
-    el('capture-progress').hidden = false;
+    el('capture-progress').hidden = true;
     paintReviewControls();
     try {
       if (selectedElement?.isConnected) selectionMetadata = globalThis.DiffuseInspector.inspect(selectedElement);
@@ -1243,6 +1317,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       if (session?.id === sessionId) showCaptureFailure(error, 'comment');
     } finally {
       captureBusy = false;
+      if(el('comment-capture-status'))el('comment-capture-status').hidden=true;
       if (el('capture-progress')) el('capture-progress').hidden = true;
       paintReviewControls();
     }
@@ -1256,7 +1331,57 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   }
 
   function readCommentFields(trim=true) {
-    return Object.fromEntries([['title','title'],['comment','actual'],['expected','expected'],['component','component'],['state','state'],['steps','steps'],['severity','severity'],['category','category']].map(([key,id]) => [key,trim?el(`comment-${id}`).value.trim():el(`comment-${id}`).value]));
+    const existing=commentDraft?.composerFields||{};
+    // Retain legacy metadata for reports; people only write the comment here.
+    return {title:existing.title||'',component:existing.component||commentDraft?.selection?.component?.name||selectionMetadata?.component?.name||'Page',state:existing.state||'Current state',
+      ...Object.fromEntries([['comment','actual'],['expected','expected'],['steps','steps'],['severity','severity'],['category','category']].map(([key,id]) => [key,trim?el(`comment-${id}`).value.trim():el(`comment-${id}`).value]))};
+  }
+
+  function setComposerPoint(selection,point) {
+    const rect=selection?.rect?.viewport;
+    composerPoint=rect&&point&&rect.width>0&&rect.height>0?{
+      x:Math.max(0,Math.min(1,(point.x-rect.x)/rect.width)),
+      y:Math.max(0,Math.min(1,(point.y-rect.y)/rect.height)),
+    }:null;
+  }
+
+  function paintCommentBadges() {
+    const category=el('comment-category').value;
+    for(const id of ['comment-category','comment-category-badge','comment-draft-pin','comment-draft-outline'])colorCategory(el(id),category);
+    el('comment-severity-badge').dataset.severity=el('comment-severity').value;
+  }
+
+  function positionComment() {
+    if(!root||contextInvalidated)return;
+    const panel=el('comment-panel'),pin=el('comment-draft-pin'),outline=el('comment-draft-outline');
+    if(!panel||panel.hidden||recording||recordingBusy){if(pin)pin.hidden=true;if(outline)outline.hidden=true;return;}
+    const selection=commentDraft?.selection||selectionMetadata;
+    const rect=globalThis.DiffuseInspector?.resolveSelection(selection);
+    const captured=selection?.rect?.viewport;
+    const anchor=rect||captured;
+    const point=anchor?pinBasePoint({pinPoint:composerPoint},anchor):{x:innerWidth/2,y:innerHeight/3};
+    const margin=innerWidth<430?8:12;
+    const x=Math.max(20,Math.min(innerWidth-20,point.x));
+    const y=Math.max(20,Math.min(innerHeight-20,point.y));
+    pin.hidden=!anchor||Boolean(rect&&!rect.visible);
+    Object.assign(pin.style,{left:`${x}px`,top:`${y}px`});
+    outline.hidden=!rect?.visible;
+    if(rect)Object.assign(outline.style,{left:`${rect.x}px`,top:`${rect.y}px`,width:`${rect.width}px`,height:`${rect.height}px`});
+    const width=panel.offsetWidth,height=panel.offsetHeight,gap=26;
+    let left=x+gap;
+    if(left+width>innerWidth-margin)left=x-gap-width;
+    left=Math.max(margin,Math.min(innerWidth-width-margin,left));
+    let top=y-18;
+    // On narrow viewports keep the pin just above the card when space permits.
+    if(x>=left-18&&x<=left+width+18){top=y+gap;if(top+height>innerHeight-margin)top=y-gap-height;}
+    top=Math.max(margin,Math.min(innerHeight-height-margin,top));
+    Object.assign(panel.style,{left:`${left}px`,top:`${top}px`});
+  }
+
+  function focusComment() {
+    if(!root||el('comment-panel').hidden)return;
+    positionComment();
+    (el('comment-form').hidden?el('retry-capture'):el('comment-actual')).focus({preventScroll:true});
   }
 
   function chooseEvidence(choice) {
@@ -1264,7 +1389,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     evidenceChoice = choice;
     if (choice === 'screenshot' && pendingCaptureAction === 'comment-record') pendingCaptureAction = null;
     el('comment-error').textContent = '';
-    el('composer-title').textContent = choice === 'recording' ? 'Add a recording comment' : 'Add a comment';
+    el('composer-title').textContent = 'Comment';
     paintEvidenceChoice();
   }
 
@@ -1273,6 +1398,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     if (!root) return;
     const wantsVideo = evidenceChoice === 'recording';
     const clip = commentDraft?.evidence?.video;
+    el('comment-evidence-summary').textContent=wantsVideo?(clip?'Recording attached':'Attach a recording'):'Screenshot attached';
     el('evidence-screenshot').setAttribute('aria-pressed',String(!wantsVideo));
     el('evidence-recording').setAttribute('aria-pressed',String(wantsVideo));
     el('recording-choice').hidden = !wantsVideo;
@@ -1329,7 +1455,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     if (!root || !draft?.id) return;
     const sameDraft = commentDraft?.id === draft.id;
     if(!sameDraft)commentFieldRevisions.clear();
-    const fields = sameDraft ? readCommentFields(false) : draft.composerFields;
+    const fields = sameDraft||captureBusy ? readCommentFields(false) : draft.composerFields;
     stopPicking(false);
     cancelArea();closePin();closeAi();
     pendingCaptureAction = null;
@@ -1337,24 +1463,20 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     draftEvidenceRevision++;
     localWarning = '';
     const selection = draft.selection || null;
-    if (!sameDraft) el('comment-form').reset();
+    if (!sameDraft) {el('comment-form').reset();el('comment-details').open=Boolean(fields?.steps);el('comment-evidence').open=Boolean(draft.evidence?.video);}
     el('comment-panel').hidden = false;
     el('capture-retry').hidden = true;
     el('comment-form').hidden = false;
-    el('composer-title').textContent = draft.evidence?.video ? 'Add a recording comment' : 'Add a comment';
+    el('composer-title').textContent = 'Comment';
+    el('comment-capture-status').hidden=true;
     el('comment-error').textContent = '';
-    el('comment-component').value = selection?.component?.name || 'Page';
-    el('comment-state').value = 'Current state';
     el('comment-category').value=isAudit()?'ux-issue':'design-mismatch';
-    if (fields) for (const [key,id] of [['title','title'],['comment','actual'],['expected','expected'],['component','component'],['state','state'],['steps','steps'],['severity','severity'],['category','category']]) {
+    if (fields) for (const [key,id] of [['comment','actual'],['expected','expected'],['steps','steps'],['severity','severity'],['category','category']]) {
       if (typeof fields[key] === 'string') el(`comment-${id}`).value = fields[key];
     }
-    colorCategory(el('comment-category'),el('comment-category').value);
+    paintCommentBadges();
     evidenceChoice = draft.evidenceChoice==='screenshot' ? 'screenshot' : draft.evidence?.video || draft.evidenceChoice==='video' ? 'recording' : sameDraft ? evidenceChoice : 'screenshot';
-    el('component-hint').textContent = selection?.component?.source
-      ? `Inferred from ${selection.component.source}. Edit this to match your team's component name.`
-      : 'Name the component or page this recording describes.';
-    el('selection-summary').textContent = selection?.kind==='region'?`Selected area · ${Math.round(selection.rect.viewport.width)} × ${Math.round(selection.rect.viewport.height)} px`:selection?.selector || 'Page-level capture';
+    el('selection-summary').textContent = selection?.kind==='region'?`Selected area · ${Math.round(selection.rect.viewport.width)} × ${Math.round(selection.rect.viewport.height)} px`:selection?'Attached to the selected element':'Page capture';
     for (const [side, imageId] of [['production', 'production-preview'], ['prototype', 'prototype-preview']]) {
       const dataUrl = draft.evidence?.[side]?.dataUrl;
       const image = el(imageId);
@@ -1366,12 +1488,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     el('evidence-preview').style.gridTemplateColumns=isAudit()?'1fr':'1fr 1fr';
     paintEvidenceChoice();
     paint();
-    if(!docked)el('comment-actual').focus({preventScroll: true});
+    focusComment();
   }
 
   function closeComment() {
     if (contextInvalidated) return;
-    if (commentSaving || recording || recordingBusy || !root) return;
+    if (captureBusy || commentSaving || recording || recordingBusy || !root) return;
     el('recording-preview').pause();
     el('recording-preview').removeAttribute('src');
     if (commentDraft?.id) quietSend('DISCARD_DRAFT', {draftId: commentDraft.id});
@@ -1379,6 +1501,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     pendingCaptureAction = null;
     selectedElement = null;
     selectionMetadata = null;
+    composerPoint=null;
     el('comment-panel').hidden = true;
     el('comment-error').textContent = '';
     paintReviewControls();
@@ -1388,23 +1511,14 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   async function saveComment(event) {
     event?.preventDefault();
     event?.stopPropagation();
-    if (!commentDraft || commentSaving || recording || recordingBusy) return;
+    if (!commentDraft || captureBusy || commentSaving || recording || recordingBusy) return;
     if(!el('comment-form').checkValidity()){
-      if(!docked)el('comment-form').reportValidity();
-      el('comment-error').textContent='Add your comment and a state name before saving.';notifyPanel();return;
+      el('comment-form').reportValidity();
+      el('comment-error').textContent='Add your comment before saving.';notifyPanel();return;
     }
-    const fields = {
-      title: el('comment-title').value.trim(),
-      comment: el('comment-actual').value.trim(),
-      expected: el('comment-expected').value.trim(),
-      component: el('comment-component').value.trim() || 'Page',
-      state: el('comment-state').value.trim(),
-      steps: el('comment-steps').value.trim(),
-      severity: el('comment-severity').value,
-      category: el('comment-category').value,
-    };
-    if (!fields.comment || !fields.state) {
-      el('comment-error').textContent = 'Add your comment and a state name before saving.';
+    const fields = readCommentFields();
+    if (!fields.comment) {
+      el('comment-error').textContent = 'Add your comment before saving.';
       notifyPanel();
       return;
     }
@@ -1418,11 +1532,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     el('save-comment').textContent = 'Saving…';
     paintReviewControls();
     try {
-      const result = requireSuccess(await send('ADD_COMMENT', {draftId: commentDraft.id, fields, evidenceChoice: evidenceChoice === 'recording' ? 'video' : 'screenshot'}));
+      const result = requireSuccess(await send('ADD_COMMENT', {draftId: commentDraft.id, fields, ...(composerPoint&&commentDraft.selection?.kind!=='region'?{pinPoint:composerPoint}:{}),evidenceChoice: evidenceChoice === 'recording' ? 'video' : 'screenshot'}));
       el('recording-preview').pause();el('recording-preview').removeAttribute('src');
       commentDraft = null;
       if (session && result.review) session.commentCount = result.review.count;
-      if(session&&result.comment){const comment=result.comment;session.comments=[...(session.comments||[]).filter(item=>item.id!==comment.id),{id:comment.id,createdAt:comment.createdAt,fields:comment.fields,selection:comment.selection,context:{production:comment.context?.production},ai:comment.ai}];renderPins();}
+      if(session&&result.comment){const comment=result.comment;session.comments=[...(session.comments||[]).filter(item=>item.id!==comment.id),{id:comment.id,createdAt:comment.createdAt,fields:comment.fields,selection:comment.selection,pinPoint:comment.pinPoint,context:{production:comment.context?.production},ai:comment.ai}];renderPins();}
+      composerPoint=null;
       if (root) { el('comment-panel').hidden = true; localWarning = 'Comment saved. Open Review to copy or export it.'; paint(); }
     } catch (error) {
       if (el('comment-error')) el('comment-error').textContent = error.message;
@@ -1442,10 +1557,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   }
 
   async function startRecording() {
-    if (!root || recording || recordingBusy || captureBusy || commentDraft || aiBusy) return;
+    if (!root || recording || recordingBusy || captureBusy || hasCommentComposer() || aiBusy) return;
     stopPicking(false);
     cancelArea();closePin();closeAi();
     pendingCaptureAction = null;
+    composerPoint=null;
+    selectionMetadata=null;
     recordingBusy = true;
     el('comment-panel').hidden = true;
     el('capture-progress').textContent = isAudit()?'Preparing screenshot and recording…':'Preparing screenshots and recording…';
@@ -1491,14 +1608,14 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     el('diff').disabled=Boolean(diffReason);
     el('diff').title=diffReason||(hasReference()?'Choose a different reference tab':'Choose a reference tab to compare');
     el('diff-hint').hidden=!diffReason;el('diff-hint').textContent=diffReason;
-    el('comment').disabled = captureBusy || commentSaving || recordingBusy || Boolean(recording) || Boolean(commentDraft) || aiBusy || aiOperationBusy || Boolean(session?.aiRunning);
+    el('comment').disabled = captureBusy || commentSaving || recordingBusy || Boolean(recording) || hasCommentComposer() || aiBusy || aiOperationBusy || Boolean(session?.aiRunning);
     el('comment').setAttribute('aria-pressed', String(picking));
     el('comment').textContent = picking ? 'Cancel selection' : 'Comment';
     el('area-comment').disabled=el('comment').disabled;
     el('area-comment').setAttribute('aria-pressed',String(areaArmed));
     const count = Number(session?.commentCount) || 0;
     el('review').textContent = `Review (${count})`;
-    el('record').disabled = recordingBusy || captureBusy || commentSaving || (Boolean(commentDraft) && !recording) || picking || areaArmed || aiBusy || aiOperationBusy || Boolean(session?.aiRunning);
+    el('record').disabled = recordingBusy || captureBusy || commentSaving || (hasCommentComposer() && !recording) || picking || areaArmed || aiBusy || aiOperationBusy || Boolean(session?.aiRunning);
     el('record').dataset.recording = String(Boolean(recording));
     if (recording) {
       const started = typeof recording.startedAt === 'number' ? recording.startedAt : Date.parse(recording.startedAt);
@@ -1509,12 +1626,13 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       el('record').textContent = recordingBusy ? 'Starting recording…' : 'Record';
       el('record').title = 'Record this page as shown. No audio. Up to 30 seconds.';
     }
-    el('save-comment').disabled = commentSaving || !commentDraft || recordingBusy || Boolean(recording);
-    el('cancel-comment').disabled = commentSaving || recordingBusy || Boolean(recording);
-    el('close-comment').disabled = commentSaving || recordingBusy || Boolean(recording);
-    for (const id of ['evidence-screenshot','evidence-recording','comment-record']) el(id).disabled = commentSaving || recordingBusy || Boolean(recording);
+    el('save-comment').disabled = captureBusy || commentSaving || !commentDraft || recordingBusy || Boolean(recording);
+    el('cancel-comment').disabled = captureBusy || commentSaving || recordingBusy || Boolean(recording);
+    el('close-comment').disabled = captureBusy || commentSaving || recordingBusy || Boolean(recording);
+    for (const id of ['evidence-screenshot','evidence-recording','comment-record']) el(id).disabled = captureBusy || commentSaving || recordingBusy || Boolean(recording);
+    for (const id of ['comment-actual','comment-expected','comment-steps','comment-category','comment-severity']) el(id).disabled = commentSaving || recordingBusy || Boolean(recording);
     el('retry-capture').disabled = captureBusy || recordingBusy;
-    el('ai-review').disabled=captureBusy||commentSaving||Boolean(commentDraft)||Boolean(recording)||recordingBusy;
+    el('ai-review').disabled=captureBusy||commentSaving||hasCommentComposer()||Boolean(recording)||recordingBusy;
     el('ai-run').disabled=aiBusy||aiOperationBusy||Boolean(session?.aiRunning)||!aiConfig.hasKey||captureBusy||Boolean(recording);
     el('ai-run').textContent=aiBusy||session?.aiRunning?'Reviewing…':aiBatch?'Run new AI review':'Run AI review';
     updatePanelState();
@@ -1752,6 +1870,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   }
 
   function stopResources() {
+    composerResizeObserver?.disconnect();composerResizeObserver=null;
     releaseTheme?.(); releaseTheme = null;
     clearInterval(contextTimer); contextTimer = null;
     finishPinDrag(true,false);clearTimeout(pinStatusTimer);pinStatusTimer=null;pinPlacements.clear();pinPendingDrops.clear();pinIgnoreClick=null;pinTrailingRelease=null;
@@ -1775,6 +1894,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 
   function invalidateContext() {
     if (contextInvalidated) return;
+    const hasText=hasCommentComposer();
     contextInvalidated = true;
     globalThis.DiffuseSelect?.destroy(root, {preserveUI: true});
     stopResources();
@@ -1785,7 +1905,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     host.removeAttribute('data-docked');
     host.removeAttribute('data-evidence-hidden');
     host.setAttribute('data-context-invalidated', '');
-    host.toggleAttribute('data-reload-draft', Boolean(commentDraft));
+    host.toggleAttribute('data-reload-draft', hasText);
     for (const node of root.querySelectorAll('button,select,input,textarea')) {
       if (node.matches('textarea,input:not([type]),input[type=text]')) node.readOnly = true;
       else node.disabled = true;
@@ -1795,12 +1915,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     const notice = document.createElement('section');
     notice.id = 'context-reload-notice'; notice.setAttribute('role', 'alert');
     const text = document.createElement('p');
-    text.textContent = reloadMessage + (commentDraft ? ' Your unsaved text is still here to copy before refreshing. If you were saving, check Review reports before adding it again.' : ' Saved reviews are kept.');
+    text.textContent = reloadMessage + (hasText ? ' Your unsaved text is still here to copy before refreshing. If you were saving, check Review reports before adding it again.' : ' Saved reviews are kept.');
     const dismiss = document.createElement('button');
     dismiss.id = 'dismiss-reload-notice'; dismiss.type = 'button'; dismiss.textContent = 'Dismiss';
     dismiss.addEventListener('click', () => host.remove());
     notice.append(text, dismiss); root.append(notice);
-    if (commentDraft) { el('comment-panel').hidden = false; el('comment-form').hidden = false; }
+    if (hasText) { el('comment-panel').hidden = false; el('comment-form').hidden = false; }
     // Let people select/copy their text, but block stale form and keyboard actions.
     for (const type of ['click','submit','input','change','keydown']) root.addEventListener(type, event => {
       if (event.composedPath().includes(notice)) return;
@@ -1821,7 +1941,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     recording = null; recordingBusy = false; commentSaving = false; captureBusy = false;
     commentDraft = null; pendingCaptureAction = null; selectedElement = null; selectionMetadata = null;
     evidenceChoice = 'screenshot'; evidencePreviouslyHidden = null;
-    docked=false;clearTimeout(panelNotifyTimer);panelNotifyTimer=null;draftEvidenceRevision=0;commentFieldRevisions.clear();
+    docked=false;clearTimeout(panelNotifyTimer);panelNotifyTimer=null;draftEvidenceRevision=0;commentFieldRevisions.clear();composerPoint=null;reselectFields=null;
     video = null;
     host?.remove(); host = null; root = null; session = null; role = null; localWarning = ''; connectionId = null;
   }
@@ -1837,7 +1957,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       const resize = () => {
         if(role==='target'){
           if(areaArmed||areaDrag){cancelArea();localWarning='The page resized. Select the area again at this size.';}
-          if(!commentDraft&&!captureBusy&&selectionMetadata?.kind==='region'&&!viewportMatches(selectionMetadata.context?.viewport)){
+          if(!hasCommentComposer()&&!captureBusy&&selectionMetadata?.kind==='region'&&!viewportMatches(selectionMetadata.context?.viewport)){
             selectionMetadata=null;pendingCaptureAction=null;el('comment-panel').hidden=true;
             localWarning='The page resized. Select the area again before capturing.';
           }

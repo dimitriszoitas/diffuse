@@ -95,6 +95,18 @@ test('portable remapped anchors survive fresh-ID import without changing origina
  for(const key of ['pinSelection','pinPoint','pinOffset','selection','context','evidence','fields'])assert.deepEqual(imported.comments[0][key],source.comments[0][key]);
  assert.equal(Object.hasOwn(parseReviewBundle(createReviewBundle(fixture(),{now:when})).review.comments[0],'pinSelection'),false);
 });
+
+test('a newly clicked element pin roundtrips without a separate remapped attachment',()=>{
+ const source=fixture();source.comments[0].selection=remapped(source);source.comments[0].pinPoint={x:.72,y:.3};source.comments[0].fields.title='';
+ const before=structuredClone(source),bundle=createReviewBundle(source,{now:when});
+ let index=0;const imported=prepareImportedReview(JSON.stringify(bundle),{uuid:()=>`initial-${++index}`,now:when});
+ for(const key of ['selection','pinPoint','fields','context','evidence'])assert.deepEqual(imported.comments[0][key],source.comments[0][key]);
+ assert.equal(Object.hasOwn(imported.comments[0],'pinSelection'),false,'Sharing must not invent a remap');
+ assert.deepEqual(source,before,'Export must not rewrite the original attachment');
+ const invalid=structuredClone(bundle);invalid.review.comments[0].pinSelection=fixture().comments[0].selection;
+ assert.throws(()=>parseReviewBundle(invalid),/missing its element attachment/,'An explicit area remap cannot inherit the original element point');
+});
+
 test('portable remapped anchors validate element identity, dimensions and same-page context and drop undeclared data',()=>{
  const source=fixture(),bundle=createReviewBundle(source,{now:when}),valid=remapped(source);
  for(const invalid of [null,{}, {...valid,kind:'region'}, {...valid,selector:''}, {...valid,anchor:{...valid.anchor,selector:'#other'}}, {...valid,tagName:'html'}, {...valid,rect:{...valid.rect,viewport:{x:0,y:0,width:0,height:44}}}, {...valid,context:{...valid.context,url:'https://elsewhere.test/'}}]){
@@ -104,7 +116,7 @@ test('portable remapped anchors validate element identity, dimensions and same-p
  const parsed=parseReviewBundle(copy);assert.deepEqual(parsed.review.comments[0].pinSelection,valid);
 });
 
-test('portable normalized drop points remain bounded and require a remapped attachment',()=>{
+test('portable normalized drop points remain bounded and require an element attachment',()=>{
  const source=fixture();source.comments[0].pinSelection=remapped(source);const bundle=createReviewBundle(source,{now:when});
  for(const point of [null,{},[],{x:0},{x:'0',y:1},{x:-.01,y:1},{x:0,y:1.01},{x:Infinity,y:0}]){
   const copy=structuredClone(bundle);copy.review.comments[0].pinPoint=point;assert.throws(()=>parseReviewBundle(copy),/drop point/);

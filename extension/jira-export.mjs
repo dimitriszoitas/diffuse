@@ -1,9 +1,11 @@
 import {jiraIssueFields, jiraAttachments} from './jira-format.mjs';
+import {cleanJiraTitle, hasJiraTitle, jiraTitleSource} from './jira-titles.mjs';
 
 const FILE_LIMIT = 20 * 1024 * 1024;
 const TOTAL_LIMIT = 40 * 1024 * 1024;
 const CHUNK_SIZE = 512 * 1024;
 const HISTORY_KEY = 'diffuseJiraDeliveryV1:';
+const TITLE_KEY = 'diffuseJiraTitleV1:';
 const SYSTEM_FIELDS = new Set(['summary', 'description', 'project', 'issuetype', 'attachment']);
 const encoder = new TextEncoder();
 
@@ -116,7 +118,7 @@ function ordered(value) {
 }
 
 /** Prepares an immutable snapshot locally; nothing is sent until the caller explicitly submits it. */
-export async function prepareDelivery(comment, review, destination, fields = {}, {index = 0, cryptoApi = globalThis.crypto, fetchImpl = globalThis.fetch, attachmentSettings = {}} = {}) {
+export async function prepareDelivery(comment, review, destination, fields = {}, {index = 0, summary, cryptoApi = globalThis.crypto, fetchImpl = globalThis.fetch, attachmentSettings = {}} = {}) {
   const evidence = jiraAttachments(comment, review, {index});
   validateEvidence(evidence, attachmentSettings);
   const attachments = [];
@@ -131,6 +133,10 @@ export async function prepareDelivery(comment, review, destination, fields = {},
     blobs.set(id, blob);
   }
   const formatted = jiraIssueFields(comment, review, {index});
+  if (summary !== undefined) {
+    formatted.summary = cleanJiraTitle(summary);
+    if (!formatted.summary) throw new Error('Enter a ticket title before creating the issue.');
+  }
   const content = {commentId: comment.id, cloudId: destination.cloudId, projectId: destination.projectId, issueTypeId: destination.issueTypeId, summary: formatted.summary, description: formatted.description, fields};
   const revision = await sha256(JSON.stringify(ordered({...content, attachments: attachments.map(({id, ...attachment}) => attachment)})), cryptoApi);
   return {payload: {...content, revision, clientDeliveryId: cryptoApi.randomUUID(), attachments}, blobs};
@@ -305,7 +311,7 @@ function descriptionPreview(description) {
   return preview;
 }
 
-export function createJiraExporter({onError = () => {}, clientFactory, storage = globalThis.chrome?.storage?.local} = {}) {
+export function createJiraExporter({onError = () => {}, clientFactory, titleGenerator, storage = globalThis.chrome?.storage?.local} = {}) {
   const selections = new Map();
   let observer;
   let activeDialog;
@@ -340,7 +346,10 @@ export function createJiraExporter({onError = () => {}, clientFactory, storage =
     const rows = comments.map(({comment, index}) => {
       const item = element('li', null, 'jira-export-item');
       const formatted = jiraIssueFields(comment, review, {index});
-      item.append(element('h3', formatted.summary));
+      const summaryLabel = element('label', 'Ticket title', 'jira-export-field');
+      const summaryInput = element('input');summaryInput.type = 'text';summaryInput.value = formatted.summary;summaryInput.maxLength = 255;summaryInput.required = true;
+      const titleHint = element('small', hasJiraTitle(comment) ? 'From the saved review. You can edit it before sending.' : 'Preparing a title from your comment…');titleHint.setAttribute('role', 'status');
+      summaryLabel.append(summaryInput, titleHint);item.append(summaryLabel);
       item.append(descriptionPreview(formatted.description));
       const evidence = jiraAttachments(comment, review, {index});
       const filesDetail = element('details', null, 'jira-export-attachments');
@@ -354,11 +363,13 @@ export function createJiraExporter({onError = () => {}, clientFactory, storage =
       item.append(filesDetail);
       const progress = element('div', '', 'jira-item-progress');progress.hidden = true;progress.setAttribute('role', 'status');
       item.append(progress);list.append(item);
-      return {comment, index, evidence, progress, item};
+      const row = {comment, index, evidence, progress, item, summaryInput, titleHint, summaryEdited: false, titleSource: hasJiraTitle(comment) ? 'existing' : 'fallback', write: Promise.resolve()};
+      summaryInput.addEventListener('input', () => {row.summaryEdited = true;row.titleSource = 'edited';titleHint.textContent = 'Your ticket title. The original comment stays unchanged.';});
+      return row;
     });
     body.append(grid, settingsLink, metadataStatus, extraFields, error, intent, list);
     const footer = element('footer', null, 'dialog-footer');
-    const footnote = element('p', 'Only these observations and their saved evidence are sent when you select Create tickets.');
+    const footnote = element('p', 'With AI configured, comment text is sent to Anthropic to suggest titles. Jira receives these observations and their saved evidence only when you select Create tickets.');
     const actions = element('div', null, 'jira-export-actions');
     const cancel = button('Cancel', () => dialog.close());
     const submit = button(`Create ${comments.length} ticket${comments.length === 1 ? '' : 's'}`, () => send(), true);submit.disabled = true;
@@ -375,6 +386,60 @@ export function createJiraExporter({onError = () => {}, clientFactory, storage =
     let inputs = [];
     let attachmentSettings = {};
     let ready = false;
+    let titlesPending = true;
+    const updateSubmit = () => { submit.disabled = !ready || titlesPending || sending; };
+    async function rememberTitle(row, summary, source) {
+      const write = row.write.catch(() => {}).then(() => storage.set({[row.cacheKey]: {summary, source}}));
+      row.write = write;await write;
+    }
+    async function prepareTitles() {
+      try {
+        const pendingRows = [];
+        let priorDeliveries = [];
+        try { priorDeliveries = Object.entries(await storage.get(null)).filter(([key]) => key.startsWith(HISTORY_KEY)); } catch { /* The normal delivery guard still fails closed on storage errors. */ }
+        for (const row of rows) {
+          row.cacheKey = TITLE_KEY + await sha256(JSON.stringify([review.id, row.comment.id, jiraTitleSource(row.comment), row.comment.fields?.title || '']));
+          let cached;
+          try { cached = (await storage.get(row.cacheKey))[row.cacheKey]; } catch { /* Use the comment excerpt if storage is unavailable. */ }
+          if (cached && ['ai', 'edited', 'fallback'].includes(cached.source) && cleanJiraTitle(cached.summary) === cached.summary && cached.summary) {
+            if (!row.summaryEdited) {
+              row.summaryInput.value = cached.summary;row.titleSource = cached.source;
+              row.titleHint.textContent = cached.source === 'ai' ? 'AI suggestion. Review or edit it before sending.' : 'Saved ticket title. You can edit it before sending.';
+            }
+          } else if (priorDeliveries.some(([key, record]) => typeof record?.revision === 'string' && key.endsWith(`:${row.comment.id}:${record.revision}`))) {
+            // Older releases sent the authored excerpt and have no title cache.
+            // Do not silently change that revision when resuming an old delivery.
+            if (!row.summaryEdited) row.titleHint.textContent = 'Keeping the original ticket title for this previous delivery.';
+          } else if (!hasJiraTitle(row.comment) && !row.summaryEdited) pendingRows.push(row);
+        }
+        const generate = titleGenerator || (async request => globalThis.chrome?.runtime?.sendMessage ? chrome.runtime.sendMessage({namespace: 'diffuse', target: 'worker', type: 'GENERATE_JIRA_TITLES', ...request}) : {titles: [], reason: 'not-configured'});
+        for (let offset = 0; offset < pendingRows.length; offset += 20) {
+          if (activeDialog !== dialog || !dialog.isConnected || !dialog.open) break;
+          const batch = pendingRows.slice(offset, offset + 20).filter(row => !row.summaryEdited);
+          if (!batch.length) continue;
+          const result = await generate({reviewId: review.id, commentIds: batch.map(row => row.comment.id)}).catch(() => ({titles: []}));
+          for (const row of batch) {
+            if (activeDialog !== dialog || !dialog.isConnected || !dialog.open || row.summaryEdited) continue;
+            const generated = result?.titles?.find(item => item.commentId === row.comment.id && item.source === jiraTitleSource(row.comment));
+            const title = cleanJiraTitle(generated?.title);
+            if (title) {
+              // Cache before displaying: reopening/resuming must use the same title
+              // and delivery revision, rather than generating another Jira issue.
+              try {
+                await rememberTitle(row, title, 'ai');
+                if (activeDialog !== dialog || !dialog.isConnected || !dialog.open || row.summaryEdited) continue;
+                row.summaryInput.value = title;row.titleSource = 'ai';row.titleHint.textContent = 'AI suggestion. Review or edit it before sending.';
+              } catch { row.titleHint.textContent = 'Using your comment as the title. You can edit it before sending.'; }
+            } else row.titleHint.textContent = result?.reason === 'not-configured' ? 'Using your comment as the title. Add an AI key in Settings for suggestions.' : 'AI suggestions are unavailable. You can edit this title before sending.';
+          }
+          if (result?.reason === 'not-configured') {
+            pendingRows.slice(offset + 20).forEach(row => {if (!row.summaryEdited) row.titleHint.textContent = 'Using your comment as the title. Add an AI key in Settings for suggestions.';});
+            break;
+          }
+        }
+      } catch { rows.filter(row => !row.summaryEdited && !hasJiraTitle(row.comment)).forEach(row => {row.titleHint.textContent = 'Using your comment as the title. You can edit it before sending.';}); }
+      finally { titlesPending = false;if (activeDialog === dialog) updateSubmit(); }
+    }
     function fail(reason) { error.textContent = reason?.message || String(reason);error.hidden = false; }
     function pending(message) { ready = false;submit.disabled = true;error.hidden = true;metadataStatus.textContent = message;extraFields.replaceChildren();descriptors = [];inputs = []; }
     const destination = () => ({cloudId: site.select.value, projectId: project.select.value, issueTypeId: issueType.select.value});
@@ -430,7 +495,7 @@ export function createJiraExporter({onError = () => {}, clientFactory, storage =
       try {
         const fields = await allMetadata(api, account.select.value, `/v1/create-fields?site=${encodeURIComponent(site.select.value)}&project=${encodeURIComponent(project.select.value)}&issueType=${encodeURIComponent(issueType.select.value)}`);
         if (version !== metadataVersion) return;
-        appendFields(fields);rows.forEach(row => validateEvidence(row.evidence, attachmentSettings));ready = true;submit.disabled = false;metadataStatus.textContent = 'Destination ready. Review the observations below before creating tickets.';
+        appendFields(fields);rows.forEach(row => validateEvidence(row.evidence, attachmentSettings));ready = true;updateSubmit();metadataStatus.textContent = 'Destination ready. Review the observations below before creating tickets.';
       } catch (reason) { if (version === metadataVersion) { metadataStatus.textContent = '';fail(reason); } }
     }
     function accountChanged() {
@@ -441,10 +506,15 @@ export function createJiraExporter({onError = () => {}, clientFactory, storage =
     }
     account.select.addEventListener('change', accountChanged);site.select.addEventListener('change', loadProjects);project.select.addEventListener('change', loadTypes);issueType.select.addEventListener('change', loadFields);
     async function send() {
-      if (!ready || sending) return;
+      if (!ready || sending || titlesPending) return;
       error.hidden = true;
       const fields = {};
       try {
+        for (const row of rows) {
+          if (!row.summaryInput.reportValidity()) return;
+          row.summary = cleanJiraTitle(row.summaryInput.value);
+          if (!row.summary) {row.summaryInput.focus();throw new Error('Enter a ticket title before creating the issue.');}
+        }
         for (const {descriptor, input} of inputs) {
           if (!input.reportValidity()) return;
           const raw = descriptor.kind === 'choices' ? [...input.selectedOptions].map(option => option.value) : input.value.trim();
@@ -453,7 +523,7 @@ export function createJiraExporter({onError = () => {}, clientFactory, storage =
         }
       } catch (reason) { fail(reason);return; }
       sending = true;submit.disabled = true;cancel.textContent = 'Hide progress';footnote.textContent = 'Keep this report open while sending. If interrupted, select the same items and destination to resume.';
-      [account.select, site.select, project.select, issueType.select, ...inputs.map(item => item.input)].forEach(input => { input.disabled = true; });
+      [account.select, site.select, project.select, issueType.select, ...inputs.map(item => item.input), ...rows.map(row => row.summaryInput)].forEach(input => { input.disabled = true; });
       const connectionId = account.select.value;
       const accountId = connections.find(connection => connection.id === connectionId)?.accountId;
       const dest = destination();
@@ -473,7 +543,8 @@ export function createJiraExporter({onError = () => {}, clientFactory, storage =
           }
         };
         try {
-          const prepared = await prepareDelivery(row.comment, review, dest, fields, {index: row.index, attachmentSettings});
+          await rememberTitle(row, row.summary, row.titleSource === 'existing' ? 'edited' : row.titleSource);
+          const prepared = await prepareDelivery(row.comment, review, dest, fields, {index: row.index, summary: row.summary, attachmentSettings});
           const receipt = await sendDelivery({client: api, connectionId, accountId, prepared, history, onProgress: update});update(receipt);completed++;
         } catch (reason) {
           row.progress.dataset.error = 'true';row.progress.prepend(element('p', reason.message || 'This observation could not be sent.'));
@@ -484,6 +555,7 @@ export function createJiraExporter({onError = () => {}, clientFactory, storage =
       footnote.textContent = 'Deliveries are saved. Reopening this review with the same selection and destination resumes existing issues.';
       if (!dialog.open) { onError(metadataStatus.textContent);dispose(); }
     }
+    void prepareTitles();
     try {
       api = await client();connections = await api.listConnections();
       populate(account.select, connections, 'Choose an account', item => item.displayName || item.accountId || 'Atlassian account');

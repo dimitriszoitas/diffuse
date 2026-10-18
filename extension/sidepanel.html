@@ -113,6 +113,13 @@
         <p id="panel-warning" class="panel-notice" role="status" hidden></p>
         <div id="panel-away" class="panel-notice" hidden><p id="panel-away-message">Return to the reviewed page to continue.</p><button id="panel-focus" type="button">Return to page</button><button id="panel-recover-page" type="button" hidden>Reconnect review</button></div>
         <div id="panel-live">
+          <section id="panel-composer" class="page-comment-status" hidden aria-labelledby="panel-composer-title">
+            <div class="page-comment-status-heading"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14a3 3 0 0 1-3 3H9l-5 4V6a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3Z"/><path d="M8 8h8m-8 4h5"/></svg><h2 id="panel-composer-title">Comment on the page</h2></div>
+            <p id="panel-comment-status" class="muted" role="status" aria-live="polite">Write and save your feedback in the comment bubble on the page.</p>
+            <p id="panel-comment-error" class="feedback" role="alert" hidden></p>
+            <button id="panel-return-comment" type="button">Return to comment <span aria-hidden="true">↗</span></button>
+            <button id="panel-recover-comment" type="button" hidden>Reconnect review</button>
+          </section>
           <section id="panel-controls" aria-label="Review controls">
             <section class="panel-control-group compare-group" aria-labelledby="compare-group-title"><div class="compare-heading"><h2 id="compare-group-title" class="control-group-title">Compare</h2>
             <button id="panel-diff" type="button" aria-describedby="panel-diff-hint"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16m-6-8h3m6 0h3"/></svg><span>Diff</span></button></div>
@@ -135,26 +142,6 @@
             <button id="panel-retry" type="button" hidden>Retry capture</button>
             </section>
             <section id="panel-comments" aria-label="Saved comments"></section>
-          </section>
-          <section id="panel-composer" hidden aria-labelledby="panel-composer-title">
-            <div class="section-heading"><h2 id="panel-composer-title">Add a comment</h2><button id="panel-cancel-comment" class="close-button" type="button" aria-label="Cancel comment">×</button></div>
-            <div class="panel-composer-scroll" tabindex="-1">
-            <p class="muted">Evidence captures the page at the moment you selected it.</p>
-            <fieldset class="evidence-choice"><legend>Attach evidence</legend><div class="button-row"><button id="panel-evidence-screenshot" type="button" aria-pressed="true">Screenshot</button><button id="panel-evidence-recording" type="button" aria-pressed="false">Short recording</button></div></fieldset>
-            <div id="panel-evidence" class="panel-evidence"></div>
-            <div id="panel-recording-choice" hidden><p class="muted">Record up to 30 seconds without audio. Your comment and original screenshot are kept.</p><video id="panel-recording-preview" controls hidden></video><button id="panel-record-comment" type="button">Start recording</button></div>
-            <p id="panel-selection" class="selection-context"></p>
-            <form id="panel-comment-form">
-              <label class="panel-field">Title <span class="optional">(optional)</span><input id="panel-field-title" name="title" maxlength="200" placeholder="Add a short title, if helpful"></label>
-              <label class="panel-field">Comment<textarea id="panel-field-comment" name="comment" required maxlength="6000" placeholder="Describe what needs attention." rows="4"></textarea></label>
-              <label class="panel-field">Expected <span class="optional">(optional)</span><textarea id="panel-field-expected" name="expected" maxlength="6000" placeholder="Describe the intended result." rows="3"></textarea></label>
-              <label class="panel-field">Category<select id="panel-field-category" name="category"><option value="design-mismatch">Design mismatch</option><option value="ux-issue">UX issue</option><option value="copy-change">Copy change</option></select></label>
-              <label class="panel-field">Component<input id="panel-field-component" name="component" maxlength="200"><small id="panel-component-hint"></small></label>
-              <div class="comment-context-fields"><label class="panel-field">State<input id="panel-field-state" name="state" required maxlength="200"></label><label class="panel-field severity-field">Severity<select id="panel-field-severity" name="severity"><option value="minor">Minor</option><option value="major">Major</option><option value="critical">Critical</option></select></label></div>
-              <label class="panel-field">Steps to reproduce <span class="optional">(optional)</span><textarea id="panel-field-steps" name="steps" maxlength="6000" rows="3" placeholder="How did you reach this state?"></textarea></label>
-            </form>
-            </div>
-            <div class="sticky-save"><p id="panel-comment-error" class="feedback" role="alert" hidden></p><button id="panel-recover-comment" type="button" hidden>Reconnect review</button><button id="panel-save-comment" class="primary-button" type="submit" form="panel-comment-form">Save comment</button></div>
           </section>
           <section id="panel-ai-view" hidden aria-labelledby="panel-ai-title">
             <div class="section-heading"><h2 id="panel-ai-title">AI review</h2><button id="panel-close-ai" class="close-button" type="button" aria-label="Close AI review">×</button></div>

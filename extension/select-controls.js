@@ -39,7 +39,7 @@
     }
     function build(select){
       if(items.has(select)||select.dataset.diffuseSelectIgnore!==undefined)return;
-      const id=`diffuse-select-${++serial}`,severity=select.name==='severity'||/severity$/.test(select.id),wrapper=make(document,'div',severity?'df-severity':'df-select');
+      const id=`diffuse-select-${++serial}`,severity=select.dataset.presentation!=='dropdown'&&(select.name==='severity'||/severity$/.test(select.id)),wrapper=make(document,'div',severity?'df-severity':'df-select');
       wrapper.dataset.diffuseSelectTheme=manager.theme;wrapper.dataset.diffuseSelectFor=select.id||id;
       const label=make(document,'span','df-select-label');label.id=`${id}-label`;wrapper.append(label);
       const error=make(document,'span','df-select-error');error.id=`${id}-error`;error.hidden=true;error.setAttribute('role','alert');

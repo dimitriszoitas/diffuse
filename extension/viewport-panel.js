@@ -48,7 +48,7 @@ function render() {
   if (!current) return;
   const state = snapshot?.state;
   const key = current.viewportPreset || viewportKey(current.targetViewport?.width);
-  const locked = changing || snapshot.busy || state?.active === false || state?.available === false || state?.captureBusy || state?.commentSaving || state?.recordingBusy || state?.recording || state?.comment || state?.aiBusy || state?.aiOperationBusy || current.aiRunning || current.viewportChanging;
+  const locked = changing || snapshot.busy || state?.active === false || state?.available === false || state?.captureBusy || state?.commentSaving || state?.recordingBusy || state?.recording || state?.commentOpen || state?.comment || state?.aiBusy || state?.aiOperationBusy || current.aiRunning || current.viewportChanging;
   for (const button of controls) { button.disabled = Boolean(locked); if(button.dataset.preset)button.setAttribute('aria-pressed', String(button.dataset.preset === key)); }
   document.getElementById('viewport-native').hidden = !current.viewportPreset;
   const size = current.targetViewport;

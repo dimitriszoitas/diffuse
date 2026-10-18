@@ -1,6 +1,6 @@
 # Diffuse Privacy Notice
 
-Updated: 28 September 2026
+Updated: 18 October 2026
 
 This notice covers the Diffuse Chrome extension and its hosted Jira connection service. Diffuse helps you compare pages, save review evidence, and optionally use AI, Figma references, and Jira.
 
@@ -15,6 +15,8 @@ Delete a comment or review in Diffuse to remove its local review record and evid
 ## Optional AI and Figma connections
 
 Clicking **Run AI review** sends the current page screenshot, a reference-page screenshot when connected, your instructions, and any explicitly linked Figma design context and reference images directly to Anthropic using your API key. Opening the AI panel alone does not send an AI request. Anthropic processes these requests under the terms and policies applicable to your API account; API charges apply. See [Anthropic's privacy policy](https://www.anthropic.com/legal/privacy).
+
+Opening the Jira export preview uses your configured Anthropic key and model to suggest ticket titles for untitled comments. This sends only the selected authored comment text, expected results, and reproduction steps. It does not send screenshots, page URLs, or DOM details for title generation. Suggestions and edits are stored locally to keep retries consistent. Saving a comment does not make an AI request. If AI is unavailable, ticket titles use comment excerpts that you can edit.
 
 Your Anthropic key is kept in Chrome session storage by default. **Remember my key on this device** saves it in local extension storage between sessions. This storage is restricted to trusted extension contexts, but is not an encrypted password vault. **Remove key** clears the stored key.
 

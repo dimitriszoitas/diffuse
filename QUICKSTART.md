@@ -45,7 +45,7 @@ Open `chrome://extensions` → Diffuse → **Details**, then enable **Allow acce
 
 ## Use the side drawer
 
-**Start review** opens the sidebar. For an active review, use **Open review sidebar** in the extension popup. Chrome gives Diffuse its own resizable space beside the page. All review controls live here; selection outlines and pins stay on the page.
+**Start review** opens the sidebar. For an active review, use **Open review sidebar** in the extension popup. Chrome gives Diffuse its own resizable space beside the page. Review controls live here; comments are written in a popover beside their pin on the page.
 
 Drag Chrome’s divider to resize the drawer. Close it using Chrome’s **×** above it to restore the page width. Closing keeps the active review and unfinished comment. **Stop** ends the review instead. Chrome controls which side the drawer uses.
 
@@ -62,15 +62,15 @@ Chrome asks for the updated extension's debugging permission and shows a notice 
 Starting a review from the real Chrome toolbar grants capture for that page. If Chrome needs access again—for example after starting from a persistent drawer on a newly selected tab—click the actual Diffuse icon on the reviewed page, then **Enable capture & return**. Your draft stays available.
 
 1. Tap **C**, release it, then click an element to leave a comment. For an area, hold **C + left-click-drag** to draw a rectangle. Shortcuts are ignored while typing in editable inputs; Escape cancels.
-2. Diffuse captures evidence before opening the form: both screens in comparison mode, or the one page in audit mode. Write your observation. **Title and expected result are optional**; an omitted title uses a short excerpt from your observation.
-3. Under **Attach evidence**, keep **Screenshot** or choose **Short recording**. Your written text and selected element or region stay attached when recording.
-4. Check the component name, label the state, choose a category and severity, and save. Categories have visible labels and distinct colors: **Design mismatch — purple**, **UX issue — amber**, and **Copy change — blue**. Comparison defaults to Design mismatch; audit defaults to UX issue.
+2. Write directly in the popover beside your selection. The comment field is focused immediately, and you can type while the screenshot is attached. Add an expected result if useful.
+3. Expand **Screenshot attached** to see the evidence or choose **Short recording**. Your written text and selected element or region stay attached when recording.
+4. Use the small category and severity dropdowns at the top right. Expand **Steps to reproduce** if needed, then save or press **Command/Ctrl + Enter**. Title, state, and component fields are omitted. Comparison defaults to Design mismatch; audit defaults to UX issue.
 
 Save comment stays visible at the bottom of the editor while its fields scroll. If the page disconnects, use **Reconnect review** to recover the pending evidence and your text, then save.
 
 Saved comments appear as numbered pins for the current viewport. New pins follow their selected element or area through scrolling and resizing; they do not float at the screen edge after the target leaves view. Click one to open its comment bubble, or choose **Open in review** for full evidence. Pins appear only on their captured URL, follow the selected element when it can still be found, and otherwise use captured document coordinates only when the viewport still matches. The original screenshots keep the recorded location even if the live layout changes.
 
-Component names come from available page labels such as `data-component`, `data-testid`, role, or tag and can be edited. They are not detected framework source components. **Current state** is an editable label for this capture, not a claim that other states were tested. The inspector records observed layout and state details without reading form values or passwords.
+The inspector still keeps available element and viewport context with the evidence. These are observed page details, not detected framework source components or a claim that other states were tested. It does not read form values or passwords.
 
 Drag a saved comment’s numbered marker onto another component and release to attach it at that point. The target highlights while you drag. To make it an area comment instead, open the comment, choose **Select area**, and draw a rectangle. Escape cancels. Your original text and screenshots stay intact; the new attachment follows scrolling and resizing and is included in exported reviews.
 
@@ -159,3 +159,7 @@ To open a shared review, click **Load review** in the Diffuse popup, then **Choo
 ## Compare against Figma
 
 Enable Desktop MCP in the matching file's Figma Dev Mode, then connect it in **Diffuse Settings → Figma reference**. Copy a frame link and add it to **AI review → Figma frame** or your instructions. Run the review to compare the captured page against that design. Keep the file open in Figma desktop. This uses your configured Anthropic key; Figma's hosted OAuth server is not supported yet.
+
+## Jira ticket titles
+
+When you open the Jira export preview, Diffuse uses your configured Anthropic key and model to suggest a concise title from each full comment, expected result, and reproduction steps. Review or edit the title before creating tickets. Existing titles are preserved. Without AI access, an excerpt from the comment is used, and Jira export still works. Saving comments never calls AI.

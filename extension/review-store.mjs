@@ -80,7 +80,14 @@ export async function discardDraft(id) {
   await done;
 }
 
-export async function addComment(draftId, input, {evidenceChoice} = {}) {
+export function cleanInitialPinPoint(point) {
+  if(point===undefined)return undefined;
+  if(!point||typeof point!=='object'||![point.x,point.y].every(value=>Number.isFinite(value)&&value>=0&&value<=1))throw new Error('Choose a position inside the selected element.');
+  return {x:point.x,y:point.y};
+}
+
+export async function addComment(draftId, input, {evidenceChoice,pinPoint} = {}) {
+  const initialPoint=cleanInitialPinPoint(pinPoint);
   if (evidenceChoice !== undefined && !['screenshot', 'video'].includes(evidenceChoice)) throw new Error('Choose screenshot or video evidence.');
   const fields = cleanFields(input);
   const transaction = (await db()).transaction(['drafts', 'comments', 'reviews'], 'readwrite');
@@ -93,6 +100,7 @@ export async function addComment(draftId, input, {evidenceChoice} = {}) {
   const review = await request(reviews.get(draft.reviewId));
   if (!review) { await done; throw new Error('This review was removed. Start another comparison.'); }
   const comment = {...draft, id: crypto.randomUUID(), fields, evidence: {...draft.evidence}, updatedAt: new Date().toISOString()};
+  if(initialPoint&&draft.selection?.kind==='element')comment.pinPoint=initialPoint;
   delete comment.composerFields;
   if (evidenceChoice === 'screenshot') {
     delete comment.evidence.video;

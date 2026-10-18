@@ -108,7 +108,9 @@ function validateReview(value) {
     if (!item.createdAt || !item.fields?.comment?.trim() || !item.fields?.state?.trim()) fail('an observation is missing its text, state or capture date.');
     if (!item.evidence?.production?.dataUrl) fail('an observation is missing its captured screenshot.');
     if (!item.context?.production?.url) fail('an observation is missing its original page URL.');
-    if (item.pinPoint && item.pinSelection?.kind !== 'element') fail('a comment drop point is missing its element attachment.');
+    // A point can be captured on the original element or moved to a new one.
+    // An explicit area remap takes precedence over the original attachment.
+    if (item.pinPoint && (item.pinSelection || item.selection)?.kind !== 'element') fail('a comment drop point is missing its element attachment.');
     if (item.pinSelection && item.pinSelection.context.url !== item.context.production.url) fail('a remapped comment must stay on its recorded page.');
   }
   result.count = result.comments.length;

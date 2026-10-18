@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {cleanFields, commentDisplayTitle, cleanPinOffset} from '../extension/review-store.mjs';
+import {cleanFields, commentDisplayTitle, cleanPinOffset, cleanInitialPinPoint} from '../extension/review-store.mjs';
+
+test('initial comment pins keep a normalized click location without accepting arbitrary metadata', () => {
+  assert.equal(cleanInitialPinPoint(undefined), undefined);
+  assert.deepEqual(cleanInitialPinPoint({x:.75,y:.2,secret:'ignored'}), {x:.75,y:.2});
+  assert.deepEqual(cleanInitialPinPoint({x:0,y:1}), {x:0,y:1});
+  for(const point of [null,{},[],{x:NaN,y:0},{x:Infinity,y:0},{x:-.1,y:0},{x:1.1,y:0},{x:0,y:'1'}])assert.throws(()=>cleanInitialPinPoint(point),/position/);
+});
 
 test('a review requires useful feedback and an explicit state, with title and expected result optional', () => {
   assert.throws(() => cleanFields({}), /Describe/);

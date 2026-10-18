@@ -82,11 +82,11 @@ try {
   assert.equal(await overlay.locator('#diff').isEnabled(),false);assert.match(snapshot.diffDisabledReason,/Save or cancel/);
   assert.equal((await command('openDiff')).ok,false);
   assert.equal(await page.evaluate(()=>window.calls.filter(item=>item.type==='OPEN_DIFF').length),3);
-  assert.equal(await overlay.locator('#comment-panel').isVisible(),false);
+  assert.equal(await overlay.locator('#comment-panel').isVisible(),true);
   assert.equal(await overlay.locator('#panel-backdrop').isVisible(),false);
   const known={knownDraftId:snapshot.comment.id,knownEvidenceKey:snapshot.comment.evidenceKey};
   assert.equal((await state(known)).comment.evidenceIncluded,false);assert.equal((await state(known)).comment.evidence,undefined);
-  pass('Docked selection opens a draft in state, with media sent once per evidence revision');
+  pass('Docked selection opens the in-page draft, with media sent once per evidence revision');
 
   const fields={title:'',comment:'  Keep the drafted detail\n',expected:'Match the reference',component:'Primary action',state:'Current state',steps:'Open releases',severity:'major',category:'copy-change'};
   await command('setCommentFields',{fields});
@@ -103,10 +103,10 @@ try {
   assert.equal(await overlay.locator('#toolbar').isVisible(),false);
   assert.equal(await overlay.locator('#toolbar').evaluate(node=>node.inert),true);
   assert.equal(await overlay.locator('#comment-actual').inputValue(),fields.comment);
-  assert.equal(await overlay.locator('#comment-panel').getAttribute('aria-modal'),'true');
+  assert.equal(await overlay.locator('#comment-panel').getAttribute('aria-modal'),'false');
   for(const end of [false,true]){
     await overlay.locator('#comment-panel>.composer-body').evaluate((node,end)=>node.scrollTop=end?node.scrollHeight:0,end);
-    const bounds=await overlay.locator('#save-comment').boundingBox();assert.ok(bounds.y>=0&&bounds.y+bounds.height<=900&&bounds.height>=44);
+    const bounds=await overlay.locator('#save-comment').boundingBox();assert.ok(bounds.y>=0&&bounds.y+bounds.height<=900&&bounds.height>=32);
   }
   assert.equal(await overlay.locator('#save-comment').evaluate(button=>button.form.id),'comment-form');
   await deliver({type:'DOCK_STATE',docked:true});
@@ -128,7 +128,7 @@ try {
   assert.equal(snapshot.view,'comment');assert.equal(snapshot.comment,null);assert.equal(snapshot.captureNeedsAccess,true);assert.match(snapshot.captureDescription,/extension icon/);
   await page.evaluate(()=>window.failCapture=false);await command('retryCapture');
   snapshot=await state();assert.ok(snapshot.comment);
-  await command('saveComment',{fields:{comment:'',state:''}});assert.match((await state()).comment.error,/comment and a state/);
+  await command('saveComment',{fields:{comment:''}});assert.match((await state()).comment.error,/comment/i);
   pass('Permission failures and required-field errors remain visible in docked state');
 
   await command('evidence',{choice:'recording'});

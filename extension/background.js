@@ -2,6 +2,7 @@ import {DEFAULT_SETTINGS, safeSettings, safeReferenceWheel, safeLinkedScroll, is
 import * as reviews from './review-store.mjs';
 import {reviewScreens} from './ai-client.mjs';
 import {readAISettings, saveAISettings, clearAIKey, protectAIStorage} from './ai-config.mjs';
+import {generateJiraTitles, hasJiraTitle} from './jira-titles.mjs';
 import {readMCPSettings, saveMCPSettings, clearMCPSettings, mcpPermissionOrigin} from './mcp-config.mjs';
 import {testMCPConnection, readFigmaReference, parseFigmaReference} from './mcp-client.mjs';
 import {createViewportController} from './viewport-controller.mjs';
@@ -1170,6 +1171,18 @@ async function handle(message, sender) {
     return {ok: true};
   }
   if (isReport) {
+    if (message.type === 'GENERATE_JIRA_TITLES') {
+      if (sender.id !== chrome.runtime.id || (sender.frameId != null && sender.frameId !== 0)) throw new Error('Open the review report to prepare Jira tickets.');
+      if (typeof message.reviewId !== 'string' || !Array.isArray(message.commentIds) || !message.commentIds.length || message.commentIds.length > 20 || message.commentIds.some(id => typeof id !== 'string') || new Set(message.commentIds).size !== message.commentIds.length) throw new Error('Select up to 20 saved comments to prepare titles.');
+      const review = await reviews.getReview(message.reviewId);
+      const comments = message.commentIds.map(id => review?.comments.find(comment => comment.id === id));
+      if (comments.some(comment => !comment)) throw new Error('A selected comment is no longer available. Reopen the Jira preview.');
+      const untitled = comments.filter(comment => !hasJiraTitle(comment));
+      if (!untitled.length) return {ok: true, titles: [], reason: 'existing'};
+      if (!(await chrome.permissions.contains({origins: ['https://api.anthropic.com/*']}))) return {ok: true, titles: [], reason: 'not-configured'};
+      const config = await readAISettings({includeKey: true});
+      return {ok: true, ...await generateJiraTitles(untitled, config)};
+    }
     if (message.type === 'LIST_REVIEWS') return {ok: true, reviews: await reviews.listReviews()};
     if (message.type === 'GET_REVIEW') return {ok: true, review: await reviews.getReview(message.reviewId)};
     if (message.type === 'UPDATE_COMMENT') { await reviews.updateComment(message.reviewId, message.commentId, message.fields); if (session?.reviewId === message.reviewId) { await refreshComments(); await publish(); } return {ok: true}; }
@@ -1226,12 +1239,12 @@ async function handle(message, sender) {
       if (!draft || draft.reviewId !== session.reviewId) throw new Error('This evidence belongs to a different comparison.');
       if (session.recording || recordingStart) throw new Error('Stop the recording before saving this comment.');
       if (message.evidenceChoice === 'video' && !draft.evidence?.video) throw new Error('Record a clip first, or choose Screenshot before saving.');
-      const saved = await reviews.addComment(message.draftId, message.fields, {evidenceChoice: message.evidenceChoice});
+      const saved = await reviews.addComment(message.draftId, message.fields, {evidenceChoice: message.evidenceChoice, pinPoint: message.pinPoint});
       session.commentCount = saved.review.count;
       await refreshComments();
       if (session.pendingDraftId === message.draftId) session.pendingDraftId = null;
       await publish();
-      return {ok: true, review: {id: saved.review.id, count: saved.review.count}};
+      return {ok: true, review: {id: saved.review.id, count: saved.review.count}, comment: saved.comment};
     }
     case 'SHOW_COMMENT':
       if (role !== 'target' || sender.frameId !== 0) throw new Error('Open comments from the reviewed page.');
