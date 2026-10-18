@@ -6,6 +6,8 @@ import {
 } from './report-format.mjs';
 import {getReview, listReviews} from './review-store.mjs';
 import {createJiraExporter} from './jira-export.mjs';
+import {createGitHubReview} from './github-review.mjs';
+import {projectReviewToPreview} from './pr-review.mjs';
 import {VIEWPORT_LABELS} from './viewport-profile.mjs';
 import {createReviewBundle, withPortableJiraLinks, REVIEW_TRANSFER_MAX_BYTES} from './review-transfer.mjs';
 
@@ -24,10 +26,12 @@ let hiddenReviewIds = new Set();
 let reviewListView = 'saved';
 let reviewVisibilityBusy = false;
 const jiraExporter = createJiraExporter({onError: message => notice(message, 'warning')});
+const githubReview = createGitHubReview({request, onError: message => notice(message, 'warning'), onRefresh: id => loadReviews(id)});
+ui['load-pr-review'].addEventListener('click', () => githubReview.openLoad().catch(error => notice(error.message, 'warning')));
 
 async function request(type, payload = {}) {
   const response = await chrome.runtime.sendMessage({namespace: 'diffuse', target: 'worker', type, ...payload});
-  if (!response?.ok) throw new Error(response?.error || 'Diffuse could not load this review. Try refreshing.');
+  if (!response?.ok) { const error = new Error(response?.error || 'Diffuse could not load this review. Try refreshing.'); error.code = response?.code; error.installationUrl = response?.installationUrl; throw error; }
   return response;
 }
 
@@ -409,6 +413,7 @@ function renderReview() {
     }));
   });
   jiraExporter.mount(review, ui['report-content'], cards);
+  githubReview.mount(review, ui['report-content'], cards);
 }
 
 function editComment(comment, reviewId) {
@@ -586,8 +591,9 @@ ui['toggle-review-sidebar'].addEventListener('click', async () => {
 });
 
 async function openReviewPage(review, commentId) {
-  const comment = commentId ? review.comments?.find(item => item.id === commentId) : null;
-  const url = comment?.context?.production?.url || comment?.selection?.context?.url || review.productionUrl;
+  const activeReview = review.prContext ? projectReviewToPreview(review) : review;
+  const comment = commentId ? activeReview.comments?.find(item => item.id === commentId) : null;
+  const url = comment?.context?.production?.url || comment?.selection?.context?.url || activeReview.productionUrl;
   if (!await requestPageAccess(url)) throw new Error('Allow Diffuse to access the reviewed page to show its comments.');
   await request('OPEN_REVIEW', {reviewId:review.id, ...(commentId ? {commentId} : {})});
 }
@@ -616,3 +622,5 @@ ui['export-review'].addEventListener('click', async () => {
 try { setSidebarCollapsed((await chrome.storage.local.get(SIDEBAR_COLLAPSED_KEY))[SIDEBAR_COLLAPSED_KEY] === true); }
 catch { setSidebarCollapsed(false); }
 await loadReviews();
+
+if (new URL(location.href).searchParams.get('github') === 'load') await githubReview.openLoad({previewUrl: new URL(location.href).searchParams.get('preview') || ''});

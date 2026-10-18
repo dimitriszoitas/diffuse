@@ -1,4 +1,5 @@
-import {prepareImportedReview, sanitizePinSelection} from './review-transfer.mjs';
+import {parseReviewBundle, prepareImportedReview, sanitizePinSelection, sanitizePRAttachment} from './review-transfer.mjs';
+import {cleanPortableKey, cleanPRContext, cleanPRRemoteBinding, ensurePortableIdentities, createVerification, mergePRReview, validatePRAttachmentLocation, upsertPRAttachment} from './pr-review.mjs';
 const DB_NAME = 'diffuse-reviews';
 let database;
 
@@ -62,7 +63,8 @@ export async function putDraft(draft, review) {
   if (review) {
     const reviews = transaction.objectStore('reviews');
     const existing = await request(reviews.get(review.id));
-    if (!existing) reviews.put({...review, count: 0});
+    if (!existing) reviews.put({...review, reviewKey: cleanPortableKey(review.reviewKey ?? crypto.randomUUID()), count: 0});
+    else if (!existing.reviewKey) reviews.put({...existing, reviewKey: crypto.randomUUID()});
   }
   transaction.objectStore('drafts').put(draft);
   await done;
@@ -99,7 +101,7 @@ export async function addComment(draftId, input, {evidenceChoice,pinPoint} = {})
   const reviews = transaction.objectStore('reviews');
   const review = await request(reviews.get(draft.reviewId));
   if (!review) { await done; throw new Error('This review was removed. Start another comparison.'); }
-  const comment = {...draft, id: crypto.randomUUID(), fields, evidence: {...draft.evidence}, updatedAt: new Date().toISOString()};
+  const comment = {...draft, id: crypto.randomUUID(), findingKey: crypto.randomUUID(), fields, evidence: {...draft.evidence}, updatedAt: new Date().toISOString()};
   if(initialPoint&&draft.selection?.kind==='element')comment.pinPoint=initialPoint;
   delete comment.composerFields;
   if (evidenceChoice === 'screenshot') {
@@ -109,6 +111,7 @@ export async function addComment(draftId, input, {evidenceChoice,pinPoint} = {})
   transaction.objectStore('comments').put(comment);
   drafts.delete(draft.id);
   review.count += 1;
+  review.reviewKey ||= crypto.randomUUID();
   review.updatedAt = comment.updatedAt;
   reviews.put(review);
   await done;
@@ -121,13 +124,112 @@ export async function listReviews() {
 }
 
 export async function getReview(id) {
-  const transaction = (await db()).transaction(['reviews', 'comments']);
+  const transaction = (await db()).transaction(['reviews', 'comments'], 'readwrite');
+  const done = completion(transaction);
   const [review, comments] = await Promise.all([
     request(transaction.objectStore('reviews').get(id)),
     request(transaction.objectStore('comments').index('reviewId').getAll(id))
   ]);
-  if (!review) throw new Error('This review is no longer available.');
-  return {...review, comments: comments.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || ((a.importOrder ?? Number.MAX_SAFE_INTEGER) - (b.importOrder ?? Number.MAX_SAFE_INTEGER)))};
+  if (!review) { await done; throw new Error('This review is no longer available.'); }
+  const identified = ensurePortableIdentities({...review, comments});
+  if (!review.reviewKey) transaction.objectStore('reviews').put({...review, reviewKey:identified.reviewKey});
+  const missingKeys = new Set(comments.filter(item => !item.findingKey).map(item => item.id));
+  for (const comment of identified.comments) if (missingKeys.has(comment.id)) transaction.objectStore('comments').put(comment);
+  await done;
+  identified.comments.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || ((a.importOrder ?? Number.MAX_SAFE_INTEGER) - (b.importOrder ?? Number.MAX_SAFE_INTEGER)));
+  return identified;
+}
+
+/** Lazily migrate old reviews once; subsequent exports retain the same portable keys. */
+export async function ensureReviewIdentities(reviewId) {
+  return getReview(reviewId);
+}
+
+export async function setPRReviewContext(reviewId, input) {
+  const identified = await ensureReviewIdentities(reviewId);
+  const context = cleanPRContext({...input, sourcePreviewUrl: identified.prContext?.sourcePreviewUrl || identified.productionUrl});
+  const transaction = (await db()).transaction('reviews', 'readwrite');
+  const done = completion(transaction);
+  const reviews = transaction.objectStore('reviews');
+  const review = await request(reviews.get(reviewId));
+  if (!review) { await done; throw new Error('This review is no longer available.'); }
+  review.prContext = context;
+  review.updatedAt = new Date().toISOString();
+  reviews.put(review);
+  await done;
+  return {...review, comments:identified.comments};
+}
+
+export async function appendVerification(reviewId, commentId, input) {
+  const transaction = (await db()).transaction(['reviews', 'comments'], 'readwrite');
+  const done = completion(transaction);
+  const comments = transaction.objectStore('comments');
+  const reviews = transaction.objectStore('reviews');
+  const [comment, review] = await Promise.all([request(comments.get(commentId)), request(reviews.get(reviewId))]);
+  if (!review || !comment || comment.reviewId !== reviewId) { await done; throw new Error('This finding is no longer available.'); }
+  let record;
+  try { record = createVerification(input, {comment, context:review.prContext}); }
+  catch (error) { await done; throw error; }
+  comment.verifications = [...(comment.verifications || []), record];
+  comment.findingKey ||= crypto.randomUUID();
+  comment.updatedAt = record.checkedAt;
+  review.reviewKey ||= crypto.randomUUID();
+  review.updatedAt = record.checkedAt;
+  comments.put(comment);
+  reviews.put(review);
+  await done;
+  return comment;
+}
+
+export async function setPRRemoteBinding(reviewId, input) {
+  const binding = input === null ? null : cleanPRRemoteBinding(input);
+  const transaction = (await db()).transaction('reviews', 'readwrite');
+  const done = completion(transaction);
+  const reviews = transaction.objectStore('reviews');
+  const review = await request(reviews.get(reviewId));
+  if (!review) { await done; throw new Error('This review is no longer available.'); }
+  if (binding && review.prRemote?.remoteReviewId === binding.remoteReviewId && review.prRemote.remoteRevision > binding.remoteRevision) { await done; throw new Error('A newer shared review is already loaded. Refresh the pull request.'); }
+  if (binding) review.prRemote = binding;
+  else delete review.prRemote;
+  reviews.put(review);
+  await done;
+  return {...review, comments:(await getReview(reviewId)).comments};
+}
+
+/** Load the same shared review again without replacing local edits or duplicating its findings. */
+export async function mergePRReviewBundle(bundle, {reviewId, remoteReviewId, remoteRevision} = {}) {
+  const incoming = parseReviewBundle(bundle).review;
+  if (!incoming.reviewKey || incoming.comments.some(item => !item.findingKey)) throw new Error('This shared review is missing its portable finding identifiers.');
+  const transaction = (await db()).transaction(['reviews', 'comments'], 'readwrite');
+  const done = completion(transaction);
+  const reviews = transaction.objectStore('reviews'), comments = transaction.objectStore('comments');
+  const records = await request(reviews.getAll());
+  const pullUrl=value=>value?.prContext?.url?.toLowerCase();
+  const samePull=item=>!!pullUrl(incoming)&&pullUrl(item)===pullUrl(incoming);
+  const compatible=item=>item.reviewKey===incoming.reviewKey&&samePull(item)&&(!remoteReviewId||!item.prRemote||item.prRemote.remoteReviewId===remoteReviewId);
+  const existing = reviewId ? records.find(item => item.id === reviewId) : records.filter(compatible).sort((a,b)=>Number(b.prRemote?.remoteReviewId===remoteReviewId)-Number(a.prRemote?.remoteReviewId===remoteReviewId)||b.updatedAt.localeCompare(a.updatedAt))[0];
+  if (reviewId && !existing) { await done; throw new Error('This review is no longer available.'); }
+  if (existing && ((pullUrl(existing)&&!samePull(existing))||(remoteReviewId&&existing.prRemote&&existing.prRemote.remoteReviewId!==remoteReviewId))) {await done;throw new Error('This shared review belongs to a different pull request or publication.');}
+  if (existing?.prRemote?.remoteReviewId === remoteReviewId && Number.isSafeInteger(remoteRevision) && existing.prRemote.remoteRevision > remoteRevision) { await done; throw new Error('A newer shared review is already loaded. Refresh the pull request.'); }
+  let result;
+  try {
+    if (existing) {
+      const localComments = await request(comments.index('reviewId').getAll(existing.id));
+      result = mergePRReview({...existing, comments:localComments}, incoming);
+      const {comments:merged, ...metadata} = result;
+      reviews.put(metadata);
+      for (const item of merged) comments.put(item);
+    } else {
+      const imported = prepareImportedReview(bundle);
+      imported.review.prRemoteTitle=incoming.title;
+      for(const item of imported.comments)item.prRemoteFields={...item.fields};
+      reviews.add(imported.review);
+      for (const item of imported.comments) comments.add(item);
+      result = {...imported.review, comments:imported.comments};
+    }
+  } catch (error) { try { transaction.abort(); } catch {} await done.catch(() => {}); throw error; }
+  await done;
+  return result;
 }
 
 export async function updateComment(reviewId, commentId, input) {
@@ -219,6 +321,31 @@ export async function remapCommentPin(reviewId, commentId, selection, position) 
   comments.put(comment);
   review.updatedAt = comment.updatedAt;
   reviews.put(review);
+  await done;
+  return comment;
+}
+
+/** Build-specific live anchors must never rewrite the original capture or attachment. */
+export async function remapPRCommentPin(reviewId, commentId, selection, position, {context:suppliedContext}={}) {
+  const cleanSelection=cleanPinSelection(selection);
+  const point=cleanSelection.kind==='element'?pinPointFromPosition(cleanSelection,position):undefined;
+  const expectedContext=suppliedContext===undefined?null:cleanPRContext(suppliedContext);
+  const transaction=(await db()).transaction(['reviews','comments'],'readwrite');
+  const done=completion(transaction),reviews=transaction.objectStore('reviews'),comments=transaction.objectStore('comments');
+  const [review,comment]=await Promise.all([request(reviews.get(reviewId)),request(comments.get(commentId))]);
+  if(!review||!comment||comment.reviewId!==reviewId){await done;throw new Error('This finding is no longer available.');}
+  let attachment;
+  try {
+    const context=cleanPRContext(review.prContext);
+    if(expectedContext&&(expectedContext.headSha!==context.headSha||expectedContext.previewUrl!==context.previewUrl||expectedContext.url!==context.url))throw new Error('The selected preview changed. Reopen this finding before remapping it.');
+    attachment=sanitizePRAttachment({buildSha:context.headSha,previewUrl:context.previewUrl,selection:cleanSelection,...(point?{pinPoint:point}:{}),updatedAt:new Date().toISOString()});
+    // Match sanitized URLs so secret parameters remain local in original evidence.
+    validatePRAttachmentLocation(attachment,comment,context.sourcePreviewUrl||review.productionUrl);
+    comment.prAttachments=upsertPRAttachment(comment.prAttachments||[],attachment);
+  } catch(error) {await done;throw error;}
+  comment.updatedAt=attachment.updatedAt;
+  review.updatedAt=attachment.updatedAt;
+  comments.put(comment);reviews.put(review);
   await done;
   return comment;
 }

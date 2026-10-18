@@ -109,7 +109,7 @@ test('Stop during video encoding waits for the same finished recording', {timeou
       this.onstop();
     }
   }
-  const track = {stop() {}};
+  const track = {stop() {},getSettings:()=>({width:1280,height:900})};
   const media = {active: true, getTracks: () => [track], getVideoTracks: () => [track]};
   const context = vm.createContext({
     Blob, MediaRecorder,

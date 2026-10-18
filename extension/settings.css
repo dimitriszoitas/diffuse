@@ -61,3 +61,8 @@
 .appearance-swatch-dark:before{background:#25354d;box-shadow:-14px 0 0 -3px #426185}
 .appearance-swatch-system{background:linear-gradient(90deg,#eef3f8 50%,#111c2d 50%)}
 .appearance-swatch-system:before{background:linear-gradient(90deg,#fff 27%,#25354d 27%);box-shadow:-14px 0 0 -3px #9bacc3}
+
+#github-feedback { padding: 12px; border: 1px solid var(--ui-line); border-radius: 6px; background: var(--ui-surface-muted); color: var(--ui-ink); }
+#github-feedback[data-error="true"] { color: var(--ui-danger); }
+.github-private-access { display: flex; align-items: center; gap: 8px; margin: 16px 0 6px; font-size: 13px; }
+.github-private-access input { width: 16px; height: 16px; accent-color: var(--ui-accent); }

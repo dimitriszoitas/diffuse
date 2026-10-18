@@ -1,4 +1,5 @@
 /** Portable review data only. Settings, credentials and live browser/session handles never cross profiles. */
+import {cleanPortableKey, cleanPRContext, cleanPreviewUrl, cleanVerificationHistory, ensurePortableIdentities, cleanPRAttachmentMetadata, validatePRAttachmentLocation, PR_MAX_ATTACHMENTS} from './pr-review.mjs';
 export const REVIEW_TRANSFER_FORMAT = 'diffuse-review';
 export const REVIEW_TRANSFER_VERSION = 1;
 export const REVIEW_TRANSFER_MAX_BYTES = 256 * 1024 * 1024;
@@ -81,6 +82,15 @@ export function sanitizePinSelection(value) {
   return result;
 }
 
+export function sanitizePRAttachment(value) {
+  const result={...cleanPRAttachmentMetadata(value),selection:sanitizePinSelection(value.selection)};
+  if(value.pinPoint!==undefined) {
+    if(result.selection.kind!=='element')fail('an area attachment cannot have an element drop point.');
+    result.pinPoint=pinPoint(value.pinPoint);
+  }
+  return result;
+}
+
 function media(value, kind) {
   if (typeof value !== 'string' || value.length > REVIEW_TRANSFER_MAX_BYTES) fail('an attachment is too large.');
   const comma = value.indexOf(',');
@@ -95,23 +105,36 @@ const image = shape({dataUrl:value=>media(value,'image'),annotatedDataUrl:value=
 const video = shape({dataUrl:value=>media(value,'video'),mimeType: value=>/^video\/(webm|mp4)(;codecs=[a-zA-Z0-9., _-]+)?$/.test(value)?value:fail('a recording format is invalid.'), ...numbers('durationMs bytes width height'),filename:text(255),kind:text(100),startedAt:date,stoppedAt:date,stopReason:text(100)});
 const fields = shape({...strings('title',180),...strings('comment expected steps',8000),...strings('component state',240),severity:enumOf(['minor','major','critical']),category:enumOf(['design-mismatch','ux-issue','copy-change'])});
 const issue = shape({url:webUrl,key:text(128),status:text(100),createdAt:date});
-const comment = shape({createdAt:date,updatedAt:date,mode:enumOf(['audit','comparison']),fields,selection:nullable(selection),pinOffset,pinPoint,pinSelection:sanitizePinSelection,
+const comment = shape({findingKey:cleanPortableKey,prSourcePreviewUrl:cleanPreviewUrl,verifications:cleanVerificationHistory,prAttachments:array(sanitizePRAttachment,PR_MAX_ATTACHMENTS),createdAt:date,updatedAt:date,mode:enumOf(['audit','comparison']),fields,selection:nullable(selection),pinOffset,pinPoint,pinSelection:sanitizePinSelection,
   context:shape({production:pageContext,prototype:pageContext,alignment:shape({...numbers('opacity reveal offsetX offsetY'),...booleans('linked hidden')}),browser}),
   evidence:shape({production:image,prototype:image,designReference:image,designReferenceAdditional:array(image,1),video,...numbers('captureSkewMs')}),
   ai:shape({provider:enumOf(['anthropic']),model:text(200),...numbers('mismatchScore confidence'),reason:text(8000),acceptedAt:date,mode:enumOf(['audit','comparison']),designReference:shape({url:webUrl,fileKey:text(200),nodeId:text(200),serverName:text(200),tools:array(text(100),4),text:text(40000),capturedAt:date})}),jiraIssues:array(issue,100)});
-const review = shape({title:text(2000),createdAt:date,updatedAt:date,mode:enumOf(['audit','comparison']),productionUrl:portablePageUrl,prototypeUrl:portablePageUrl,comments:array(comment,MAX_COMMENTS)});
+const review = shape({reviewKey:cleanPortableKey,prContext:cleanPRContext,title:text(2000),createdAt:date,updatedAt:date,mode:enumOf(['audit','comparison']),productionUrl:portablePageUrl,prototypeUrl:portablePageUrl,comments:array(comment,MAX_COMMENTS)});
 
 function validateReview(value) {
   const result = review(value);
   if (!result.productionUrl || !result.title || !result.createdAt || !Array.isArray(result.comments)) fail('the review is missing its title, URL, capture date or comments.');
+  const findingKeys = new Set();
   for (const item of result.comments) {
+    if (item.findingKey) {
+      if (findingKeys.has(item.findingKey)) fail('the review contains duplicate finding identifiers.');
+      findingKeys.add(item.findingKey);
+    }
     if (!item.createdAt || !item.fields?.comment?.trim() || !item.fields?.state?.trim()) fail('an observation is missing its text, state or capture date.');
     if (!item.evidence?.production?.dataUrl) fail('an observation is missing its captured screenshot.');
     if (!item.context?.production?.url) fail('an observation is missing its original page URL.');
+    if(item.prSourcePreviewUrl&&new URL(item.prSourcePreviewUrl).origin!==new URL(item.context.production.url).origin)fail('a finding preview source must match its captured page.');
     // A point can be captured on the original element or moved to a new one.
     // An explicit area remap takes precedence over the original attachment.
     if (item.pinPoint && (item.pinSelection || item.selection)?.kind !== 'element') fail('a comment drop point is missing its element attachment.');
     if (item.pinSelection && item.pinSelection.context.url !== item.context.production.url) fail('a remapped comment must stay on its recorded page.');
+    const builds=new Set();
+    for(const attachment of item.prAttachments || []) {
+      const key=`${attachment.buildSha}:${attachment.previewUrl}`;
+      if(builds.has(key))fail('a finding has duplicate attachments for one preview build.');
+      builds.add(key);
+      validatePRAttachmentLocation(attachment,item,result.prContext?.sourcePreviewUrl || result.productionUrl);
+    }
   }
   result.count = result.comments.length;
   return result;
@@ -133,10 +156,11 @@ export function parseReviewBundle(input) {
   return {format:REVIEW_TRANSFER_FORMAT,version:REVIEW_TRANSFER_VERSION,exportedAt:date(value.exportedAt),review:validateReview(value.review)};
 }
 
-export function prepareImportedReview(input, {uuid = () => crypto.randomUUID(), now = new Date().toISOString()} = {}) {
+export function prepareImportedReview(input, {uuid = () => crypto.randomUUID(), identityUuid = () => crypto.randomUUID(), now = new Date().toISOString()} = {}) {
   const bundle = parseReviewBundle(input);
   const id = uuid();
-  const {comments: original, ...metadata} = bundle.review;
+  if (typeof id !== 'string' || !id) fail('unique review identifiers could not be created.');
+  const {comments: original, ...metadata} = ensurePortableIdentities(bundle.review, {uuid:identityUuid});
   const review = {...metadata,id,updatedAt:date(now),importedAt:date(now)};
   const ids = new Set([id]);
   const comments = original.map((item, importOrder)=>{

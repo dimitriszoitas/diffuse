@@ -6,12 +6,17 @@ import {generateJiraTitles, hasJiraTitle} from './jira-titles.mjs';
 import {readMCPSettings, saveMCPSettings, clearMCPSettings, mcpPermissionOrigin} from './mcp-config.mjs';
 import {testMCPConnection, readFigmaReference, parseFigmaReference} from './mcp-client.mjs';
 import {createViewportController} from './viewport-controller.mjs';
+import {projectReviewToPreview, mapPreviewUrl, cleanPreviewUrl} from './pr-review.mjs';
+import {createGitHubConnectionClient} from './github-connection.mjs';
+import {createGitHubWorker, isGitHubRequest} from './github-worker.mjs';
+import {formatGitHubSummary} from './github-format.mjs';
 
 let session = null;
 let transitioning = false;
 let offscreenCreation = null;
 let evidenceBusy = false;
 let recordingStart = null;
+let prProofRecording = null;
 let lastScreenshotAt = 0;
 let aiJob = null;
 const acceptingSuggestions = new Set();
@@ -22,6 +27,7 @@ const panelPorts = new Map();
 let panelDocking = Promise.resolve();
 let panelDockState = null;
 let diffWindow = null;
+let githubWorker = null;
 const referenceRequests = new Map();
 const viewportController = createViewportController({chromeApi: chrome, assertPageAccess,
   onOwnershipChanged: async tabs => {if(session){session.viewportDebuggerTabs=tabs;await persist();}},
@@ -195,7 +201,8 @@ async function publish() {
 
 async function refreshComments(current = session) {
   if (!current) return;
-  const review = await reviews.getReview(current.reviewId || current.id).catch(() => null);
+  let review = await reviews.getReview(current.reviewId || current.id).catch(() => null);
+  if (review?.prContext && current.prContext) review = projectReviewToPreview(review, current.prContext);
   current.comments = (review?.comments || []).map(({id, createdAt, fields, selection, context, ai, pinOffset, pinSelection, pinPoint}) => ({id, createdAt, fields, selection, context: {production: context?.production}, ...(ai ? {ai} : {}), ...(pinOffset ? {pinOffset} : {}), ...(pinSelection ? {pinSelection} : {}), ...(pinPoint ? {pinPoint} : {})}));
   current.commentCount = current.comments.length;
 }
@@ -280,7 +287,8 @@ async function captureDraft(selection, {pending = true, forAI = false, forRecord
     }
     if (session?.id !== current.id) throw new Error('The comparison ended before the screenshot was saved.');
     const {evidence} = await evidenceStep(mediaMessage('SNAPSHOT_EVIDENCE', {sessionId: current.id, includePrototype: current.mode !== 'audit', dataUrl, capturedAt, selection, viewport: productionContext.viewport}), 'The screenshots could not be processed. Keep production visible and try again.');
-    const draft = {id: crypto.randomUUID(), reviewId: current.reviewId || current.id, createdAt: capturedAt, mode: current.mode || 'comparison', selection: selection || null, context: {production: productionContext, ...(referenceContext ? {prototype: referenceContext.context} : {}), alignment: {...current.settings}, browser: productionContext.browser}, evidence};
+    const draft = {id: crypto.randomUUID(), reviewId: current.reviewId || current.id, createdAt: capturedAt, mode: current.mode || 'comparison', selection: selection || null, context: {production: productionContext, ...(referenceContext ? {prototype: referenceContext.context} : {}), alignment: {...current.settings}, browser: productionContext.browser}, evidence,
+      ...(current.prContext ? {prSourcePreviewUrl:current.prContext.previewUrl} : {})};
     await reviews.putDraft(draft, {id: draft.reviewId, mode: draft.mode, title: `${current.target.title || 'Page'} — design ${current.mode === 'audit' ? 'audit' : 'review'}`, createdAt: current.startedAt, updatedAt: capturedAt, productionUrl: productionContext.url, ...(referenceContext ? {prototypeUrl: referenceContext.context.url} : {})});
     if (pending && session?.id === current.id) { current.pendingDraftId = draft.id; await persist(); }
     return draft;
@@ -447,6 +455,7 @@ async function beginRecording(message = {}) {
 async function endRecording(options = {}) {
   const current = session;
   if (!current?.recording) throw new Error('There is no active recording.');
+  if(current.recording.kind==='pr-proof'){if(prProofRecording)await discardPRProof(prProofRecording,{error:new Error('Recording cancelled. Start a new recording from the pull request check.')});else {await mediaMessage('DISCARD_RECORDING',{sessionId:current.id,recordingId:current.recording.id}).catch(()=>{});current.recording=null;await publish();}return null;}
   const recordingId = current.recording.id;
   const response = await mediaMessage('STOP_RECORDING', {sessionId: current.id, recordingId});
   return finishRecording(recordingId, response.video, options);
@@ -645,7 +654,8 @@ async function navigateToComment(current, commentId) {
 async function openSavedReview(message) {
   if (transitioning) throw new Error('Wait for the current review action to finish.');
   if (session) assertReferenceReady(session);
-  const review = await reviews.getReview(message.reviewId);
+  const storedReview = await reviews.getReview(message.reviewId);
+  const review = storedReview.prContext ? projectReviewToPreview(storedReview) : storedReview;
   const requestedComment = message.commentId ? review.comments.find(item => item.id === message.commentId) : null;
   if (message.commentId && !requestedComment) throw new Error('This comment is no longer available.');
   const defaultComment = requestedComment || review.comments.find(item => (item.context?.production?.url || item.selection?.context?.url) === review.productionUrl) || review.comments[0] || null;
@@ -687,7 +697,7 @@ async function openSavedReview(message) {
     // evidence retain their original identity and are never copied or reset.
     session = {id, reviewId: review.id, mode: 'audit', targetTabId: tab.id, target: {url, title: review.title}, comments: [], commentCount: 0,
       status: 'starting', captureReady: false, recording: null, settings: {...DEFAULT_SETTINGS, hidden: true, linked: false}, startedAt: review.createdAt,
-      ...(comment ? {pendingCommentId: comment.id} : {})};
+      ...(comment ? {pendingCommentId: comment.id} : {}), ...(review.prContext ? {prContext:review.prContext} : {})};
     const current = session;
     await persist();
     await waitForReviewPage(tab.id);
@@ -703,6 +713,138 @@ async function openSavedReview(message) {
     if (session?.reviewId === review.id) {session.status = 'error'; session.error = error.message; await publish().catch(() => {});}
     throw error;
   } finally {transitioning = false; notifyPanels();}
+}
+
+async function assertPRProofContext(proof) {
+  const current=proof.current,context=proof.context;
+  if(session!==current||current.status!=='live'||current.reviewId!==proof.reviewId||
+    current.prContext?.headSha!==context.headSha||current.prContext?.url?.toLowerCase()!==context.url.toLowerCase()||
+    current.prContext?.previewUrl!==context.previewUrl)throw new Error('The selected build changed. Start a new recording on the current preview.');
+  const tab=await chrome.tabs.get(current.targetTabId);await assertPageAccess(tab.url);
+  const page=(await tabMessage(current.targetTabId,'GET_CONTEXT',{sessionId:current.id}))?.context;
+  if(savedPageUrl(tab.url)!==proof.expectedUrl||savedPageUrl(page?.url)!==proof.expectedUrl)throw new Error('The page changed during the recording. Open the finding again.');
+  const actual=current.viewportPreset||savedCommentViewport({context:{production:page}});
+  if((proof.desiredViewport&&proof.desiredViewport!==actual)||!page?.viewport||
+    !['width','height'].every(key=>Number.isFinite(proof.recordedViewport?.[key])&&Math.abs(page.viewport[key]-proof.recordedViewport[key])<2))throw new Error('The viewport changed during the recording. Open the finding at its recorded size.');
+  if(session!==current||current.status!=='live'||current.reviewId!==proof.reviewId||current.prContext?.headSha!==context.headSha||current.prContext?.url?.toLowerCase()!==context.url.toLowerCase()||current.prContext?.previewUrl!==context.previewUrl)throw new Error('The selected build changed during the recording.');
+  return page;
+}
+
+async function discardPRProof(proof,{error}={}) {
+  clearInterval(proof.timer);
+  if(error)proof.error=String(error.message||error);proof.evidence=null;
+  await mediaMessage('DISCARD_RECORDING',{sessionId:proof.current.id,recordingId:proof.id}).catch(()=>{});
+  if(session===proof.current&&session.recording?.id===proof.id){session.recording=null;await publish();}
+}
+
+async function finishPRProof(proof,video) {
+  if(proof.finishing)return proof.finishing;
+  proof.finishing=(async()=>{
+    try {
+      if(proof.error)throw new Error(proof.error);
+      await assertPRProofContext(proof);
+      if(typeof video?.dataUrl!=='string'||video.dataUrl.length>2*1024*1024||!/^data:video\/webm(?:;codecs=[a-z0-9]+)?;base64,[A-Za-z0-9+/]+={0,2}$/i.test(video.dataUrl)||
+        !Number.isFinite(video.durationMs)||video.durationMs<100||video.durationMs>30000||!Number.isInteger(video.width)||!Number.isInteger(video.height)||video.width<2||video.height<2||
+        !Number.isFinite(Date.parse(video.startedAt))||Date.parse(video.startedAt)<proof.requestedAt-1000||Date.parse(video.startedAt)>Date.now()+1000)throw new Error('This recording could not be saved. Try a shorter recording.');
+      if(proof.error)throw new Error(proof.error);
+      proof.evidence={dataUrl:video.dataUrl,mimeType:video.mimeType,durationMs:video.durationMs,width:video.width,height:video.height,
+        capturedAt:video.startedAt,startedAt:video.startedAt,stoppedAt:video.stoppedAt,pageUrl:cleanPreviewUrl(proof.expectedUrl)};
+      clearInterval(proof.timer);
+      if(session===proof.current&&session.recording?.id===proof.id){session.recording=null;await publish();}
+      return proof.evidence;
+    } catch(error){await discardPRProof(proof,{error});throw error;}
+  })();
+  return proof.finishing;
+}
+
+async function capturePRProofRecording({review,comment,context,action,recordingToken}) {
+  if(action==='stop'||action==='cancel'){
+    const proof=prProofRecording;
+    if(action==='cancel'){if(proof?.token===recordingToken){await discardPRProof(proof);if(prProofRecording===proof)prProofRecording=null;}else if(!proof&&session?.recording?.kind==='pr-proof'){await endRecording({interrupted:true});}return {cancelled:true};}
+    if(!proof||proof.token!==recordingToken||proof.reviewId!==review?.id||proof.findingKey!==comment?.findingKey)throw new Error('This recording is no longer available. Start a new one.');
+    try {
+      if(proof.error)throw new Error(proof.error);
+      if(context.headSha!==proof.context.headSha||context.url?.toLowerCase()!==proof.context.url.toLowerCase()||context.previewUrl!==proof.context.previewUrl)throw new Error('The selected build changed. Record the current preview again.');
+      await assertPRProofContext(proof);
+      const evidence=proof.evidence||await finishPRProof(proof,(await mediaMessage('STOP_RECORDING',{sessionId:proof.current.id,recordingId:proof.id})).video);
+      await assertPRProofContext(proof);
+      return evidence;
+    } finally {await discardPRProof(proof);if(prProofRecording===proof)prProofRecording=null;}
+  }
+  if(action!=='start')throw new Error('Choose Start or Stop recording.');
+  const current=session;
+  if(!current||current.reviewId!==review.id||current.status!=='live'||!current.prContext)throw new Error('Open this finding on the chosen preview before recording.');
+  if(transitioning||recordingStart||current.recording||evidenceBusy||aiJob||current.aiRunning||acceptingSuggestions.size||current.pendingDraftId)throw new Error('Finish the current comment, capture or AI review before recording proof.');
+  if(prProofRecording)await discardPRProof(prProofRecording);
+  const liveComment=projectReviewToPreview(review,context).comments.find(item=>item.id===comment.id);
+  const proof={id:crypto.randomUUID(),token:crypto.randomUUID(),current,reviewId:review.id,findingKey:comment.findingKey,context:structuredClone(context),requestedAt:Date.now(),
+    expectedUrl:mapPreviewUrl(comment.context?.production?.url,comment.prSourcePreviewUrl||context.sourcePreviewUrl||review.productionUrl,context.previewUrl),
+    desiredViewport:savedCommentViewport(liveComment),recordedViewport:(liveComment?.pinSelection?.context||liveComment?.context?.production||liveComment?.selection?.context)?.viewport};
+  assertReferenceReady(current);
+  const starting={sessionId:current.id,kind:'pr-proof'};recordingStart=starting;prProofRecording=proof;
+  try {
+    const page=await assertPRProofContext(proof);await focusTab(current.targetTabId);
+    const target=await requireActiveProduction(current),streamId=await chrome.tabCapture.getMediaStreamId({targetTabId:target.id});
+    await assertPRProofContext(proof);
+    current.recording={id:proof.id,kind:'pr-proof',startedAt:new Date().toISOString()};
+    const response=await mediaMessage('START_RECORDING',{sessionId:current.id,recordingId:proof.id,streamId,viewport:page.viewport,proof:true});
+    await assertPRProofContext(proof);
+    if(proof.error)throw new Error(proof.error);
+    if(!proof.evidence)current.recording={...response.recording,kind:'pr-proof'};await publish();
+    let checking=false;
+    proof.timer=setInterval(async()=>{if(checking||proof.evidence||proof.error||prProofRecording!==proof)return;checking=true;try{await assertPRProofContext(proof);}catch(error){await discardPRProof(proof,{error});}finally{checking=false;}},750);
+    return {recordingToken:proof.token,startedAt:response.recording.startedAt,maxDurationMs:30000};
+  } catch(error){await discardPRProof(proof,{error});if(prProofRecording===proof)prProofRecording=null;throw captureError(error);}
+  finally{if(recordingStart===starting)recordingStart=null;}
+}
+
+async function capturePRVerification({review,comment,context}) {
+  const current = session;
+  if (!current || current.reviewId !== review.id || !current.prContext || current.status !== 'live') throw new Error('Open this finding on the chosen preview and inspect it before recording a check.');
+  const sameBuild = () => session === current && current.prContext?.headSha === context.headSha &&
+    current.prContext?.url?.toLowerCase() === context.url?.toLowerCase() && current.prContext?.previewUrl === context.previewUrl;
+  if (!sameBuild()) throw new Error('The selected build changed. Open the finding on the current preview before checking it.');
+  assertReferenceReady(current);
+  const expectedUrl = mapPreviewUrl(comment.context?.production?.url,comment.prSourcePreviewUrl || context.sourcePreviewUrl || review.productionUrl,context.previewUrl);
+  const target = await chrome.tabs.get(current.targetTabId);
+  if (savedPageUrl(target.url) !== expectedUrl || current.prContext.previewUrl !== context.previewUrl) throw new Error('Open the finding on this preview before checking it.');
+  const liveComment = projectReviewToPreview(review,context).comments.find(item=>item.id===comment.id);
+  const desired = savedCommentViewport(liveComment);
+  const recordedViewport = (liveComment?.pinSelection?.context || liveComment?.context?.production || liveComment?.selection?.context)?.viewport;
+  const sameViewport = viewport => !recordedViewport || ['width','height'].every(key => Number.isFinite(recordedViewport[key]) && Math.abs((viewport?.[key] || 0) - recordedViewport[key]) < 2);
+  const pageContext = (await tabMessage(current.targetTabId,'GET_CONTEXT',{sessionId:current.id}))?.context;
+  const actual = current.viewportPreset || savedCommentViewport({context:{production:pageContext}});
+  if ((desired && desired !== actual) || !sameViewport(pageContext?.viewport)) throw new Error('Open the finding at its recorded viewport before checking it.');
+  await focusTab(current.targetTabId);
+  // Keep original evidence immutable. This temporary draft is only used to run
+  // the same guarded capture pipeline as an ordinary comment.
+  const draft = await captureDraft(null,{pending:false});
+  try {
+    if (!sameBuild() || draft.context.production.url !== expectedUrl || !sameViewport(draft.context.production.viewport)) throw new Error('The page or selected build changed during the check. Open the finding again.');
+    let evidence = draft.evidence.production;
+    if (evidence.dataUrl.length > 2 * 1024 * 1024) {
+      const bitmap = await createImageBitmap(await (await fetch(evidence.dataUrl)).blob());
+      try {
+        const scale = Math.min(1,1920/bitmap.width);
+        const canvas = new OffscreenCanvas(Math.round(bitmap.width*scale),Math.round(bitmap.height*scale));
+        canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);
+        const blob = await canvas.convertToBlob({type:'image/jpeg',quality:0.78});
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        let raw='';for(let offset=0;offset<bytes.length;offset+=8192)raw+=String.fromCharCode(...bytes.subarray(offset,offset+8192));
+        evidence={dataUrl:`data:image/jpeg;base64,${btoa(raw)}`,width:canvas.width,height:canvas.height,capturedAt:draft.createdAt};
+      } finally {bitmap.close();}
+    }
+    if (evidence.dataUrl.length > 2*1024*1024) throw new Error('This screenshot is too large to share. Use a smaller viewport and try again.');
+    return {dataUrl:evidence.dataUrl,width:evidence.width,height:evidence.height,capturedAt:draft.createdAt,pageUrl:cleanPreviewUrl(expectedUrl)};
+  } finally {await reviews.discardDraft(draft.id);}
+}
+
+function getGitHubWorker() {
+  if (!githubWorker) githubWorker = createGitHubWorker({client:createGitHubConnectionClient(),store:reviews,formatSummary:formatGitHubSummary,
+    openReview:openSavedReview,captureVerification:capturePRVerification,captureProofRecording:capturePRProofRecording,onReviewChanged:async id=>{
+      if(session?.reviewId===id){const review=await reviews.getReview(id);session.prContext=review.prContext;await refreshComments();await publish();}
+    }});
+  return githubWorker;
 }
 
 function referenceBusyReason(current = session, {ownTransition = false} = {}) {
@@ -1122,6 +1264,10 @@ async function handle(message, sender) {
   const isAISettings = isSettings || sender.url?.split(/[?#]/)[0] === chrome.runtime.getURL('ai-settings.html');
   const role = session && Number.isInteger(sender.tab?.id) ? sender.tab.id === session.targetTabId ? 'target' : sender.tab.id === session.sourceTabId ? 'source' : null : null;
   const isDiff = sender.id === chrome.runtime.id && sender.url?.split('?')[0] === chrome.runtime.getURL('diff.html');
+  if (message.type?.startsWith('GITHUB_') && isGitHubRequest(message.type)) {
+    if (sender.id !== chrome.runtime.id || !isReport || (sender.frameId != null && sender.frameId !== 0)) throw new Error('Open Review reports to work with a GitHub pull request.');
+    return getGitHubWorker().handle(message);
+  }
   if (message.type === 'GET_APPEARANCE' && sender.id === chrome.runtime.id && role && sender.frameId === 0) return {ok: true, preference: safeAppearance((await chrome.storage.local.get('diffuseTheme')).diffuseTheme)};
   if (isDiff) {
     if (!session || sender.url !== chrome.runtime.getURL('diff.html') + `?session=${encodeURIComponent(session.id)}` || (message.type !== 'GET_DIFF_CONTEXT' && message.sessionId !== session.id)) throw new Error('This review changed. Close this window and open Diff again.');
@@ -1167,7 +1313,9 @@ async function handle(message, sender) {
   if (message.type === 'START_AUDIT' && (isPopup || isPanel)) return startAudit(message);
   if (message.type === 'OPEN_REPORT' && (isPopup || isPanel || isReport || role === 'target')) {
     const id = message.reviewId || session?.reviewId;
-    await chrome.tabs.create({url: chrome.runtime.getURL('report.html') + (message.loadReview === true ? '?load=1' : id ? `?review=${encodeURIComponent(id)}` : '')});
+    let query = message.loadReview === true ? '?load=1' : id ? `?review=${encodeURIComponent(id)}` : '';
+    if(message.loadGitHub===true){query='?github=load';try{query+=`&preview=${encodeURIComponent(cleanPreviewUrl(message.previewUrl))}`;}catch{}}
+    await chrome.tabs.create({url: chrome.runtime.getURL('report.html') + query});
     return {ok: true};
   }
   if (isReport) {
@@ -1253,7 +1401,8 @@ async function handle(message, sender) {
       if (sender.id !== chrome.runtime.id || role !== 'target' || sender.frameId !== 0) throw new Error('Move comments on the reviewed page.');
       const current = session;
       const offset = reviews.cleanPinOffset(message.offset);
-      const review = await reviews.getReview(current.reviewId);
+      const storedReview = await reviews.getReview(current.reviewId);
+      const review = current.prContext ? projectReviewToPreview(storedReview,current.prContext) : storedReview;
       const comment = review.comments.find(item => item.id === message.commentId);
       if (!comment) throw new Error('This comment is no longer available.');
       const tab = await chrome.tabs.get(current.targetTabId);
@@ -1286,7 +1435,8 @@ async function handle(message, sender) {
         requested = {selector: message.selector};
       }
       const current = session;
-      const review = await reviews.getReview(current.reviewId);
+      const storedReview = await reviews.getReview(current.reviewId);
+      const review = current.prContext ? projectReviewToPreview(storedReview,current.prContext) : storedReview;
       const comment = review.comments.find(item => item.id === message.commentId);
       if (!comment) throw new Error('This comment is no longer available.');
       const tab = await chrome.tabs.get(current.targetTabId);
@@ -1308,7 +1458,8 @@ async function handle(message, sender) {
       const selectedViewport = current.viewportPreset || savedCommentViewport({context: {production: selection.context}});
       if (desired && selectedViewport !== desired) throw new Error('Switch to the comment’s viewport before remapping it.');
       selection.context.viewportProfile = {key: selectedViewport || actual, mode: current.viewportPreset ? 'preset' : 'window'};
-      const saved = await reviews.remapCommentPin(current.reviewId, comment.id, selection, position);
+      let saved = current.prContext ? await reviews.remapPRCommentPin(current.reviewId, comment.id, selection, position,{context:current.prContext}) : await reviews.remapCommentPin(current.reviewId, comment.id, selection, position);
+      if(current.prContext)saved=projectReviewToPreview({...storedReview,comments:[saved]},current.prContext).comments[0];
       if (session === current) {
         await refreshComments(current);
         if (session === current) await publish();
@@ -1317,7 +1468,8 @@ async function handle(message, sender) {
     }
     case 'GET_COMMENT': {
       if (role !== 'target') throw new Error('Open the comment on the audited page.');
-      const review = await reviews.getReview(session.reviewId);
+      const storedReview = await reviews.getReview(session.reviewId);
+      const review = session.prContext ? projectReviewToPreview(storedReview,session.prContext) : storedReview;
       const comment = review.comments.find(item => item.id === message.commentId);
       if (!comment) throw new Error('This comment is no longer available.');
       return {ok: true, comment};
@@ -1355,10 +1507,14 @@ async function handle(message, sender) {
       return {ok: true, draft: await endRecording()};
     case 'RECORDING_FINISHED':
       if (!isMedia) throw new Error('Unsupported recording event.');
+      if(prProofRecording?.id===message.recordingId){await finishPRProof(prProofRecording,message.video).catch(()=>{});return {ok:true};}
+      if(session.recording?.kind==='pr-proof'&&session.recording.id===message.recordingId){await endRecording({interrupted:true});return {ok:true};}
       await finishRecording(message.recordingId, message.video, {notify: true});
       return {ok: true};
     case 'RECORDING_ERROR': {
       if (!isMedia) throw new Error('Unsupported recording event.');
+      if(prProofRecording?.id===message.recordingId){await discardPRProof(prProofRecording,{error:new Error(message.error||'The recording could not be saved.')});return {ok:true};}
+      if(session.recording?.kind==='pr-proof'&&session.recording.id===message.recordingId){await endRecording({interrupted:true});return {ok:true};}
       if (message.recordingId !== session.recording?.id) return {ok: true};
       const draft = session.recording ? await reviews.getDraft(session.recording.draftId) : null;
       session.recording = null;
@@ -1486,7 +1642,9 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     } catch (error) { respond({ok: false, error: error.message}); }
     return true;
   }
-  handle(message, sender).then(respond, error => respond({ok: false, error: error.message, code: error.code, ...(typeof error.pageUrl === 'string' && error.pageUrl.length <= 16384 && isReviewableUrl(error.pageUrl) ? {pageUrl: error.pageUrl} : {})}));
+  handle(message, sender).then(respond, error => respond({ok: false, error: error.message, code: error.code,
+    ...(typeof error.installationUrl === 'string' && /^https:\/\/github\.com\/apps\/[a-z0-9-]+\/installations\/new$/.test(error.installationUrl) ? {installationUrl:error.installationUrl} : {}),
+    ...(typeof error.pageUrl === 'string' && error.pageUrl.length <= 16384 && isReviewableUrl(error.pageUrl) ? {pageUrl: error.pageUrl} : {})}));
   return true;
 });
 

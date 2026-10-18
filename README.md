@@ -1,8 +1,8 @@
 # Diffuse — live design comparison and page audits
 
-**[Download Diffuse 0.11.0 for Chrome](https://github.com/dimitriszoitas/diffuse/releases/download/v0.11.0/Diffuse-0.11.0.zip).** Comment directly on the page with a compact popover, and prepare AI-suggested Jira titles from your feedback. Official installations keep the same approved Jira identity. Install the ZIP, open **Settings → Jira connections → Connect Jira**, and sign in with your own Atlassian account. No installation-ID registration, API token, or personal server is required.
+**[Download Diffuse 0.12.0 for Chrome](https://github.com/dimitriszoitas/diffuse/releases/download/v0.12.0/Diffuse-0.12.0.zip).** Give and receive feedback on GitHub pull requests, with original and updated screenshots or recordings directly in the PR. Load shared findings back onto a working preview, make changes, and capture evidence for recheck. On-page comments, AI audits, live Diff, and Jira export remain included.
 
-Light, Dark, and System appearance and optional read-only Figma MCP references remain included. See the [release notes](docs/releases/0.11.0.md), [privacy policy](docs/PRIVACY.md), and [terms](docs/TERMS.md).
+Light, Dark, and System appearance and optional read-only Figma MCP references remain included. See the [release notes](docs/releases/0.12.0.md), [privacy policy](docs/PRIVACY.md), and [terms](docs/TERMS.md).
 
 Diffuse uses a native Chrome side drawer for review controls. **Start review** opens it; for an active review, click the extension icon and **Open review sidebar**. There is no floating toolbar. The webpage resizes beside Diffuse, and closing the drawer preserves the review and unfinished comment. Chrome chooses the drawer side and owns its resize handle.
 
@@ -14,14 +14,16 @@ Diffuse layers a **continuously running prototype** over a production page in Ch
 
 ## Install in Chrome
 
-1. Use Chrome 116 or later and unzip the [current release](https://github.com/dimitriszoitas/diffuse/releases/download/v0.11.0/Diffuse-0.11.0.zip). Keep the resulting **Diffuse** folder somewhere permanent.
+1. Use Chrome 116 or later and unzip the [current release](https://github.com/dimitriszoitas/diffuse/releases/download/v0.12.0/Diffuse-0.12.0.zip). Keep the resulting **Diffuse** folder somewhere permanent.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Choose **Load unpacked** and select the unzipped **Diffuse** folder. If developing from a source checkout instead, select its **`extension` folder**.
 4. Pin **Diffuse — Live design comparison** in Chrome’s extensions menu.
 
 The extension loads directly from its files; no build step is needed. If Diffuse updates while a page is open, its old controls stop and show a refresh notice. Unsaved comment text remains available to copy before refreshing; an interrupted Save is never retried automatically. After changing extension code, choose **Reload** on its card in `chrome://extensions`, then refresh both comparison pages.
 
-**Moving from 0.10.1 or earlier:** export the reviews you want to keep using **⋯ → Export review** before upgrading. Leave the old extension and its folder intact, install 0.11.0 from a separate folder, then use **Load review** to import those files. Disable the old copy after checking your reviews in the new one. The new stable identity has its own storage, so reconnect Jira and any optional AI/Figma settings. Replacing the old files does not transfer old storage. For subsequent official releases with the same identity, update the installed folder and choose **Reload** without uninstalling.
+**Updating an official 0.10.2 or 0.11.0 installation:** replace the files in its existing Diffuse folder, choose **Reload** in `chrome://extensions`, and refresh the reviewed pages. Keep the same installation; its identity, saved reviews, and settings remain.
+
+**Moving from 0.10.1 or earlier:** export the reviews you want to keep using **⋯ → Export review** before upgrading. Leave the old extension and its folder intact, install 0.12.0 from a separate folder, then use **Load review** to import those files. Disable the old copy after checking your reviews in the new one. The stable identity introduced in 0.10.2 has its own storage, so reconnect Jira and any optional AI/Figma settings. Replacing the old files does not transfer old storage.
 
 ## Choose an appearance
 
@@ -167,6 +169,18 @@ The notebook sidebar can be collapsed and expanded using its sidebar icon. **Set
 A confirmed rejection can be retried explicitly. If Jira may have accepted a request but the response was lost, Diffuse requires a manual check in Jira and blocks another automatic write. It does not treat missing evidence as a fully successful delivery. Files are limited to 20 MiB each, 40 MiB per observation and the site's own attachment limit; evidence is validated before creating the issue.
 
 Jira access follows the permissions of the account and sites you authorize. Your organization may require an administrator to allow third-party apps. Atlassian may show an unreviewed-app notice. Separate accounts remain separate connections; connecting an account does not send review content or create tickets. See [deployment verification](docs/jira-integration.md) for the checks performed and remaining live-account coverage.
+
+## Give and receive feedback on a pull request
+
+Connect your GitHub account in **Settings → GitHub reviews**. An owner installs the **Diffuse Review** app on the repositories they choose. No personal access token or separate server is needed. Sign-in enables public repositories by default. **Include private repositories** requests GitHub's broader `repo` permission for repositories your account can access; Diffuse also checks that its app is installed on each chosen repository.
+
+The report has two activities: **Give feedback** for someone reviewing the work, and **Work through feedback** for someone making changes. A designer can do either; stakeholders, managers, and engineers use the same shared review.
+
+- Select findings, enter a PR and the preview you reviewed, then inspect the text, evidence, destination visibility, and commit before publishing. Diffuse maintains one summary comment with screenshots and recordings.
+- Read the findings directly in GitHub, or use **Load review → Load from a GitHub PR** to open their pins on your chosen preview with the captured route and viewport.
+- Capture and inspect an updated screenshot or a short recording before sharing **Ready for recheck**, **Verified**, or **Still present**. The PR keeps the original capture alongside the updated evidence and identifies who checked which commit. A new commit makes earlier checks historical; it does not automatically resolve findings.
+
+Read access allows loading feedback. Publishing evidence and changing shared statuses currently require repository write access. The activity selector does not grant permissions. Previously published findings remain when the author adds or updates a selection. See the [GitHub review guide](docs/github-review.md) for the full workflow, recovery, and privacy details.
 
 ## Try the included demo
 

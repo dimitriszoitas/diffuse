@@ -150,3 +150,56 @@ test('Figma design provenance and reference screenshot travel with the review, c
  source.comments[0].evidence.designReferenceAdditional.push(source.comments[0].evidence.designReference);
  assert.throws(()=>createReviewBundle(source,{now:when}),/list is invalid or too large/);
 });
+
+test('portable PR identities and recheck history survive fresh local IDs without sharing connection metadata',()=>{
+ const source=fixture();source.reviewKey='portable-review-123';source.comments[0].findingKey='portable-finding-123';
+ const previewUrl='https://next.example.test/';
+ source.prContext={owner:'dimitriszoitas',repo:'diffuse',number:12,url:'https://github.com/dimitriszoitas/diffuse/pull/12',headSha:'a'.repeat(40),previewUrl,sourcePreviewUrl:source.productionUrl,association:'manual',token:'secret'};
+ source.prRemote={remoteReviewId:'secret',connectionId:'secret',remoteRevision:2};
+ source.comments[0].verifications=[{id:'verification-123',buildSha:'a'.repeat(40),previewUrl,status:'verified',reviewer:{login:'reviewer',token:'secret'},checkedAt:when,note:'Retested on the preview.',evidence:{dataUrl:png,width:1280,height:800,capturedAt:when,pageUrl:'https://next.example.test/releases/42'}}];
+ const bundle=createReviewBundle(source,{now:when});let i=0;
+ const first=prepareImportedReview(bundle,{uuid:()=>`fresh-${++i}`,now:when}),second=prepareImportedReview(bundle,{uuid:()=>`fresh-${++i}`,now:when});
+ assert.equal(bundle.version,1);assert.notEqual(first.review.id,second.review.id);assert.notEqual(first.comments[0].id,second.comments[0].id);
+ assert.equal(first.review.reviewKey,'portable-review-123');assert.equal(first.comments[0].findingKey,'portable-finding-123');assert.equal(second.comments[0].findingKey,first.comments[0].findingKey);
+ assert.equal(first.comments[0].verifications[0].status,'verified');assert.equal(JSON.stringify(bundle).includes('secret'),false);assert.equal(first.review.prRemote,undefined);
+ const duplicate=structuredClone(bundle);duplicate.review.comments.push(structuredClone(duplicate.review.comments[0]));assert.throws(()=>parseReviewBundle(duplicate),/duplicate finding/);
+});
+
+test('legacy review imports acquire portable identity once and retain it in subsequent exports',()=>{
+ const legacy=createReviewBundle(fixture(),{now:when});let id=0,key=0;
+ const imported=prepareImportedReview(legacy,{uuid:()=>`local-${++id}`,identityUuid:()=>`portable-${++key}`,now:when});
+ assert.equal(imported.review.reviewKey,'portable-1');assert.equal(imported.comments[0].findingKey,'portable-2');
+ const exported=createReviewBundle({...imported.review,comments:imported.comments},{now:when});
+ const repeated=prepareImportedReview(exported,{uuid:()=>`local-${++id}`,identityUuid:()=>assert.fail('Keys must survive repeated export/import'),now:when});
+ assert.equal(repeated.review.reviewKey,imported.review.reviewKey);assert.equal(repeated.comments[0].findingKey,imported.comments[0].findingKey);
+});
+
+test('updated behavior recordings retain their capture metadata and original evidence through shared transfer',()=>{
+ const source=fixture(),original=structuredClone(source.comments[0].evidence);
+ source.reviewKey='portable-review-proof';source.comments[0].findingKey='portable-finding-proof';
+ source.comments[0].verifications=[{id:'recording-proof-1',buildSha:'b'.repeat(40),previewUrl:'https://next.example.test/',status:'ready-for-recheck',reviewer:{login:'recipient'},checkedAt:when,note:'Adjusted the menu behavior.',evidence:{dataUrl:'data:video/webm;codecs=vp9;base64,dmlkZW8=',mimeType:'video/webm;codecs=vp9',durationMs:30000,width:390,height:844,capturedAt:when,pageUrl:'https://next.example.test/releases/42',accessToken:'secret'}}];
+ const bundle=createReviewBundle(source,{now:when});let i=0;
+ const imported=prepareImportedReview(parseReviewBundle(bundle),{uuid:()=>`fresh-proof-${++i}`,now:when});
+ const record=imported.comments[0].verifications[0];
+ assert.equal(record.evidence.kind,'recording');assert.equal(record.evidence.durationMs,30000);assert.equal(record.reviewer.login,'recipient');
+ assert.equal(record.evidence.mimeType,'video/webm;codecs=vp9');assert.deepEqual(imported.comments[0].evidence,original);assert(!JSON.stringify(bundle).includes('secret'));
+ const malformed=structuredClone(bundle);malformed.review.comments[0].verifications[0].evidence.durationMs=30001;
+ assert.throws(()=>parseReviewBundle(malformed),/30 seconds/);
+});
+
+test('per-build anchors and new-preview source identity are portable without replacing original attachments',()=>{
+ const source=fixture(),original=structuredClone(source.comments[0]),target=remapped(source);
+ target.context.url='https://next.example.test/releases/42?tab=activity#details';target.context.viewportProfile=source.comments[0].context.production.viewportProfile;
+ source.prContext={owner:'dimitriszoitas',repo:'diffuse',number:12,headSha:'a'.repeat(40),previewUrl:'https://next.example.test/',sourcePreviewUrl:source.productionUrl};
+ source.comments[0].prAttachments=[{buildSha:'a'.repeat(40),previewUrl:'https://next.example.test/',selection:{...target,token:'secret'},pinPoint:{x:.2,y:.3,token:'secret'},updatedAt:when,token:'secret'}];
+ const bundle=createReviewBundle(source,{now:when});let index=0;
+ const imported=prepareImportedReview(bundle,{uuid:()=>`anchor-${++index}`,now:when});
+ for(const field of ['selection','context','evidence','fields'])assert.deepEqual(imported.comments[0][field],original[field]);
+ assert.equal(imported.comments[0].prAttachments[0].selection.selector,'#remapped');assert.equal(JSON.stringify(bundle).includes('secret'),false);
+ const bad=structuredClone(bundle);bad.review.comments[0].prAttachments[0].selection.context.url='https://next.example.test/other';assert.throws(()=>parseReviewBundle(bad),/page/);
+ const wrongViewport=structuredClone(bundle);wrongViewport.review.comments[0].prAttachments[0].selection.context.viewportProfile.key='phone';assert.throws(()=>parseReviewBundle(wrongViewport),/viewport/);
+ const duplicated=structuredClone(bundle);duplicated.review.comments[0].prAttachments.push(structuredClone(duplicated.review.comments[0].prAttachments[0]));assert.throws(()=>parseReviewBundle(duplicated),/duplicate attachments/);
+ const recent=fixture();recent.comments[0].prSourcePreviewUrl='https://example.test/?access_token=secret';
+ const recentBundle=createReviewBundle(recent,{now:when});assert.equal(recentBundle.review.comments[0].prSourcePreviewUrl,'https://example.test/');
+ recentBundle.review.comments[0].prSourcePreviewUrl='https://unrelated.test/';assert.throws(()=>parseReviewBundle(recentBundle),/source must match/);
+});

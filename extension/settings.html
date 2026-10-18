@@ -4,7 +4,7 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Settings · Diffuse</title>
   <link rel="stylesheet" href="ai-settings.css"><link rel="stylesheet" href="jira-settings.css"><link rel="stylesheet" href="settings.css"><link rel="stylesheet" href="ui-chrome.css">
-  <script src="ai-settings.js" type="module"></script><script src="jira-settings.js" type="module"></script><script src="settings.js" type="module"></script><script src="mcp-settings.js" type="module"></script><script src="select-controls.js" defer></script>
+  <script src="ai-settings.js" type="module"></script><script src="jira-settings.js" type="module"></script><script src="settings.js" type="module"></script><script src="github-settings.js" type="module"></script><script src="mcp-settings.js" type="module"></script><script src="select-controls.js" defer></script>
   <link rel="stylesheet" href="ui-theme.css"><link rel="stylesheet" href="ui.css">
   <link rel="stylesheet" href="ui-dark.css">
   <script src="theme.js"></script>
@@ -14,7 +14,7 @@
   <main>
     <section class="intro"><h1>Settings</h1><p>Appearance, AI review, design references, and connected accounts.</p></section>
     <div class="settings-layout">
-      <nav class="settings-nav" aria-label="Settings sections"><a href="#appearance"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v16M12 4a8 8 0 0 1 0 16Z"/></svg>Appearance</a><a href="#ai"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3 1.7 5.3L16 10l-5.3 1.7L9 17l-1.7-5.3L2 10l5.3-1.7L9 3Z"/><path d="m18 14 .9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9L18 14Z"/></svg>AI review</a><a href="#figma"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3H8a4 4 0 0 0 0 8h4V3Zm0 0h4a4 4 0 0 1 0 8h-4V3ZM12 11H8a4 4 0 0 0 0 8h4v-8Zm0 0h4a4 4 0 1 1-4 4v-4ZM12 19v1a4 4 0 1 1-4-4"/></svg>Figma reference</a><a href="#jira"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 13 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 1 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/></svg>Jira connections</a><a href="#browser"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01m-2 7 3 2-3 2m6 0h3"/></svg>Browser &amp; shortcuts</a></nav>
+      <nav class="settings-nav" aria-label="Settings sections"><a href="#appearance"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v16M12 4a8 8 0 0 1 0 16Z"/></svg>Appearance</a><a href="#ai"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3 1.7 5.3L16 10l-5.3 1.7L9 17l-1.7-5.3L2 10l5.3-1.7L9 3Z"/><path d="m18 14 .9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9L18 14Z"/></svg>AI review</a><a href="#figma"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3H8a4 4 0 0 0 0 8h4V3Zm0 0h4a4 4 0 0 1 0 8h-4V3ZM12 11H8a4 4 0 0 0 0 8h4v-8Zm0 0h4a4 4 0 1 1-4 4v-4ZM12 19v1a4 4 0 1 1-4-4"/></svg>Figma reference</a><a href="#jira"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 13 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 1 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/></svg>Jira connections</a><a href="#github"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="6" r="2"/><path d="M6 7v10m12-9v3a4 4 0 0 1-4 4H6"/></svg>GitHub reviews</a><a href="#browser"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01m-2 7 3 2-3 2m6 0h3"/></svg>Browser &amp; shortcuts</a></nav>
       <div class="settings-content">
         <section id="appearance" class="settings-section" aria-labelledby="appearance-heading">
           <div class="settings-section-heading"><h2 id="appearance-heading">Appearance</h2><p>A comfortable view for your workspace. Only Diffuse changes; the website keeps its own appearance.</p></div>
@@ -84,6 +84,20 @@
 
           <details class="connection-details"><summary>Connection details</summary><div class="installation"><label for="installation-id">Diffuse extension ID</label><div class="copy-field"><input id="installation-id" type="text" readonly spellcheck="false" aria-describedby="installation-help"><button id="copy-installation" type="button" disabled>Copy ID</button></div><p class="help" id="installation-help">Support may ask for this identifier to troubleshoot a connection. It is safe to share.</p></div></details>
           <p class="section-note">Connecting an account does not send any comments or evidence. Review your tickets before creating them.</p>
+        </section>
+        <section id="github" class="settings-section" aria-labelledby="github-heading">
+          <div class="settings-section-heading"><h2 id="github-heading">GitHub reviews</h2><p>Give feedback on a pull request or bring someone’s feedback onto your preview. Your role can change from one review to the next.</p></div>
+          <section id="github-connections" class="connections" aria-busy="true" aria-labelledby="github-connections-heading">
+            <div class="section-heading"><h3 id="github-connections-heading">Connected accounts</h3><span class="status" id="github-count">Loading…</span></div>
+            <p id="github-feedback" role="status" aria-live="polite" hidden></p>
+            <div id="github-account-list"></div>
+            <p class="empty-state" id="github-empty" hidden>Sign in with GitHub to share feedback and native screenshots or recordings on pull requests.</p>
+            <label class="github-private-access"><input id="github-private-access" type="checkbox"><span>Include private repositories</span></label>
+            <p class="help">Public repositories are enabled by default. Including private repositories requests GitHub’s <code>repo</code> permission, granting broad read/write access to public and private repositories your account can access. Diffuse still checks that its app is installed on each chosen repository.</p>
+            <button class="primary" id="github-connect" type="button" disabled>Connect GitHub ↗</button>
+            <p class="help">GitHub opens in a separate sign-in window. Your repository administrator may need to approve the Diffuse app.</p>
+          </section>
+          <p class="section-note">Connecting does not publish feedback. A publish preview shows the repository, its visibility, and the findings you are about to share. People can read published feedback in GitHub without installing Diffuse.</p>
         </section>
         <section id="browser" class="settings-section" aria-labelledby="browser-heading"><div class="settings-section-heading"><h2 id="browser-heading">Browser &amp; shortcuts</h2><p>Manage local file access and review keyboard shortcuts.</p></div>
           <div class="settings-card"><div class="section-heading"><h3>Local HTML files</h3><span class="status" id="file-access-status" role="status">Checking…</span></div><p class="help">To review HTML files on your computer, enable “Allow access to file URLs” in Chrome’s extension settings.</p><div class="actions"><button id="browser-settings" type="button">Manage browser access <span aria-hidden="true">↗</span></button><button id="check-access" type="button">Check again</button></div><p id="browser-feedback" role="status" hidden></p></div>

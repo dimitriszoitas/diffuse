@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="report.css">
   <link rel="stylesheet" href="report-sidebar.css">
   <link rel="stylesheet" href="jira-export.css">
+  <link rel="stylesheet" href="github-review.css">
   <script src="report.js" type="module"></script>
   <link rel="stylesheet" href="ui-chrome.css">
   <script src="select-controls.js" defer></script>
@@ -20,6 +21,7 @@
     <div class="sidebar-top"><button id="toggle-review-sidebar" class="sidebar-toggle" type="button" aria-controls="review-sidebar" aria-expanded="true" aria-label="Collapse review sidebar" title="Collapse review sidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m6-12-4 4 4 4"/></svg></button>
     <a class="brand" href="report.html" aria-label="Diffuse review notebook"><span class="brand-mark" aria-hidden="true"><i></i><i></i></span>Diffuse<span class="brand-tag">Review</span></a></div>
     <div class="list-heading"><h2>Saved reviews</h2><button id="refresh-reviews" class="small-icon" title="Refresh reviews" aria-label="Refresh reviews">↻</button></div>
+    <button id="load-pr-review" class="button github-load-entry" type="button">Load from PR</button>
     <div class="review-visibility-tabs" role="group" aria-label="Review visibility"><button id="review-view-saved" type="button" aria-pressed="true">Saved</button><button id="review-view-hidden" type="button" aria-pressed="false">Hidden</button></div>
     <p id="hidden-reviews-hint" class="hidden-reviews-hint" hidden>Hidden reviews keep all their comments and evidence. Restore them at any time.</p>
     <nav id="review-list" class="review-list" aria-label="Saved reviews"><p class="sidebar-empty">Loading your reviews…</p></nav>

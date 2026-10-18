@@ -1,14 +1,14 @@
 # Diffuse Privacy Notice
 
-Updated: 18 October 2026
+Updated: 19 October 2026
 
-This notice covers the Diffuse Chrome extension and its hosted Jira connection service. Diffuse helps you compare pages, save review evidence, and optionally use AI, Figma references, and Jira.
+This notice covers the Diffuse Chrome extension and its hosted Jira and GitHub connection services. Diffuse helps you compare pages, save review evidence, and optionally use AI, Figma references, Jira, and shared PR reviews.
 
 ## Reviews on your device
 
 Diffuse reads the tabs and pages you select and captures review content after your actions and Chrome's permission prompts. Saved content can include page titles and URLs, comments, screenshots, silent recordings, viewport and element details, and accepted AI findings. Screenshots and recordings can include sensitive information visible on the page. Recordings do not capture microphone or tab audio.
 
-Reviews and evidence are stored in the extension's local browser database in your Chrome profile. Settings and connection credentials use Chrome extension storage. Diffuse does not sync reviews between devices. The live comparison stream stays inside Chrome; the websites being reviewed continue their own normal network activity.
+Reviews and evidence are stored in the extension's local browser database in your Chrome profile. Settings and connection credentials use Chrome extension storage. Reviews are not automatically synchronized between devices. Explicit GitHub publication makes the selected review available to authorized collaborators as described below. The live comparison stream stays inside Chrome; the websites being reviewed continue their own normal network activity.
 
 Delete a comment or review in Diffuse to remove its local review record and evidence. Clearing extension data or removing the extension can also remove local data. Downloaded reports, copied content, and files shared with other people remain wherever you saved or sent them. Review exports include saved evidence and context but exclude account credentials.
 
@@ -32,7 +32,21 @@ The Jira service is hosted on Vercel and uses a Neon PostgreSQL database. These 
 
 The service periodically reports stored Atlassian account IDs and the oldest collection time of their account data to Atlassian's Personal Data Reporting API. It follows Atlassian's reporting interval and retry instructions. When Atlassian reports an account as closed or its stored data as outdated, the service deletes all backend connections for that account and their associated delivery records and evidence. A confirmed unusable refresh grant also removes its connection. Locally cached connection profiles are cleared when the extension next validates the connection and receives an unauthorized response; an offline browser cannot be cleared immediately by the service.
 
-## Retention and disconnection
+## GitHub account connections and shared reviews
+
+GitHub sign-in takes place with GitHub through Diffuse's OAuth app. The hosted Diffuse service encrypts its expiring access and refresh tokens and stores your account identifier, login and display name. It keeps a hash of the extension's connection credential. The service checks the signed-in account's current repository access before returning shared feedback or accepting an update. It does not receive your GitHub password. Connecting an account does not upload reviews.
+
+Sign-in requests public-repository access (`public_repo`) by default. Selecting **Include private repositories** requests GitHub's broader `repo` permission, which grants read/write access to public and private repositories your account can access. The OAuth permission itself is not limited to a chosen repository. Diffuse separately requires its GitHub App to be installed on each repository used for shared reviews and checks both the installation and your current access. Both sign-in choices include `offline_access` so the service can refresh expiring tokens. You can manage the OAuth authorization and the repository app installation separately in GitHub.
+
+Looking up a PR sends its link to the service and GitHub to retrieve the PR, current commit, repository access, and available deployment URLs. Publishing sends only the selected findings and their evidence to the service. This includes authored text, page URLs and context, element and viewport details, screenshots, recordings, and accepted AI reference context. The service stores the portable review encrypted so authorized collaborators can load it into Diffuse. It uploads the selected media to GitHub's native attachment service and writes one summary comment using the installed Diffuse app. Public-repository comments and attachments are public; GitHub applies its own access rules to private-repository content.
+
+Shared status updates store the signed-in person's GitHub identity, status, time, commit, preview URL, optional note, and updated evidence. New **Ready for recheck**, **Verified**, and **Still present** updates require a fresh screenshot or silent recording of up to 30 seconds. Capturing creates a private draft for inspection; the final **Share** action sends it to the service and GitHub. The original and updated captures remain available in the PR. Imported names are not treated as authenticated verification claims. The person confirms which build they checked; Diffuse does not independently prove that a preview URL serves that commit. Loading a shared review saves a local copy in the recipient's Chrome profile. Remapping a finding on a new preview keeps the original evidence and records a separate anchor.
+
+GitHub data uses the same Vercel and Neon hosting providers as the Jira service, with separate encrypted records. GitHub processes comments, media, and sign-in data under [GitHub's privacy statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement).
+
+Abandoned GitHub uploads with no publication attempt expire after 24 hours and are removed during service cleanup. If a publication attempt has an unconfirmed outcome, its receipt and required transfer chunks remain available until that outcome is resolved, so retrying cannot create a duplicate PR comment. Published review bundles, evidence, publication receipts, and verification history have no fixed time-based expiry so collaborators can reopen them. Disconnecting GitHub deletes that connection's server token and the local connection credential; it does not delete shared project reviews, local copies, or GitHub comments and attachments. Deleting a local review also does not remove shared copies. Contact the maintainer using the contact route below for help removing stored shared review data. Manage the app installation and authorization separately in GitHub.
+
+## Jira retention and disconnection
 
 - Uploaded evidence bytes are removed from the service's active database after confirmed successful attachment upload. Unfinished evidence expires seven days after the delivery is prepared; expired bytes are removed when backend cleanup next runs during a service request.
 - Active connection records, ticket-text snapshots, and delivery receipts have no fixed time-based expiry. They are removed by the privacy-reporting actions described above or by a successful **Disconnect** in Jira connections. Disconnect deletes that connection and its associated snapshots, receipts, and remaining evidence from the active backend database, and removes its local connection credential.

@@ -81,6 +81,13 @@
     finally { lock(false); }
   }
   $('choose-page-review-file').addEventListener('click', () => $('page-review-file').click());
+  $('load-github-review')?.addEventListener('click', async () => {
+    if(loading)return;
+    lock(true);
+    try {await sendMessage('OPEN_REPORT',{loadGitHub:true,previewUrl:sourceTab?.url});}
+    catch(error){notice(describeError(error));}
+    finally{lock(false);}
+  });
   $('page-review-file').addEventListener('change', async () => {
     const file = $('page-review-file').files?.[0]; if (!file || loading) return;
     lock(true); pendingReview = null; $('open-loaded-review').hidden = true; notice('Loading review file…');
