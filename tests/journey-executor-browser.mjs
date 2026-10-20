@@ -11,7 +11,7 @@ const project = resolve(import.meta.dirname, '..');
 const temp = await mkdtemp(join(tmpdir(), 'diffuse-journey-browser-'));
 const extension = join(temp, 'extension');
 await mkdir(extension);
-for (const file of ['journey-executor.mjs', 'journey-page.js']) await cp(join(project, 'extension', file), join(extension, file));
+for (const file of ['journey-executor.mjs', 'journey-page.js', 'recording-pointer.js']) await cp(join(project, 'extension', file), join(extension, file));
 await writeFile(join(extension, 'manifest.json'), JSON.stringify({
   manifest_version: 3, name: 'Journey executor fixture', version: '1.0',
   permissions: ['tabs', 'scripting', 'debugger'], host_permissions: ['http://127.0.0.1/*'],

@@ -1,10 +1,10 @@
 # Diffuse — live design comparison and page audits
 
-**[Download Diffuse 0.13.0 for Chrome](https://github.com/dimitriszoitas/diffuse/releases/download/v0.13.0/Diffuse-0.13.0.zip).** Give AI a task to try across your app, then inspect the journey recording, notes, and suggested feedback. On-page comments, AI audits, live Diff, Jira export, and shared GitHub reviews with original and updated evidence remain included.
+**[Download Diffuse 0.14.0 for Chrome](https://github.com/dimitriszoitas/diffuse/releases/download/v0.14.0/Diffuse-0.14.0.zip).** Give AI a task to try across your app, watch where it clicked, ask about its choices, and fork an alternative route while keeping the original recording and notes. On-page comments, AI audits, live Diff, Jira export, and shared GitHub reviews with original and updated evidence remain included.
 
-Light, Dark, and System appearance and optional read-only Figma MCP references remain included. See the [release notes](docs/releases/0.13.0.md), [privacy policy](docs/PRIVACY.md), and [terms](docs/TERMS.md).
+Light, Dark, and System appearance and optional read-only Figma MCP references remain included. See the [release notes](docs/releases/0.14.0.md), [privacy policy](docs/PRIVACY.md), and [terms](docs/TERMS.md).
 
-Diffuse uses a native Chrome side drawer for review controls. **Start review** opens it; for an active review, click the extension icon and **Open review sidebar**. There is no floating toolbar. The webpage resizes beside Diffuse, and closing the drawer preserves the review and unfinished comment. Chrome chooses the drawer side and owns its resize handle.
+Diffuse uses a native Chrome side drawer for review controls. **Start Diffuse** opens it; for an active review, click the extension icon and **Start Diffuse**. There is no floating toolbar. The webpage resizes beside Diffuse, and closing the drawer preserves the review and unfinished comment. Chrome chooses the drawer side and owns its resize handle.
 
 Keep both comparison pages in one Chrome window. Background tabs may retain their old viewport until activated, so visit the prototype once and return after changing the drawer width if the viewport warning appears. Native drawer pixels are excluded from screenshots and recordings. New comment pins follow their captured element or area anchor through scrolling and responsive layout changes. Pins leave the screen with their target instead of sticking to the viewport edge. Older area captures without anchors retain their recorded document position; an original screenshot remains available when a target cannot be located. AI preview highlights remain tied to their captured viewport. The existing Chrome toolbar gesture is still required to grant capture on each reviewed tab. Selecting a new tab from a persistent drawer does not itself grant capture access.
 
@@ -14,7 +14,7 @@ Diffuse layers a **continuously running prototype** over a production page in Ch
 
 ## Install in Chrome
 
-1. Use Chrome 116 or later and unzip the [current release](https://github.com/dimitriszoitas/diffuse/releases/download/v0.13.0/Diffuse-0.13.0.zip). Keep the resulting **Diffuse** folder somewhere permanent.
+1. Use Chrome 116 or later and unzip the [current release](https://github.com/dimitriszoitas/diffuse/releases/download/v0.14.0/Diffuse-0.14.0.zip). Keep the resulting **Diffuse** folder somewhere permanent.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Choose **Load unpacked** and select the unzipped **Diffuse** folder. If developing from a source checkout instead, select its **`extension` folder**.
 4. Pin **Diffuse — Live design comparison** in Chrome’s extensions menu.
@@ -23,7 +23,7 @@ The extension loads directly from its files; no build step is needed. If Diffuse
 
 **Updating an official 0.10.2, 0.11.0, or 0.12.0 installation:** replace the files in its existing Diffuse folder, choose **Reload** in `chrome://extensions`, and refresh the reviewed pages. Keep the same installation; its identity, saved reviews, and settings remain.
 
-**Moving from 0.10.1 or earlier:** export the reviews you want to keep using **⋯ → Export review** before upgrading. Leave the old extension and its folder intact, install 0.13.0 from a separate folder, then use **Load review** to import those files. Disable the old copy after checking your reviews in the new one. The stable identity introduced in 0.10.2 has its own storage, so reconnect Jira and any optional AI/Figma settings. Replacing the old files does not transfer old storage.
+**Moving from 0.10.1 or earlier:** export the reviews you want to keep using **⋯ → Export review** before upgrading. Leave the old extension and its folder intact, install 0.14.0 from a separate folder, then use **Load review** to import those files. Disable the old copy after checking your reviews in the new one. The stable identity introduced in 0.10.2 has its own storage, so reconnect Jira and any optional AI/Figma settings. Replacing the old files does not transfer old storage.
 
 ## Choose an appearance
 
@@ -40,9 +40,11 @@ Appearance is a local preference. It does not restyle the website, change captur
 
 ## Test a journey across pages
 
-Open **Test a journey** in the review sidebar and give AI a goal, such as “Add Oat milk to the ingredients table with ml as its unit.” Add optional success criteria or test data, then let Diffuse find the route through the app using your configured Anthropic key and model.
+Open **Journey Testing with AI** in the review sidebar and give AI a goal, such as “Add Oat milk to the ingredients table with ml as its unit.” Add optional success criteria or test data, then let Diffuse find the route through the app using your configured Anthropic key and model.
 
 The result includes a silent movie of the attempt, a timeline with screenshots and notes, and observed page visits, click attempts, and backtracking. **Watch this step** seeks to that moment in the recording. Pause and Resume affect both the actions and the recording; download the full WebM movie to keep or share it.
+
+After a run, choose **Ask about this step** to discuss a recorded choice. The answer can offer **Fork journey…** with an editable alternative route. Starting it creates a separate run from the original starting page, keeping the original evidence. Existing app data is not reset. Yellow click pulses make the actions visible in both journey and comment recordings.
 
 AI assesses discoverability, clarity, effort, feedback, and recovery with supporting evidence and confidence. It leaves untested dimensions unscored. Accept useful findings as ordinary review comments with their captured page, screenshot, and reproduction steps for Jira, GitHub, or exports. The full journey movie stays in local history and is downloaded separately.
 
@@ -54,7 +56,7 @@ For a page opened directly from your computer (`file:///…/page.html`), open `c
 
 ## Start a review, then add Diff when needed
 
-Start on the page being reviewed: click the Chrome extension icon, choose **Start review**, and allow access to that page. The side drawer gives you comments, region selection, recording, AI review and reports. There is no upfront audit/comparison choice.
+Start on the page being reviewed: click the Chrome extension icon, choose **Start Diffuse**, and allow access to that page. The side drawer separates Review with AI, Journey Testing with AI, and Diff View, with a shortcut legend for comments. Recording is available inside each comment. There is no upfront audit/comparison choice.
 
 Choose **Diff** in the drawer when you want a live reference. Select an open reference tab, grant that selected site access, then confirm **the same tab** in Chrome’s sharing dialog. A capture handle identifies the selected reference; a mismatched tab or non-tab surface is rejected before replacing the working stream. The live reference stays in the offscreen capture document, so closing the small selector window does not stop it.
 
@@ -62,7 +64,7 @@ With **Link scroll** off, wheel or trackpad scrolling over the production side m
 
 The existing divider and opacity controls appear once connected. **Hide reference / Show reference** toggles the overlay. Use Diff again to change or remove the reference. The review identity and saved evidence stay together across these changes, and each saved observation retains its own captured page/reference context. Reference changes wait until pending comments, recordings, captures and AI actions are finished. Cancellation preserves the current reference.
 
-**Start review** opens the native Chrome side drawer. To reopen it during a review, click Diffuse’s extension icon and choose **Open review sidebar**. The drawer resizes the page and keeps unfinished comments when closed. Chrome controls its side and resize handle. Visit the reference once after resizing if a viewport mismatch appears: inactive tabs may retain their previous dimensions. A full reference reload clears its capture identity; choose it again through Diff. Saved comments remain intact.
+**Start Diffuse** opens the native Chrome side drawer. To reopen it during a review, click Diffuse’s extension icon and choose **Start Diffuse**. The drawer resizes the page and keeps unfinished comments when closed. Chrome controls its side and resize handle. Visit the reference once after resizing if a viewport mismatch appears: inactive tabs may retain their previous dimensions. A full reference reload clears its capture identity; choose it again through Diff. Saved comments remain intact.
 
 **Keyboard shortcuts:** `Alt+Shift+D` toggles a connected reference; `Alt+Shift+P` switches between reference and reviewed page. Tap **C**, release it, then click an element to leave a comment; hold **C + left-click-drag** to select an area. Escape cancels. The shortcuts are ignored while typing in an editable field.
 
@@ -80,7 +82,7 @@ Every captured comment keeps its viewport view and exact dimensions. Pins and dr
 
 ## Comment with screenshot evidence
 
-Starting from the reviewed page’s actual Chrome toolbar icon grants that page’s initial capture access. A persistent drawer on a newly selected tab does not grant access by itself. If needed, click Diffuse in Chrome’s toolbar on the reviewed page and choose **Enable capture & return**; a pending capture retries without discarding its draft.
+Starting from the reviewed page’s actual Chrome toolbar icon grants that page’s initial capture access. A persistent drawer on a newly selected tab does not grant access by itself. If needed, click Diffuse in Chrome’s toolbar on the reviewed page and choose **Start Diffuse**; a pending capture retries without discarding its draft.
 
 1. Open the page and state you want to review. If you have connected a reference through **Diff**, bring both apps into matching states and wait for the live reference.
 2. Tap **C**, release it, then click the reviewed element to leave a comment. Hold **C** and drag to select an area. Press Escape to cancel.
@@ -110,7 +112,7 @@ In the comment form, choose **Short recording**, then **Start recording**. The f
 
 The clip captures the whole visible page as you interact, including Diffuse’s controls and any live prototype overlay. A selected region is screenshot context, not a video crop. No microphone or tab audio is recorded. Keep **Short recording** selected to attach the clip; choosing **Screenshot** before saving excludes the clip from the saved comment.
 
-The drawer’s **Record page** control is available throughout the review. They first capture clean starting screenshots—paired in comparison mode, one in audit mode—and open the comment form afterward. These page-level recordings start with an editable page component label. Ending the session with **Stop** preserves an unfinished recording in the report.
+Recordings start inside comments. A yellow pointer halo and click pulse show the interaction in the saved clip. The sidebar shows **Stop recording** only while a clip is active. Ending the session with **Stop** preserves an unfinished recording in the report.
 
 ## Optional AI review with your own key
 
@@ -207,7 +209,7 @@ Keep that terminal open, then open both pages in Chrome:
 - [Production demo](http://127.0.0.1:4178/production.html)
 - [Prototype demo](http://127.0.0.1:4178/prototype.html)
 
-Activate Diffuse **from the production demo**, choose **Start review**, then use **Diff** to select the prototype demo. Confirm that same prototype tab in Chrome’s sharing dialog. The demo server listens only on `127.0.0.1:4178`. It serves a fixed list of demo assets and does not expose the rest of the workspace. Stop it with `Ctrl+C`. If that port is in use, run `PORT=4179 npm run demo` and change the links accordingly.
+Activate Diffuse **from the production demo**, choose **Start Diffuse**, then use **Diff** to select the prototype demo. Confirm that same prototype tab in Chrome’s sharing dialog. The demo server listens only on `127.0.0.1:4178`. It serves a fixed list of demo assets and does not expose the rest of the workspace. Stop it with `Ctrl+C`. If that port is in use, run `PORT=4179 npm run demo` and change the links accordingly.
 
 ### Things to try
 

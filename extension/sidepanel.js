@@ -90,8 +90,11 @@
     draftId=comment?.id||null;
     const recording=Boolean(state.recording), preparing=Boolean(state.recordingBusy);
     text('panel-composer-title',state.commentSaving?'Saving comment…':recording?'Recording in progress':'Comment on the page');
-    notice('panel-comment-status',state.commentSaving?'Saving your feedback and evidence.':preparing?'Preparing your recording…':recording?'Interact with the page, then stop the recording below to finish your comment.':state.captureBusy?'Capturing evidence for your comment…':state.pendingCaptureAction==='comment'?'Your comment is on the page. Retry its capture there, or cancel the comment.':'Write and save your feedback in the comment bubble on the page.');
+    notice('panel-comment-status',state.commentSaving?'Saving your feedback and evidence.':preparing?'Preparing your recording…':recording?'Interact with the page, then stop recording to finish your comment.':state.captureBusy?'Capturing evidence for your comment…':state.pendingCaptureAction==='comment'?'Your comment is on the page. Retry its capture there, or cancel the comment.':'Write and save your feedback in the comment bubble on the page.');
     notice('panel-comment-error',commandError||comment?.error);
+    $('panel-stop-recording').hidden=!recording&&!preparing;
+    $('panel-stop-recording').disabled=preparing||Boolean(pendingAction);
+    text('panel-stop-recording',preparing?'Preparing recording…':'Stop recording');
     $('panel-return-comment').disabled=connectionLost||state.commentSaving||preparing||recording||state.captureBusy||Boolean(pendingAction);
     $('panel-recover-comment').hidden=!connectionLost||!draftId;
     $('panel-recover-comment').disabled=Boolean(pendingAction);
@@ -207,7 +210,7 @@
     $('panel-comparison-controls').hidden=!hasReference;
     $('panel-diff').disabled=Boolean(state.diffDisabledReason)||Boolean(pendingAction);
     $('panel-diff').title=state.diffDisabledReason||(hasReference?'Choose a different reference tab':'Choose a reference tab');
-    text('panel-diff-hint',state.diffDisabledReason||(hasReference?'Choose another reference with Diff. Show or hide it below.':'Choose a reference tab to compare with this page.'));
+    text('panel-diff-hint',state.diffDisabledReason||(hasReference?'Reference connected. Change or adjust it here.':'Compare with a reference tab.'));
     const settings=session.settings||{};
     for(const [id,key,fallback]of[['panel-opacity','opacity',.55],['panel-reveal','reveal',50],['panel-offset-x','offsetX',0],['panel-offset-y','offsetY',0]])if(document.activeElement!==$(id))$(id).value=String(id==='panel-opacity'?Math.round((settings[key]??fallback)*100):settings[key]??fallback);
     text('panel-opacity-value',`${$('panel-opacity').value}%`);text('panel-reveal-value',`${$('panel-reveal').value}%`);$('panel-linked').checked=settings.linked!==false;$('panel-hide').setAttribute('aria-pressed',String(Boolean(settings.hidden)));text('panel-hide',settings.hidden?'Show reference':'Hide reference');
@@ -215,19 +218,17 @@
     const selecting=state.picking||state.areaArmed;
     const locked=state.captureBusy||state.commentSaving||state.recordingBusy||Boolean(state.recording)||Boolean(state.commentOpen||state.comment)||state.aiBusy||state.aiOperationBusy||session.aiRunning||Boolean(pendingAction);
     $('panel-ai').disabled=locked||selecting;
-    $('panel-record').disabled=state.recordingBusy||state.captureBusy||state.commentSaving||Boolean(pendingAction)||(!state.recording&&(Boolean(state.commentOpen||state.comment)||selecting||state.aiBusy||session.aiRunning));
-    text('panel-record',state.recording?'Stop recording':'Record page');
     $('panel-cancel-selection').hidden=!selecting;$('panel-retry').hidden=!state.pendingCaptureAction;
     notice('panel-capture-error',[state.captureDescription,state.captureError].filter(Boolean).join(' '));
     $('panel-retry').disabled=Boolean(state.captureNeedsAccess)||Boolean(pendingAction)||state.captureBusy;
     notice('panel-instruction',state.captureBusy?'Capturing your selection…':state.recording?'Interact with the page, then stop recording. The clip stops automatically after 30 seconds.':state.areaArmed?'Drag across the page to select an area. Press Escape to cancel.':state.picking?'Click an element on the page. Press Escape to cancel.':'');
-    if(state.captureNeedsAccess)notice('panel-instruction','Click the Diffuse icon in Chrome’s toolbar on this page, then Enable capture & return. Your drawer stays open.');
+    if(state.captureNeedsAccess)notice('panel-instruction','Click the Diffuse icon in Chrome’s toolbar on this page, then Start Diffuse to enable capture.');
     paintComments();
   }
 
   const actions={'panel-diff':'openDiff','panel-cancel-selection':'cancelSelection','panel-ai':'openAi','panel-close-ai':'closeAi','panel-return-comment':'focusComment','panel-retry':'retryCapture','panel-focus':'focusTarget','panel-source':'focusSource','panel-reconnect':'reconnect','panel-stop':'stop'};
   for(const [id,action]of Object.entries(actions))$(id).addEventListener('click',()=>act(action,action==='focusComment'?{draftId}:undefined));
-  $('panel-record').addEventListener('click',()=>act(state?.recording?'stopRecording':'record'));
+  $('panel-stop-recording').addEventListener('click',()=>act('stopRecording'));
   $('panel-recover-page').addEventListener('click',()=>act('recoverPage'));
   $('panel-recover-comment').addEventListener('click',()=>act('recoverPage',{draftId,fields:state?.comment?.fields,evidenceChoice:state?.comment?.evidenceChoice==='recording'?'video':'screenshot'}));
   const aiFields=()=>({instructions:$('panel-ai-instructions').value,referenceUrl:$('panel-ai-reference-url').value.trim(),threshold:Number($('panel-ai-threshold').value)});

@@ -1,0 +1,31 @@
+.popup .journey-discussion { margin-block: 22px; padding-top: 4px; border-top: 1px solid var(--ui-line); }
+.popup .journey-discussion .journey-section-title { margin-top: 12px; }
+.popup .journey-question-form { padding: 12px; border: 1px solid var(--ui-line); border-radius: 7px; background: var(--ui-surface); }
+.popup .journey-question-form label { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 600; color: var(--ui-ink); }
+.popup .journey-question-form textarea { min-height: 92px; background: var(--ui-surface-muted); color: var(--ui-ink); border-color: var(--ui-line-strong); }
+.popup .journey-question-context { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; margin-bottom: 9px; color: var(--ui-accent); font-size: 11px; }
+.popup .journey-question-context .journey-text-button { min-height: 30px; padding: 4px 6px; font-size: 11px; }
+.popup .journey-ask-submit { width: 100%; min-height: 38px; padding: 8px 12px; border-color: var(--ui-line-strong); background: var(--ui-accent-soft); color: var(--ui-accent); font-size: 12px; }
+.popup .journey-question-error { font-size: 12px; line-height: 1.55; color: var(--ui-danger, #bc5d52); }
+.popup .journey-conversation { overflow-wrap: anywhere; }
+.popup .journey-exchange { margin-bottom: 16px; font-size: 13px; line-height: 1.65; }
+.popup .journey-exchange small { color: var(--ui-muted); font-size: 10px; font-weight: 600; }
+.popup .journey-exchange p { margin: 4px 0 8px; white-space: pre-wrap; }
+.popup .journey-question-copy { margin-left: 20px; padding: 10px 12px; background: var(--ui-surface-muted); border: 1px solid var(--ui-line); border-radius: 7px 7px 2px 7px; }
+.popup .journey-answer-copy { padding: 12px 2px; }
+.popup .journey-answer-copy > small { color: var(--ui-accent); }
+.popup .journey-ask-step { display: block; margin: 9px 0; min-height: 36px; padding: 6px 9px; border-color: var(--ui-line); background: var(--ui-surface); color: var(--ui-accent); font-size: 11px; }
+.popup .journey-route-offer { margin-top: 12px; padding: 12px; border-left: 2px solid var(--ui-accent); background: var(--ui-surface); border-radius: 0 5px 5px 0; }
+.popup .journey-route-offer strong { font-size: 12px; font-weight: 600; }
+.popup .journey-route-offer p { color: var(--ui-muted); font-size: 12px; }
+.popup .journey-fork-proposal { min-height: 36px; background: var(--ui-accent-soft); border-color: var(--ui-line-strong); color: var(--ui-accent); font-size: 12px; }
+.popup .journey-fork-fields { margin-block: 14px; padding: 12px; border: 1px solid var(--ui-line-strong); border-radius: 7px; background: var(--ui-surface); }
+.popup .journey-fork-fields h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.popup .journey-fork-fields textarea { background: var(--ui-surface-muted); color: var(--ui-ink); border-color: var(--ui-line-strong); }
+.popup .journey-fork-fields .journey-text-button { font-size: 11px; min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--ui-accent); }
+.popup .journey-lineage { margin: 10px 0; padding-left: 10px; border-left: 2px solid var(--ui-accent); color: var(--ui-muted); font-size: 12px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.popup .journey-finished-actions { flex-wrap: wrap; }
+.popup .journey-finished-actions .journey-fork-button { flex-basis: 100%; color: var(--ui-accent); }
+.popup .journey-ask-submit:hover, .popup .journey-fork-proposal:hover { border-color: var(--ui-accent); }
+.popup .journey-discussion [hidden], .popup .journey-fork-fields[hidden], .popup .journey-lineage[hidden] { display: none; }
+@media (forced-colors: active) { .popup .journey-route-offer, .popup .journey-lineage { border-color: CanvasText; } }

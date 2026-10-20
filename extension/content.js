@@ -1089,7 +1089,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       aiBatch=result.batch||null;aiPreviewContext=aiBatch?.context?.production||aiPreviewContext;
     }catch(error){
       if(root&&session?.id===sessionId){
-        if(error.code==='NEEDS_CAPTURE_ACCESS'){pendingCaptureAction='ai';el('ai-error').textContent='Click the Diffuse icon in Chrome on this page, then Enable capture & return. This requested review will retry after access is granted.';}
+        if(error.code==='NEEDS_CAPTURE_ACCESS'){pendingCaptureAction='ai';el('ai-error').textContent='Click the Diffuse icon in Chrome on this page, then Start Diffuse. This requested review will retry after access is granted.';}
         else if(error.code==='NEEDS_AI_KEY'){aiConfig.hasKey=false;el('ai-error').textContent='Add your Anthropic API key in AI settings, then reopen this panel.';}
         else el('ai-error').textContent=error.message;
       }

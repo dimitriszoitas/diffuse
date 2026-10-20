@@ -193,3 +193,28 @@ select:disabled { color: var(--muted); background: #eeeaf3; }
   .popup .start-actions { grid-template-columns: 1fr 1fr; gap: 7px; }
   .popup .start-actions button { gap: 6px; padding-inline: 10px; }
 }
+
+/* The action popup is a launcher. The review workspace lives in the drawer. */
+html:has(body[data-surface=popup]) { width: 360px; }
+body[data-surface=popup] { width: min(360px, 100vw); font-size: 14px; background: var(--ui-bg); }
+body[data-surface=popup] .popup { padding: 14px; }
+body[data-surface=popup] .brand-header { padding: 0 2px 13px; border-color: var(--ui-line); }
+body[data-surface=popup] .brand { font-size: 20px; gap: 8px; }
+body[data-surface=popup] .brand-mark { transform: scale(.82); transform-origin: left center; width: 28px; flex-basis: 28px; }
+body[data-surface=popup] .launcher-state { color: var(--ui-muted); font-size: 10px; }
+body[data-surface=popup] .launcher-page { padding: 12px 2px 10px; min-width: 0; }
+body[data-surface=popup] .source-title { margin: 0 0 2px; font-size: 12px; font-weight: 550; }
+body[data-surface=popup] .source-url { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body[data-surface=popup] #comparison-form { margin: 0; }
+body[data-surface=popup] .primary-button { min-height: 44px; padding: 10px 12px; border-radius: 6px; font-size: 13px; color: #fff; border-color: var(--ui-primary); background: var(--ui-primary-fill); box-shadow: var(--ui-primary-shadow); }
+body[data-surface=popup] .primary-button:hover { background: var(--ui-primary-hover); }
+body[data-surface=popup] .primary-button:disabled { color: var(--ui-muted); background: var(--ui-surface-muted); border-color: var(--ui-line); box-shadow: none; }
+body[data-surface=popup] .launcher-menu { display: grid; gap: 2px; margin-top: 7px; }
+body[data-surface=popup] .popup .launcher-item { display: flex; align-items: center; gap: 11px; min-height: 44px; width: 100%; padding: 10px 11px; border: 1px solid transparent; border-radius: 6px; color: var(--ui-ink); background: transparent; font-size: 13px; font-weight: 500; text-align: left; }
+body[data-surface=popup] .popup .launcher-item:hover { background: var(--ui-surface); border-color: var(--ui-line); }
+body[data-surface=popup] .popup .launcher-item:disabled { opacity: .55; }
+body[data-surface=popup] .popup .launcher-item svg { flex: 0 0 18px; width: 18px; height: 18px; color: var(--ui-muted); }
+body[data-surface=popup] .launcher-chevron { margin-left: auto; font-size: 20px; color: var(--ui-muted); font-weight: 400; }
+body[data-surface=popup] #settings { border-top: 1px solid var(--ui-line); margin-top: 3px; border-radius: 0 0 6px 6px; }
+body[data-surface=popup] .initial-loading { min-height: 72px; font-size: 12px; }
+body[data-surface=popup] :is(.feedback,.session-error) { margin: 10px 0 0; padding: 9px 10px; font-size: 12px; }

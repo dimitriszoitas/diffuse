@@ -209,6 +209,13 @@
     el.dispatchEvent(new Event('change', {bubbles: true}));
     if (el.value !== text && el.type !== 'number') throw fail('The field did not retain the entered value.', 'JOURNEY_ACTION_FAILED');
   }
+  function previewClick(message) {
+    validateContext(message.context);
+    if (location.origin !== message.origin) throw fail('This page is outside the approved website.');
+    const el = targetFor(message.action?.targetId);
+    assertTargetNavigation(el, message.origin);
+    return {point: unobstructed(el)};
+  }
   function execute(message) {
     validateContext(message.context);
     if (location.origin !== message.origin) throw fail('This page is outside the approved website.');
@@ -217,6 +224,10 @@
     if (el) assertTargetNavigation(el, message.origin);
     if (action.type === 'click') {
       const point = unobstructed(el);
+      if (message.point && (!Number.isFinite(message.point.x) || !Number.isFinite(message.point.y) ||
+        Math.abs(message.point.x - point.x) > 3 || Math.abs(message.point.y - point.y) > 3)) {
+        throw fail('The control moved before the click. Read the page again.', 'JOURNEY_STALE');
+      }
       el.focus?.({preventScroll: true});
       for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup']) {
         const EventClass = type.startsWith('pointer') ? PointerEvent : MouseEvent;
@@ -262,6 +273,7 @@
     if (message?.namespace !== namespace || sender.id !== chrome.runtime.id) return;
     Promise.resolve().then(async () => {
       if (message.type === 'OBSERVE') return observe();
+      if (message.type === 'PREVIEW_CLICK') return previewClick(message);
       if (message.type === 'EXECUTE') return execute(message);
       if (message.type === 'VALIDATE') { validateContext(message.context); return {url: location.href, documentId}; }
       if (message.type === 'SETTLE') return settle();

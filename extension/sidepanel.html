@@ -17,6 +17,7 @@
   <script src="select-controls.js" defer></script>
   <link rel="stylesheet" href="ui-dark.css">
   <script src="theme.js"></script>
+  <link rel="stylesheet" href="journey-conversation.css">
 </head>
   <body data-surface="sidepanel">
     <main class="popup" id="popup" aria-busy="true">
@@ -59,7 +60,7 @@
         </div>
         <div class="start-actions">
         <form id="comparison-form">
-          <button class="primary-button" id="start-comparison" type="submit" disabled><span class="button-label">Start review</span><span aria-hidden="true">→</span></button>
+          <button class="primary-button" id="start-comparison" type="submit" disabled><span class="button-label">Start Diffuse</span><span aria-hidden="true">→</span></button>
         </form>
         <button class="secondary-button load-review-button" id="load-review" type="button"><span>Load review</span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 15v5h14v-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </div>
@@ -120,12 +121,23 @@
             <p id="panel-comment-status" class="muted" role="status" aria-live="polite">Write and save your feedback in the comment bubble on the page.</p>
             <p id="panel-comment-error" class="feedback" role="alert" hidden></p>
             <button id="panel-return-comment" type="button">Return to comment <span aria-hidden="true">↗</span></button>
+            <button id="panel-stop-recording" type="button" hidden>Stop recording</button>
             <button id="panel-recover-comment" type="button" hidden>Reconnect review</button>
           </section>
           <section id="panel-controls" aria-label="Review controls">
-            <section class="panel-control-group compare-group" aria-labelledby="compare-group-title"><div class="compare-heading"><h2 id="compare-group-title" class="control-group-title">Compare</h2>
-            <button id="panel-diff" type="button" aria-describedby="panel-diff-hint"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16m-6-8h3m6 0h3"/></svg><span>Diff</span></button></div>
-            <p id="panel-diff-hint" class="muted">Choose a reference tab to compare with this page.</p>
+            <section class="comment-shortcuts" aria-labelledby="capture-group-title">
+              <h2 id="capture-group-title" class="control-group-title">Comment on the page</h2>
+              <div class="shortcut-cheatsheet" aria-label="Comment shortcuts"><p><span>On an element</span><span class="shortcut-keys"><kbd>C</kbd><span>then</span><kbd>Click</kbd></span></p><p><span>On an area</span><span class="shortcut-keys"><kbd>C</kbd><span>+</span><kbd>Click + drag</kbd></span></p></div>
+              <p id="panel-instruction" class="muted" role="status" hidden></p>
+              <button id="panel-cancel-selection" type="button" hidden>Cancel selection</button>
+              <p id="panel-capture-error" class="feedback" role="alert" hidden></p>
+              <button id="panel-retry" type="button" hidden>Retry capture</button>
+            </section>
+            <section class="review-tools" aria-label="Review tools">
+              <button id="panel-ai" class="review-tool" type="button"><span class="review-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="m10 3 2.3 6.7L19 12l-6.7 2.3L10 21l-2.3-6.7L1 12l6.7-2.3Z"/><path d="m19 2 1 3 3 1-3 1-1 3-1-3-3-1 3-1Z"/></svg></span><span class="review-tool-copy"><strong>Review with AI</strong><small>Audit this screen against your instructions.</small></span><span class="review-tool-arrow" aria-hidden="true">›</span></button>
+              <button id="panel-journey" class="review-tool" type="button" aria-controls="panel-journey-view"><span class="review-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M7 5h10a4 4 0 0 1 0 8H8a3 3 0 0 0 0 6h9"/></svg></span><span class="review-tool-copy"><strong>Journey Testing with AI</strong><small>Give a goal. Test the path across pages.</small></span><span class="review-tool-arrow" aria-hidden="true">›</span></button>
+              <div class="diff-tool">
+                <button id="panel-diff" class="review-tool" type="button" aria-describedby="panel-diff-hint"><span class="review-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16m-6-8h3m6 0h3"/></svg></span><span class="review-tool-copy"><strong>Diff View</strong><small id="panel-diff-hint">Compare with a reference tab.</small></span><span class="review-tool-arrow" aria-hidden="true">›</span></button>
             <div id="panel-comparison-controls">
               <div class="control-pair"><label class="checkbox"><input id="panel-linked" type="checkbox"> Link scrolling</label><button id="panel-hide" type="button" aria-pressed="false">Hide reference</button></div>
               <details class="panel-details"><summary>Adjust reference</summary>
@@ -134,20 +146,12 @@
                 <div class="control-pair"><label class="panel-field">Horizontal<input id="panel-offset-x" type="number" min="-3000" max="3000" value="0"></label><label class="panel-field">Vertical<input id="panel-offset-y" type="number" min="-3000" max="3000" value="0"></label></div><div class="button-row"><button id="panel-reset" type="button">Reset</button><button id="panel-source" type="button">Open prototype</button><button id="panel-reconnect" type="button">Reconnect</button></div>
               </details>
             </div>
-            </section>
-            <section class="panel-control-group capture-group" aria-labelledby="capture-group-title"><h2 id="capture-group-title" class="control-group-title">Capture &amp; review</h2>
-            <div class="shortcut-cheatsheet" aria-label="Comment shortcuts"><p><span>Leave a comment</span><kbd>C</kbd></p><p><span>Comment on an area</span><span class="shortcut-keys"><kbd>C</kbd><span>+</span><kbd>Drag</kbd></span></p></div>
-            <div class="tool-grid"><button id="panel-record" type="button">Record page</button><button id="panel-ai" type="button">AI review</button></div>
-            <button id="panel-journey" class="journey-entry" type="button" aria-controls="panel-journey-view"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="6" r="2"/><path d="M7 6h9a4 4 0 0 1 0 8H8a4 4 0 0 0 0 8h5M17 18l4 4-4 4" transform="translate(0 -2)"/><path d="M13 20h7"/></svg><span>Test a journey<small>Follow a task across pages</small></span><span class="journey-entry-tag" aria-hidden="true">AI</span></button>
-            <p id="panel-instruction" class="muted" role="status" hidden></p>
-            <button id="panel-cancel-selection" type="button" hidden>Cancel selection</button>
-            <p id="panel-capture-error" class="feedback" role="alert" hidden></p>
-            <button id="panel-retry" type="button" hidden>Retry capture</button>
+              </div>
             </section>
             <section id="panel-comments" aria-label="Saved comments"></section>
           </section>
           <section id="panel-ai-view" hidden aria-labelledby="panel-ai-title">
-            <div class="section-heading"><h2 id="panel-ai-title">AI review</h2><button id="panel-close-ai" class="close-button" type="button" aria-label="Close AI review">×</button></div>
+            <div class="section-heading"><h2 id="panel-ai-title">Review with AI</h2><button id="panel-close-ai" class="close-button" type="button" aria-label="Close AI review">×</button></div>
             <p id="panel-ai-mode" class="muted"></p>
             <label class="panel-field">Instructions <span class="optional">(optional)</span><textarea id="panel-ai-instructions" maxlength="4000" rows="3" placeholder="What should this review focus on?"></textarea></label>
             <label class="panel-field" for="panel-ai-reference-url">Figma frame link <span class="optional">(optional)</span><input id="panel-ai-reference-url" type="url" maxlength="4096" autocomplete="off" spellcheck="false" placeholder="https://www.figma.com/design/…?node-id=…" aria-describedby="panel-ai-reference-help"></label>

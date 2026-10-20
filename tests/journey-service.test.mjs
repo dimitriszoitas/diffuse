@@ -363,3 +363,200 @@ test('a terminal save failure still exposes the terminal memory state instead of
   assert.equal(result.run.status, 'inconclusive');
   assert.match(result.run.summary, /could not save/);
 });
+
+const answer = (extra = {}) => ({answer: 'Step 1 opened Ingredients; step 2 recorded the saved result.', evidenceSteps: [1, 2], routeSuggestion: null, ...extra});
+
+test('post-run questions use recorded context, persist grounded answers and never create an executor', async () => {
+  const questions = [];
+  let executions = 0;
+  const h = harness({service: {
+    createExecutor: async () => { executions++; throw new Error('Must not execute'); },
+    followUp: async input => { questions.push(input); return answer(); },
+  }});
+  const original = savedRun(); h.records.set(original.id, original);
+  const first = await h.message('JOURNEY_ASK', {runId: original.id, stepIndex: 1, question: 'Why did you open Ingredients?'});
+  assert.equal(questions[0].apiKey, KEY);
+  assert.equal(questions[0].stepIndex, 1);
+  assert.deepEqual(questions[0].run.steps, original.steps);
+  assert.equal(first.run.followUps.length, 1);
+  assert.equal(first.run.followUps[0].question, 'Why did you open Ingredients?');
+  assert.deepEqual(first.run.followUps[0].evidenceSteps, [1, 2]);
+  assert.deepEqual(first.run.steps, original.steps);
+  assert.deepEqual(first.run.findings, original.findings);
+  assert.equal(first.run.status, 'completed');
+  assert.equal(JSON.stringify(first).includes(KEY), false);
+  const second = await h.message('JOURNEY_ASK', {runId: original.id, question: 'What about that route?'});
+  assert.equal(questions[1].run.followUps.length, 1, 'The previous answer supplies conversational context');
+  assert.equal(second.run.followUps.length, 2);
+  assert.notEqual(second.run.followUps[0].id, second.run.followUps[1].id);
+  assert.equal(executions, 0);
+  assert.equal(h.service.busy, false);
+});
+
+test('questions reject cross-review, active or missing steps, excessive input and conversation limits', async () => {
+  let requests = 0;
+  const h = harness({service: {followUp: async () => { requests++; return answer(); }}});
+  h.records.set('run-saved', savedRun());
+  h.records.set('other', savedRun({id: 'other', reviewId: 'review-2'}));
+  h.records.set('running', savedRun({id: 'running', status: 'running'}));
+  for (const message of [
+    {runId: 'other'}, {runId: 'running'}, {runId: 'missing'}, {runId: 'run-saved', stepIndex: 99}, {runId: 'run-saved', stepIndex: '1'},
+    {runId: 'run-saved', question: ''}, {runId: 'run-saved', question: 'x'.repeat(2001)}, {runId: 'run-saved', question: KEY},
+  ]) await assert.rejects(h.message('JOURNEY_ASK', {question: 'Why?', ...message}));
+  h.records.set('run-saved', savedRun({followUps: Array.from({length: 20}, () => ({question: 'Why?'}))}));
+  await assert.rejects(h.message('JOURNEY_ASK', {runId: 'run-saved', question: 'Why?'}), /20 follow-up questions/);
+  assert.equal(requests, 0);
+});
+
+test('question failures cannot persist invented evidence, leak provider errors or retain a busy lock', async () => {
+  for (const followUp of [
+    async () => answer({evidenceSteps: [99]}),
+    async () => answer({answer: KEY}),
+    async () => { throw new Error(`Unsafe provider diagnostic ${KEY}`); },
+  ]) {
+    const h = harness({service: {followUp}});
+    const original = savedRun(); h.records.set(original.id, original);
+    await assert.rejects(h.message('JOURNEY_ASK', {runId: original.id, question: 'Why?'}), error => !error.message.includes(KEY));
+    assert.deepEqual(h.records.get(original.id), original);
+    assert.equal(h.service.busy, false);
+  }
+});
+
+test('an interrupted or replaced-session question cannot persist a late answer or start page actions', async () => {
+  for (const change of ['interrupt', 'session']) {
+    const gate = deferred(); let signal;
+    const h = harness({service: {followUp: async input => { signal = input.signal; return gate.promise; }}});
+    const original = savedRun(); h.records.set(original.id, original);
+    const pending = h.message('JOURNEY_ASK', {runId: original.id, question: 'Why?'});
+    await tick();
+    assert.equal(h.service.busy, true);
+    await assert.rejects(h.start(), /current journey/);
+    if (change === 'interrupt') { await h.service.interrupt(); assert.equal(signal.aborted, true); }
+    else h.current = {...h.current, id: 'replacement'};
+    gate.resolve(answer());
+    await assert.rejects(pending, /cancelled|review has ended/);
+    assert.deepEqual(h.records.get(original.id), original);
+    assert.equal(h.calls.execute, 0);
+    assert.equal(h.service.busy, false);
+  }
+});
+
+test('a follow-up route suggestion remains discussion until a separate explicit fork is started', async () => {
+  const route = {label: 'Try the table shortcut', instructions: 'Try the New ingredient button directly from the table.'};
+  const h = harness({service: {followUp: async () => answer({routeSuggestion: route})}});
+  h.records.set('run-saved', savedRun());
+  const result = await h.message('JOURNEY_ASK', {runId: 'run-saved', question: 'Could the table shortcut be easier?'});
+  assert.deepEqual(result.run.followUps[0].routeSuggestion, route);
+  assert.equal(h.records.size, 1);
+  assert.equal(h.calls.execute, 0);
+  assert.equal(h.runnerOptions, undefined);
+});
+
+test('a fork preserves the original and starts a separate run from its starting page with explicit route preferences', async () => {
+  let url = 'https://example.test/ingredients';
+  const prepared = [];
+  const h = harness({service: {
+    checkReady: async () => ({url}),
+    prepareFork: async (current, parent, options) => { prepared.push({current, parent: copy(parent), signal: options.signal}); url = parent.startUrl; },
+  }});
+  const original = savedRun({testData: 'Name: Oat milk', maxSteps: 10}); h.records.set(original.id, original);
+  const result = await h.service.handle({type: 'JOURNEY_START', sessionId: h.current.id, input: {fork: {parentRunId: original.id, stepIndex: 1, instructions: 'Use the table shortcut.'}}});
+  try {
+    assert.equal(prepared.length, 1);
+    assert.equal(prepared[0].signal.aborted, false);
+    assert.notEqual(result.run.id, original.id);
+    assert.equal(result.run.startUrl, original.startUrl);
+    assert.equal(result.run.goal, original.goal);
+    assert.equal(result.run.testData, original.testData);
+    assert.equal(result.run.maxSteps, 10);
+    assert.deepEqual(result.run.fork, {parentRunId: original.id, stepIndex: 1, instructions: 'Use the table shortcut.'});
+    assert.deepEqual(h.records.get(original.id), original);
+    await h.runnerOptions.decide({goal: result.run.goal, observation: {}});
+    assert.equal(h.calls.decisions[0].routePreferences, 'Use the table shortcut.');
+    assert.equal(JSON.stringify(result).includes(KEY), false);
+  } finally { await h.service.interrupt(); }
+});
+
+test('fork goal and test data overrides are explicit and cannot smuggle unapproved input fields', async () => {
+  const h = harness({service: {prepareFork: async () => {}}});
+  h.records.set('run-saved', savedRun());
+  const result = await h.start({goal: 'Find the existing ingredient.', testData: '', maxSteps: 5, fork: {parentRunId: 'run-saved', instructions: 'Use search.', startUrl: 'https://evil.test/', apiKey: 'wrong'}});
+  try {
+    assert.equal(result.run.goal, 'Find the existing ingredient.');
+    assert.equal(result.run.testData, '');
+    assert.equal(result.run.maxSteps, 5);
+    assert.equal(result.run.startUrl, 'https://example.test/');
+    assert.equal(result.run.fork.startUrl, undefined);
+    assert.equal(result.run.fork.apiKey, undefined);
+  } finally { await h.service.interrupt(); }
+});
+
+test('fork validation rejects wrong review, active parent, nonexistent step and cross-origin start before navigation', async () => {
+  let prepared = 0;
+  const h = harness({service: {prepareFork: async () => { prepared++; }}});
+  for (const original of [savedRun({reviewId: 'other'}), savedRun({status: 'running'}), savedRun({startUrl: 'https://other.test/'})]) {
+    h.records.set('run-saved', original);
+    await assert.rejects(h.start({fork: {parentRunId: 'run-saved', instructions: 'Use the shortcut.'}}));
+  }
+  h.records.set('run-saved', savedRun());
+  for (const fork of [null, {}, {parentRunId: 'run-saved', instructions: ''}, {parentRunId: 'run-saved', instructions: 'x'.repeat(2001)}, {parentRunId: 'run-saved', instructions: 'Use search.', stepIndex: 99}, {parentRunId: 'run-saved', instructions: 'Use search.', stepIndex: 3}, {parentRunId: 'run-saved', instructions: KEY}]) {
+    await assert.rejects(h.start({fork}));
+  }
+  assert.equal(prepared, 0);
+  assert.equal(h.service.busy, false);
+});
+
+test('fork cancellation during starting-page navigation cannot create recording or execute actions', async () => {
+  const gate = deferred(); let signal, captures = 0;
+  const h = harness({service: {
+    prepareFork: async (current, parent, options) => { signal = options.signal; await gate.promise; },
+    startRecording: async () => { captures++; },
+  }});
+  const original = savedRun(); h.records.set(original.id, original);
+  const pending = h.start({fork: {parentRunId: original.id, instructions: 'Use search.'}});
+  await tick();
+  await h.service.interrupt();
+  assert.equal(signal.aborted, true);
+  gate.resolve();
+  await assert.rejects(pending, /cancelled/);
+  assert.equal(captures, 0);
+  assert.equal(h.runnerOptions, undefined);
+  assert.deepEqual(h.records.get(original.id), original);
+  assert.equal(h.service.busy, false);
+});
+
+test('interrupt cancels queued questions before another provider call can start', async () => {
+  let calls = 0;
+  const gate = deferred();
+  const h = harness({service: {followUp: async () => { calls++; return gate.promise; }}});
+  h.records.set('run-saved', savedRun());
+  const first = h.message('JOURNEY_ASK', {runId: 'run-saved', question: 'First question'});
+  const second = h.message('JOURNEY_ASK', {runId: 'run-saved', question: 'Queued question'});
+  const completed = Promise.allSettled([first, second]);
+  await tick();
+  assert.equal(calls, 1);
+  await h.service.interrupt();
+  gate.resolve(answer());
+  const outcomes = await completed;
+  assert(outcomes.every(outcome => outcome.status === 'rejected' && /cancelled/.test(outcome.reason.message)));
+  assert.equal(calls, 1, 'The cancelled queue must not make a second API request');
+  assert.equal(h.records.get('run-saved').followUps, undefined);
+});
+
+test('concurrent questions serialize their saved context without dropping either answer', async () => {
+  const questions = [];
+  const gate = deferred();
+  const h = harness({service: {followUp: async input => {
+    questions.push(copy({...input, signal: undefined}));
+    if (questions.length === 1) await gate.promise;
+    return answer();
+  }}});
+  h.records.set('run-saved', savedRun());
+  const first = h.message('JOURNEY_ASK', {runId: 'run-saved', question: 'First question'});
+  const second = h.message('JOURNEY_ASK', {runId: 'run-saved', question: 'Second question'});
+  await tick(); gate.resolve();
+  await Promise.all([first, second]);
+  assert.equal(questions.length, 2);
+  assert.equal(questions[1].run.followUps[0].question, 'First question');
+  assert.deepEqual(h.records.get('run-saved').followUps.map(item => item.question), ['First question', 'Second question']);
+});

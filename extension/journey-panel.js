@@ -14,6 +14,8 @@
   let videoSource = '';
   let aiConfig = null, aiConfigLoading = false;
   let acceptedBusy = new Set();
+  let questionStep = null, conversationRun = null, conversationKey = '', asking = false;
+  let questionGeneration = 0, forkContext = null;
   const node = (tag, content, className) => {
     const element = document.createElement(tag);
     if (content !== undefined) element.textContent = String(content);
@@ -30,6 +32,146 @@
   const isActive = value => activeStatuses.has(value?.status);
   const asText = value => typeof value === 'string' ? value : '';
   const numeric = value => Number.isFinite(Number(value)) ? Number(value) : 0;
+
+  // Keep this form outside the timeline renderer so polling never replaces a
+  // question being typed, its selection, or the focused control.
+  const discussion = node('section', undefined, 'journey-discussion');
+  discussion.id = 'journey-discussion';
+  discussion.setAttribute('aria-labelledby', 'journey-discussion-title');
+  discussion.hidden = true;
+  const discussionHeading = node('div', undefined, 'journey-section-title');
+  const discussionTitle = node('h3', 'Ask about this journey');
+  discussionTitle.id = 'journey-discussion-title';
+  discussionHeading.append(discussionTitle, node('span', 'AI'));
+  const discussionHelp = node('p', 'Ask about a choice or explore a different route. Answers use the saved steps and evidence.', 'journey-help');
+  const conversation = node('div', undefined, 'journey-conversation');
+  conversation.id = 'journey-conversation';
+  const questionForm = node('form', undefined, 'journey-question-form');
+  questionForm.id = 'journey-question-form';
+  const questionContext = node('div', undefined, 'journey-question-context');
+  const contextLabel = node('span', 'Whole journey');
+  const clearContext = button('Clear', () => selectQuestionStep(null, false), 'journey-text-button');
+  clearContext.setAttribute('aria-label', 'Ask about the whole journey');
+  questionContext.append(contextLabel, clearContext);
+  const questionLabel = node('label', 'Your question');
+  questionLabel.htmlFor = 'journey-question';
+  const questionInput = node('textarea');
+  questionInput.id = 'journey-question'; questionInput.rows = 3; questionInput.maxLength = 2000; questionInput.required = true;
+  questionInput.placeholder = 'Why did you take this route? Could the wizard be simpler?';
+  const questionStatus = node('p', '', 'journey-help');
+  questionStatus.id = 'journey-question-status'; questionStatus.setAttribute('role', 'status');
+  const questionError = node('p', '', 'journey-question-error');
+  questionError.id = 'journey-question-error'; questionError.setAttribute('role', 'alert'); questionError.hidden = true;
+  const askButton = node('button', 'Ask AI', 'journey-ask-submit');
+  askButton.type = 'submit'; askButton.id = 'journey-ask';
+  questionForm.append(questionContext, questionLabel, questionInput, questionStatus, questionError, askButton);
+  discussion.append(discussionHeading, discussionHelp, conversation, questionForm);
+  $('journey-assessment').before(discussion);
+  questionForm.addEventListener('submit', askQuestion);
+
+  const forkFields = node('section', undefined, 'journey-fork-fields');
+  forkFields.id = 'journey-fork-fields'; forkFields.hidden = true;
+  const forkHeading = node('h3', 'Try another route');
+  const forkDescription = node('p', '', 'journey-help');
+  forkDescription.id = 'journey-fork-description';
+  const routeLabel = node('label', 'Route to try', 'panel-field');
+  routeLabel.htmlFor = 'journey-route';
+  const routeInput = node('textarea');
+  routeInput.id = 'journey-route'; routeInput.rows = 3; routeInput.maxLength = 2000;
+  routeInput.placeholder = 'Use the first step of the wizard before opening Ingredients.';
+  routeLabel.append(routeInput);
+  const forkCancel = button('Back to original journey', () => {
+    forkContext = null; showForm = false; selectedRunId = run?.id || null; showError(''); paint();
+  }, 'journey-text-button');
+  forkCancel.id = 'journey-fork-cancel';
+  forkFields.append(forkHeading, forkDescription, routeLabel, forkCancel);
+  $('journey-form').prepend(forkFields);
+  const forkButton = button('Try another route', () => prepareFork(), 'journey-fork-button');
+  forkButton.id = 'journey-fork';
+  $('journey-finished-actions').prepend(forkButton);
+  const lineage = node('p', '', 'journey-lineage');
+  lineage.id = 'journey-lineage'; lineage.hidden = true;
+  $('journey-run-goal').after(lineage);
+
+  function selectQuestionStep(index, focus = true) {
+    questionStep = index;
+    contextLabel.textContent = index ? `About step ${index}` : 'Whole journey';
+    clearContext.hidden = !index;
+    questionInput.placeholder = index ? 'Why did you choose this action? What about another route?' : 'Why did you take this route? Could the wizard be simpler?';
+    if (focus) {
+      discussion.scrollIntoView({behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start'});
+      questionInput.focus({preventScroll: true});
+    }
+  }
+  async function askQuestion(event) {
+    event.preventDefault();
+    if (asking || pending || !run || isActive(run) || !questionForm.reportValidity()) return;
+    const question = questionInput.value.trim();
+    if (!question) return;
+    const requestSession = session?.id, id = run.id, generation = ++questionGeneration;
+    asking = true; questionError.hidden = true; renderConversation();
+    try {
+      const reply = await request('JOURNEY_ASK', {runId: id, question, ...(questionStep ? {stepIndex: questionStep} : {})});
+      if (session?.id !== requestSession || run?.id !== id || generation !== questionGeneration) return;
+      run = reply.run;
+      questionInput.value = ''; renderKey = ''; paint();
+    } catch (error) {
+      if (session?.id === requestSession && run?.id === id && generation === questionGeneration) {
+        questionError.textContent = error.message; questionError.hidden = false;
+      }
+    } finally {
+      if (generation === questionGeneration) { asking = false; paint(); }
+    }
+  }
+  function prepareFork(suggestion = null, stepIndex = questionStep) {
+    if (!run || isActive(run) || pending || asking) return;
+    const previous = run;
+    showFormFor(previous);
+    forkContext = {parentRunId: previous.id, ...(stepIndex ? {stepIndex} : {}), startUrl: previous.startUrl};
+    routeInput.value = suggestion?.instructions || '';
+    paint();
+    routeInput.focus();
+  }
+  function renderConversation() {
+    discussion.hidden = !run || isActive(run) || !run.steps?.length;
+    if (!run) return;
+    if (conversationRun !== run.id) {
+      conversationRun = run.id; conversationKey = ''; questionGeneration++; asking = false;
+      questionInput.value = ''; questionError.hidden = true; selectQuestionStep(null, false);
+    }
+    const entries = Array.isArray(run.followUps) ? run.followUps : [];
+    const key = JSON.stringify(entries);
+    if (key !== conversationKey) {
+      conversationKey = key;
+      const fragment = document.createDocumentFragment();
+      entries.forEach(entry => {
+        const exchange = node('article', undefined, 'journey-exchange');
+        const question = node('div', undefined, 'journey-question-copy');
+        question.append(node('small', entry.stepIndex ? `You · Step ${entry.stepIndex}` : 'You'), node('p', entry.question));
+        const answer = node('div', undefined, 'journey-answer-copy');
+        answer.append(node('small', 'Diffuse'), node('p', entry.answer));
+        const links = node('div', undefined, 'journey-evidence-links');
+        for (const index of entry.evidenceSteps || []) if (run.steps.some(step => step.index === index)) links.append(button(`Step ${index}`, () => focusStep(index)));
+        answer.append(links);
+        if (entry.routeSuggestion?.instructions) {
+          const offer = node('div', undefined, 'journey-route-offer');
+          offer.append(node('strong', entry.routeSuggestion.label || 'Try a different route'), node('p', entry.routeSuggestion.instructions));
+          const action = button('Fork journey…', () => prepareFork(entry.routeSuggestion, entry.stepIndex), 'journey-fork-proposal');
+          offer.append(action); answer.append(offer);
+        }
+        exchange.append(question, answer); fragment.append(exchange);
+      });
+      conversation.replaceChildren(fragment);
+    }
+    const full = entries.length >= 20;
+    questionInput.disabled = asking || Boolean(pending) || full;
+    askButton.disabled = asking || Boolean(pending) || full || aiConfig?.hasKey !== true;
+    clearContext.disabled = asking;
+    askButton.textContent = asking ? 'Reading the saved steps…' : 'Ask AI';
+    questionStatus.textContent = asking ? 'Reviewing the evidence for your answer…' : full ? 'This journey has reached its 20-question limit.' : 'Uses your saved AI key. Your question and journey evidence go to Anthropic.';
+    questionForm.setAttribute('aria-busy', String(asking));
+    for (const action of conversation.querySelectorAll('.journey-fork-proposal')) action.disabled = asking || Boolean(pending);
+  }
 
   function showError(message, focus = false) {
     text('journey-error', message || '');
@@ -81,6 +223,11 @@
     $('journey-key-help').hidden = hasKey !== false;
     $('journey-form').setAttribute('aria-busy', String(pending === 'JOURNEY_START'));
     for (const field of $('journey-form').querySelectorAll('textarea,select')) field.disabled = pending === 'JOURNEY_START';
+    forkCancel.disabled = Boolean(pending);
+    forkFields.hidden = !forkContext;
+    routeInput.required = Boolean(forkContext);
+    text('journey-start', pending === 'JOURNEY_START' ? 'Preparing the journey…' : forkContext ? 'Run alternative route →' : 'Start journey →');
+    if (forkContext) forkDescription.textContent = `Starts again at ${pageLabel(forkContext.startUrl)}${forkContext.stepIndex ? `, exploring an alternative to step ${forkContext.stepIndex}` : ''}. Your original journey stays saved. Existing app data is not reset.`;
   }
   async function loadAIConfig() {
     if (aiConfigLoading) return;
@@ -93,6 +240,7 @@
     } finally {
       aiConfigLoading = false;
       updateAvailability();
+      renderConversation();
     }
   }
   function scheduleRefresh(immediate = false) {
@@ -108,11 +256,13 @@
     if (!session?.id || fetching) return;
     const requestSession = session.id;
     const requestedRun = selectedRunId;
+    const requestedMutation = mutationGeneration, requestedQuestion = questionGeneration;
     fetching = true;
     lastFetch = Date.now();
     try {
       const reply = await request('JOURNEY_STATE', {knownUpdatedAt: run?.updatedAt, ...(requestedRun ? {runId: requestedRun} : {})});
-      if (session?.id !== requestSession || selectedRunId !== requestedRun) return;
+      if (session?.id !== requestSession || selectedRunId !== requestedRun || mutationGeneration !== requestedMutation || questionGeneration !== requestedQuestion) return;
+      if (reply.run?.id === run?.id && Date.parse(reply.run.updatedAt) < Date.parse(run.updatedAt)) return;
       if (!reply.unchanged) {
         const previous = run;
         run = reply.run || null;
@@ -156,7 +306,10 @@
     if (isActive(run)) return;
     $('journey-video').pause();
     showForm = true;
-    selectedRunId = null;
+    forkContext = null;
+    // Keep an older parent selected while editing its rerun. Polling the latest
+    // run here could otherwise replace the form underneath the user.
+    selectedRunId = previous?.id || run?.id || null;
     if (previous) {
       $('journey-goal').value = previous.goal || '';
       $('journey-success').value = previous.successCriteria || previous.input?.successCriteria || '';
@@ -174,10 +327,12 @@
       goal: $('journey-goal').value.trim(),
       successCriteria: $('journey-success').value.trim(),
       testData: $('journey-test-data').value.trim(),
-      maxSteps: Number($('journey-max-steps').value)
+      maxSteps: Number($('journey-max-steps').value),
+      ...(forkContext ? {fork: {parentRunId: forkContext.parentRunId, ...(forkContext.stepIndex ? {stepIndex: forkContext.stepIndex} : {}), instructions: routeInput.value.trim()}} : {})
     };
     if (!input.goal) { $('journey-goal').focus(); return; }
     const requestSession = session.id;
+    const generation = ++mutationGeneration;
     try {
       const url = new URL(session.target?.url || '');
       if (!['http:', 'https:', 'file:'].includes(url.protocol) || url.username || url.password || (url.protocol === 'file:' && url.hostname)) throw new Error('Open a website or local prototype to start a journey.');
@@ -187,19 +342,22 @@
       showError('');
       paint();
       if (!await access) throw new Error('Allow access to this site so Diffuse can follow the journey across its pages.');
-      if (session?.id !== requestSession) return;
+      if (session?.id !== requestSession || generation !== mutationGeneration) return;
       const reply = await request('JOURNEY_START', {input});
-      if (session?.id !== requestSession) return;
+      if (session?.id !== requestSession || generation !== mutationGeneration) return;
       run = reply.run || null;
+      forkContext = null;
       selectedRunId = null;
       showForm = false;
       renderKey = '';
     } catch (error) {
-      if (session?.id === requestSession) showError(error.message, true);
+      if (session?.id === requestSession && generation === mutationGeneration) showError(error.message, true);
     } finally {
-      pending = null;
-      paint();
-      scheduleRefresh(true);
+      if (generation === mutationGeneration) {
+        pending = null;
+        paint();
+        scheduleRefresh(true);
+      }
     }
   }
   function renderMetrics() {
@@ -286,7 +444,7 @@
     const existing = new Map([...list.children].map(item => [Number(item.dataset.step), item]));
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i], index = Number(step.index || i + 1);
-      const signature = JSON.stringify([step.action, step.reason, step.result, step.executionStatus, step.observation?.url, step.observation?.title, Boolean(screenshotUrl(step)), Boolean(videoSource), step.videoOffsetMs]);
+      const signature = JSON.stringify([step.action, step.reason, step.result, step.executionStatus, step.observation?.url, step.observation?.title, Boolean(screenshotUrl(step)), Boolean(videoSource), step.videoOffsetMs, isActive(run)]);
       let item = existing.get(index);
       if (item?.dataset.signature === signature) { existing.delete(index); continue; }
       const wasOpen = item?.querySelector('details')?.open || false;
@@ -308,6 +466,7 @@
       const result = typeof step.result === 'string' ? step.result : step.result?.message || step.result?.error || step.result?.description;
       if (result) body.append(node('p', result, step.result?.ok === false ? 'journey-step-error' : 'journey-step-result'));
       if (step.observation?.url) body.append(node('p', pageLabel(step.observation.url), 'journey-step-url'));
+      if (!isActive(run)) body.append(button('Ask about this step', () => { if (!asking) selectQuestionStep(index); }, 'journey-ask-step'));
       if (videoSource && Number.isFinite(step.videoOffsetMs)) {
         const timestamp = `${Math.floor(step.videoOffsetMs / 60000)}:${String(Math.floor(step.videoOffsetMs / 1000) % 60).padStart(2, '0')}`;
         body.append(button(`Watch this step · ${timestamp}`, () => watchStep(step), 'journey-watch-step'));
@@ -413,7 +572,7 @@
       const fragment = document.createDocumentFragment();
       for (const item of runs) {
         const open = button('', async () => {
-          if (pending || isActive(run)) return;
+          if (pending || asking || isActive(run)) return;
           pending = 'JOURNEY_LOAD'; paint(); showError('');
           try {
             const result = await request('JOURNEY_LOAD', {runId: item.id});
@@ -427,8 +586,9 @@
           finally { pending = null; paint(); }
         });
         const date = new Date(item.createdAt);
-        const when = Number.isFinite(date.getTime()) ? date.toLocaleDateString(undefined, {month: 'short', day: 'numeric'}) : '';
-        open.append(node('strong', item.goal || 'Journey review'), node('small', [statusLabels[item.status] || item.status, when].filter(Boolean).join(' · ')));
+        const when = Number.isFinite(date.getTime()) ? date.toLocaleString(undefined, {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'}) : '';
+        open.append(node('strong', item.goal || 'Journey review'), node('small', [item.fork ? 'Alternative route' : 'Original run', statusLabels[item.status] || item.status, when].filter(Boolean).join(' · ')));
+        if (item.fork?.instructions) open.append(node('small', item.fork.instructions));
         fragment.append(open);
       }
       $('journey-history-list').replaceChildren(fragment);
@@ -462,8 +622,12 @@
     text('journey-run-notice', notice);
     $('journey-run-notice').hidden = !notice;
     $('journey-finished-actions').hidden = active;
-    $('journey-new').disabled = Boolean(pending);
-    $('journey-use-goal').disabled = Boolean(pending);
+    $('journey-new').disabled = Boolean(pending || asking);
+    $('journey-use-goal').disabled = Boolean(pending || asking);
+    forkButton.disabled = Boolean(pending || asking);
+    lineage.hidden = !run.fork;
+    if (run.fork) lineage.textContent = `Alternative route${run.fork.stepIndex ? ` · From step ${run.fork.stepIndex}` : ''}. ${run.fork.instructions}`;
+    renderConversation();
     const summary = asText(run.summary) || asText(run.summary?.text);
     $('journey-summary-section').hidden = !summary;
     text('journey-summary', summary);
@@ -481,6 +645,7 @@
     if (next?.id !== session?.id) {
       run = null; selectedRunId = null; renderKey = ''; historyKey = '';
       showForm = true; acceptedBusy = new Set(); historyGeneration++; mutationGeneration++; pending = null;
+      questionGeneration++; asking = false; forkContext = null; conversationRun = null;
       $('journey-history-list').replaceChildren();
       showError('');
       if (!next) setOpen(false);

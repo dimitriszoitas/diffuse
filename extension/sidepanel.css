@@ -243,3 +243,27 @@ html[data-theme=dark] .popup #panel-journey-view .journey-back { background: tra
 html[data-theme=dark] .popup #panel-journey-view .journey-back:hover { background: var(--ui-accent-soft); }
 @keyframes journey-breathe { 50% { opacity: .45; } }
 @media(prefers-reduced-motion:reduce) { .popup #journey-run #journey-status::before { animation: none; } }
+
+/* A clear menu for manual feedback, a screen audit, or a journey test. */
+body[data-surface=sidepanel] .popup .comment-shortcuts { margin: 0 0 17px; padding: 0 2px; }
+body[data-surface=sidepanel] .popup .comment-shortcuts .control-group-title { margin: 0 0 7px; font-size: 12px; color: var(--ui-ink); }
+body[data-surface=sidepanel] .popup .comment-shortcuts .shortcut-cheatsheet { padding: 0; margin: 0; background: transparent; color: var(--ui-muted); }
+body[data-surface=sidepanel] .popup .comment-shortcuts .shortcut-cheatsheet p { min-height: 29px; }
+body[data-surface=sidepanel] .popup .review-tools { overflow: hidden; border: 1px solid var(--ui-line); border-radius: 8px; background: var(--ui-surface); box-shadow: var(--ui-surface-shadow); }
+body[data-surface=sidepanel] .popup :is(#panel-ai,#panel-journey,#panel-diff).review-tool { display: flex; align-items: center; gap: 11px; width: 100%; min-height: 73px; margin: 0; padding: 13px; border: 0; border-radius: 0; background: transparent; color: var(--ui-ink); text-align: left; box-shadow: none; }
+body[data-surface=sidepanel] .popup :is(#panel-ai,#panel-journey,#panel-diff).review-tool:hover { background: var(--ui-surface-muted); }
+body[data-surface=sidepanel] .popup :is(#panel-ai,#panel-journey,#panel-diff).review-tool::before { display: none; }
+body[data-surface=sidepanel] .popup .review-tools > .review-tool + .review-tool,body[data-surface=sidepanel] .popup .diff-tool { border-top: 1px solid var(--ui-line); }
+body[data-surface=sidepanel] .popup .review-tool-icon { display: grid; place-items: center; width: 32px; height: 34px; flex: 0 0 32px; border-radius: 6px; background: var(--ui-accent-soft); color: var(--ui-accent); }
+body[data-surface=sidepanel] .popup .review-tool-icon svg { width: 19px; height: 19px; color: inherit; }
+body[data-surface=sidepanel] .popup #panel-journey .review-tool-icon { background: color-mix(in srgb, #65948c 14%, var(--ui-surface)); color: light-dark(#39796f,#91c9bd); }
+body[data-surface=sidepanel] .popup #panel-diff .review-tool-icon { background: color-mix(in srgb, #9680bb 13%, var(--ui-surface)); color: light-dark(#79619c,#c2aedc); }
+body[data-surface=sidepanel] .popup .review-tool-copy { display: block; min-width: 0; flex: 1; }
+body[data-surface=sidepanel] .popup .review-tool-copy strong { display: block; font-size: 12px; line-height: 1.45; font-weight: 600; letter-spacing: -.1px; }
+body[data-surface=sidepanel] .popup .review-tool-copy small,body[data-surface=sidepanel] .popup #panel-diff-hint { display: block; margin: 3px 0 0; font-size: 10px; line-height: 1.55; font-weight: 400; color: var(--ui-muted); }
+body[data-surface=sidepanel] .popup .review-tool-arrow { color: var(--ui-muted); font-size: 20px; font-weight: 400; flex: 0 0 7px; }
+body[data-surface=sidepanel] .popup .diff-tool #panel-comparison-controls { margin: 0 13px; padding: 10px 0 13px; border-color: var(--ui-line); }
+body[data-surface=sidepanel] .popup #panel-stop-recording { width: 100%; min-height: 38px; margin-top: 8px; border-color: var(--ui-line-strong); background: var(--ui-surface); color: var(--ui-danger); }
+body[data-surface=sidepanel] .popup .review-tool:focus-visible { outline-offset: -3px; }
+
+body[data-surface=sidepanel] .popup #panel-journey.review-tool { border-top: 1px solid var(--ui-line); }

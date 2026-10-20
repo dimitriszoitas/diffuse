@@ -20,7 +20,7 @@ await writeFile(join(extension, 'manifest.json'), JSON.stringify(manifest));
 const servicePath = join(extension, 'journey-service.mjs');
 const service = await readFile(servicePath, 'utf8');
 assert.ok(service.includes('decide = requestJourneyDecision'), 'Journey decision injection point is missing');
-await writeFile(servicePath, service.replace('decide = requestJourneyDecision', 'decide = globalThis.__journeyDecide || requestJourneyDecision'));
+await writeFile(servicePath, service.replace('decide = requestJourneyDecision', 'decide = globalThis.__journeyDecide || requestJourneyDecision').replace('followUp = requestJourneyFollowUp', 'followUp = globalThis.__journeyFollowUp || requestJourneyFollowUp'));
 const workerPath = join(extension, 'background.js');
 await writeFile(workerPath, (await readFile(workerPath, 'utf8'))
   .replace("import * as reviews from './review-store.mjs';", "import * as reviews from './review-store.mjs';\nglobalThis.__journeyReviews = reviews;")
@@ -33,9 +33,10 @@ input,select{display:block;margin:8px 0 24px;padding:12px;border:1px solid #a8bd
 label{display:block}h1{margin-top:0}table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:18px;border-bottom:1px solid #dbe4ed}
 </style></head><body><main>${content}</main></body></html>`;
 const pages = {
-  '/': shell('<p>Workspace</p><h1>Dashboard</h1><p>Manage the materials used in your products.</p><a href="/ingredients">Ingredients</a>'),
-  '/ingredients': shell('<p>Inventory</p><h1>Ingredients</h1><a href="/new">New</a><table><thead><tr><th>Name</th><th>Unit</th></tr></thead><tbody id="items"></tbody></table><script>const entry=JSON.parse(localStorage.getItem("ingredient")||"null");if(entry){const row=document.createElement("tr");for(const v of [entry.name,entry.unit]){const cell=document.createElement("td");cell.textContent=v;row.append(cell)}document.querySelector("#items").append(row)}</script>'),
-  '/new': shell('<p>Inventory / Ingredients</p><h1>New ingredient</h1><form><label>Name<input name="name" required></label><label>Unit<select name="unit"><option value="g">g</option><option value="ml">ml</option></select></label><button>Save ingredient</button></form><script>document.querySelector("form").addEventListener("submit",event=>{event.preventDefault();const data=new FormData(event.currentTarget);localStorage.setItem("ingredient",JSON.stringify({name:data.get("name"),unit:data.get("unit")}));location.href="/ingredients"})</script>'),
+  '/': shell('<p>Workspace</p><h1>Dashboard</h1><p>Manage the materials used in your products.</p><a href="/ingredients">Ingredients</a><br><a href="/wizard">Setup wizard</a>'),
+  '/wizard': shell('<p>Setup</p><h1>Add your first ingredient</h1><p>Step 1 of 1</p><a href="/new">Add ingredient</a>'),
+  '/ingredients': shell('<p>Inventory</p><h1>Ingredients</h1><a href="/new">New</a><table><thead><tr><th>Name</th><th>Unit</th></tr></thead><tbody id="items"></tbody></table><script>const entries=JSON.parse(localStorage.getItem("ingredients")||"[]");for(const entry of entries){const row=document.createElement("tr");for(const v of [entry.name,entry.unit]){const cell=document.createElement("td");cell.textContent=v;row.append(cell)}document.querySelector("#items").append(row)}</script>'),
+  '/new': shell('<p>Inventory / Ingredients</p><h1>New ingredient</h1><form><label>Name<input name="name" required></label><label>Unit<select name="unit"><option value="g">g</option><option value="ml">ml</option></select></label><button>Save ingredient</button></form><script>document.querySelector("form").addEventListener("submit",event=>{event.preventDefault();const data=new FormData(event.currentTarget);const entries=JSON.parse(localStorage.getItem("ingredients")||"[]");entries.push({name:data.get("name"),unit:data.get("unit")});localStorage.setItem("ingredients",JSON.stringify(entries));location.href="/ingredients"})</script>'),
 };
 const server = http.createServer((request, response) => {
   response.writeHead(200, {'content-type': 'text/html; charset=utf-8'});
@@ -80,7 +81,7 @@ async function nativeView(path) {
     text: selector => evaluate(`document.querySelector(${JSON.stringify(selector)})?.textContent||''`),
     fill: (selector, value) => evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));})()`),
     click: async selector => {
-      const point = await evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e||!e.checkVisibility()||e.disabled)throw new Error('Unavailable control '+${JSON.stringify(selector)});e.scrollIntoView({block:'nearest'});const b=e.getBoundingClientRect();return{x:b.x+b.width/2,y:b.y+b.height/2}})()`);
+      const point = await evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e||!e.checkVisibility()||e.disabled)throw new Error('Unavailable control '+${JSON.stringify(selector)});e.scrollIntoView({block:'center'});const b=e.getBoundingClientRect();return{x:b.x+b.width/2,y:b.y+b.height/2}})()`);
       await send('Input.dispatchMouseEvent', {type: 'mousePressed', button: 'left', clickCount: 1, ...point});
       await send('Input.dispatchMouseEvent', {type: 'mouseReleased', button: 'left', clickCount: 1, ...point});
     },
@@ -108,17 +109,19 @@ try {
   await worker.evaluate(async () => {
     await chrome.storage.session.set({anthropicApiKey: 'sk-ant-fixture-not-a-real-key'});
     globalThis.__journeyDecisionCalls = 0;
-    globalThis.__journeyDecide = async ({observation, history}) => {
+    globalThis.__journeyDecide = async ({observation, history, routePreferences}) => {
       globalThis.__journeyDecisionCalls++;
+      const ingredient = routePreferences ? 'Rice milk' : 'Oat milk';
       const controls = observation.controls;
       const byLabel = label => controls.find(item => item.label === label);
       const click = label => ({action: {type: 'click', targetId: byLabel(label).id}, reason: `Follow the visible ${label} control.`});
       const path = new URL(observation.url).pathname;
       await new Promise(resolve => setTimeout(resolve, history.length ? 200 : 1000));
-      if (path === '/') return click('Ingredients');
-      if (path === '/ingredients' && !observation.text.includes('Oat milk')) return click('New');
+      if (path === '/') return click(routePreferences ? 'Setup wizard' : 'Ingredients');
+      if (path === '/wizard') return click('Add ingredient');
+      if (path === '/ingredients' && !observation.text.includes(ingredient)) return click('New');
       if (path === '/new') {
-        if (byLabel('Name').value !== 'Oat milk') return {action: {type: 'type', targetId: byLabel('Name').id, text: 'Oat milk'}, reason: 'Enter the supplied test ingredient.'};
+        if (byLabel('Name').value !== ingredient) return {action: {type: 'type', targetId: byLabel('Name').id, text: ingredient}, reason: 'Enter the supplied test ingredient.'};
         if (byLabel('Unit').value !== 'ml') return {action: {type: 'select', targetId: byLabel('Unit').id, value: 'ml'}, reason: 'Choose the specified unit.'};
         return click('Save ingredient');
       }
@@ -131,6 +134,10 @@ try {
           evidenceSteps: dimension === 'recovery' ? [] : [2], confidence: dimension === 'recovery' ? 0 : .8})),
       }};
     };
+    globalThis.__journeyFollowUp = async ({stepIndex, question, run}) => {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      return {answer: 'The recorded step used New on Ingredients. The starting page also offered Setup wizard; that route was not tested in this attempt.', evidenceSteps: [1, 2], routeSuggestion: question.includes('wizard') ? {label: 'Try the setup wizard', instructions: 'Start with Setup wizard, then Add ingredient. Use Rice milk as a separate test entry.'} : null};
+    };
   });
   const page = await context.newPage();
   await page.goto(`${origin}/`);
@@ -140,10 +147,9 @@ try {
   await cdp.send('Extensions.triggerAction', {id: extensionId, targetId: target.targetId});
   const popup = await nativeView('popup.html');
   await until(() => popup.evaluate(`document.getElementById('popup')?.getAttribute('aria-busy')==='false'`), 'popup ready');
-  await popup.click('#open-side-panel');
+  await popup.click('#start-comparison');
   panel = await nativeView('sidepanel.html');
   await until(() => panel.evaluate(`document.getElementById('popup')?.getAttribute('aria-busy')==='false'`), 'native panel ready');
-  await panel.click('#start-comparison');
   await until(() => panel.visible('#panel-journey'), 'journey entry');
   await panel.click('#panel-journey');
   await panel.fill('#journey-goal', 'Add Oat milk to the Ingredients table, with ml as its unit. Find the path yourself and confirm the saved row.');
@@ -222,6 +228,52 @@ try {
   assert.match(await panel.text('#journey-history'), /Oat milk/);
   await panel.screenshot('journey-history');
   console.log('PASS journey history remains available after closing and reopening the sidebar view');
+
+  if (!await panel.evaluate(`document.querySelector('#journey-timeline li[data-step="2"] details').open`)) await panel.click('#journey-timeline li[data-step="2"] summary');
+  await panel.click('#journey-timeline li[data-step="2"] .journey-ask-step');
+  await panel.fill('#journey-question', 'Why did you choose New instead of the setup wizard?');
+  await panel.click('#journey-ask');
+  await until(() => panel.text('#journey-conversation').then(value => value.includes('that route was not tested')), 'grounded follow-up answer');
+  const answered = await currentRun();
+  assert.equal(answered.followUps.length, 1);
+  assert.equal(answered.followUps[0].stepIndex, 2);
+  assert.equal(page.url(), `${origin}/ingredients`, 'Asking a question must not operate the app');
+  await panel.screenshot('journey-follow-up');
+  await panel.click('.journey-fork-proposal');
+  assert.match(await panel.text('#journey-fork-description'), /Existing app data is not reset/);
+  await panel.fill('#journey-goal', 'Add Rice milk to Ingredients using ml. Use the setup wizard and verify the saved row.');
+  assert.equal(await panel.evaluate('document.querySelector("#journey-route").value'), answered.followUps[0].routeSuggestion.instructions);
+  await panel.screenshot('journey-fork-setup');
+  await panel.click('#journey-start');
+  await until(async () => (await currentRun())?.id !== run.id && (await currentRun())?.status === 'completed' && (await currentRun())?.recording?.status === 'saved', 'fork completed', 60000);
+  const forked = await currentRun();
+  assert.equal(forked.fork.parentRunId, run.id);
+  assert.equal(forked.fork.stepIndex, 2);
+  assert.equal(forked.startUrl, `${origin}/`);
+  assert.equal(forked.steps[0].observation.url, `${origin}/`);
+  assert.ok(forked.steps.some(step => step.observation.url === `${origin}/wizard`));
+  assert.match(await page.locator('tbody').textContent(), /Oat milk.*Rice milk/s);
+  const retained = await worker.evaluate(id => __journeyStore.getJourney(id), run.id);
+  assert.equal(retained.followUps.length, 1);
+  assert.equal(retained.video.dataUrl, run.video.dataUrl, 'Fork keeps the original recording intact');
+  await until(() => panel.text('#journey-lineage').then(value => value.includes('Alternative route')), 'fork lineage');
+  await panel.screenshot('journey-fork-completed');
+  console.log('PASS step follow-up persists an answer without actions, proposes an editable alternative, reruns from the original start through the wizard, and preserves original evidence and existing app data');
+  await until(() => panel.text('#journey-history-list').then(value => value.includes('Rice milk')), 'fork history refreshed');
+  await panel.click('#journey-history summary');
+  const originalHistoryIndex = await panel.evaluate(`Array.from(document.querySelectorAll('#journey-history-list button')).findIndex(button => button.textContent.includes('Add Oat milk')) + 1`);
+  await panel.click(`#journey-history-list button:nth-child(${originalHistoryIndex})`);
+  await until(() => panel.text('#journey-run-goal').then(value => value.includes('Oat milk')), 'original journey restored');
+  assert.match(await panel.text('#journey-conversation'), /setup wizard/);
+  await panel.click('.journey-fork-proposal');
+  await until(() => panel.visible('#journey-fork-fields'), 'older journey fork form');
+  await panel.fill('#journey-route', 'Try the wizard with another test ingredient.');
+  await pause(7600); // A normal finished-run poll must not replace an older parent form.
+  assert.equal(await panel.visible('#journey-fork-fields'), true);
+  assert.equal(await panel.evaluate('document.querySelector("#journey-route").value'), 'Try the wizard with another test ingredient.');
+  await panel.click('#journey-fork-cancel');
+  assert.match(await panel.text('#journey-run-goal'), /Oat milk/);
+  console.log('PASS saved conversation reloads with its original journey and an older fork draft survives polling');
   await writeFile(join(artifacts, 'journey-browser-verification.json'), JSON.stringify({
     status: run.status, pages: [...new Set(run.steps.map(step => step.observation.url))],
     steps: run.steps.length, findings: run.findings.length, metrics: run.metrics,

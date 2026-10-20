@@ -1,16 +1,25 @@
 import {createJourneyRunner} from './journey-runner.mjs';
-import {requestJourneyDecision} from './journey-ai.mjs';
+import {JourneyError, requestJourneyDecision, requestJourneyFollowUp, validateJourneyFollowUp} from './journey-ai.mjs';
 import * as localStore from './journey-store.mjs';
 
-export const JOURNEY_MESSAGES = new Set(['JOURNEY_START', 'JOURNEY_STATE', 'JOURNEY_HISTORY', 'JOURNEY_LOAD', 'JOURNEY_PAUSE', 'JOURNEY_RESUME', 'JOURNEY_STOP', 'JOURNEY_ACCEPT']);
+export const JOURNEY_MESSAGES = new Set(['JOURNEY_START', 'JOURNEY_STATE', 'JOURNEY_HISTORY', 'JOURNEY_LOAD', 'JOURNEY_PAUSE', 'JOURNEY_RESUME', 'JOURNEY_STOP', 'JOURNEY_ACCEPT', 'JOURNEY_ASK']);
 const activeStatus = status => ['running', 'paused'].includes(status);
+const terminalStatus = status => ['completed', 'failed', 'blocked', 'inconclusive', 'stopped'].includes(status);
 export function journeyInput(input = {}) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Describe the task you want Diffuse to complete.');
   const clean = {};
+  if (input.fork !== undefined) {
+    const fork = input.fork;
+    if (!fork || typeof fork !== 'object' || Array.isArray(fork) || typeof fork.parentRunId !== 'string' || !fork.parentRunId.trim() || fork.parentRunId.length > 120 ||
+        typeof fork.instructions !== 'string' || !fork.instructions.trim() || fork.instructions.length > 2000 ||
+        (fork.stepIndex !== undefined && (!Number.isInteger(fork.stepIndex) || fork.stepIndex < 1 || fork.stepIndex > 31))) throw new Error('Choose a saved journey and describe the alternative route in under 2,000 characters.');
+    clean.fork = {parentRunId: fork.parentRunId.trim(), ...(fork.stepIndex !== undefined ? {stepIndex: fork.stepIndex} : {}), instructions: fork.instructions.trim()};
+  }
   for (const [name, limit] of [['goal', 2000], ['successCriteria', 2000], ['testData', 4000]]) {
     if (input[name] !== undefined && (typeof input[name] !== 'string' || input[name].length > limit)) throw new Error(`Keep ${name === 'goal' ? 'the goal' : name === 'testData' ? 'test data' : 'success criteria'} under ${limit} characters.`);
     clean[name] = (input[name] || '').trim();
   }
-  if (!clean.goal) throw new Error('Describe the task you want Diffuse to complete.');
+  if (!clean.goal && (!clean.fork || input.goal !== undefined)) throw new Error('Describe the task you want Diffuse to complete.');
   clean.maxSteps = input.maxSteps ?? 20;
   if (!Number.isInteger(clean.maxSteps) || clean.maxSteps < 5 || clean.maxSteps > 30) throw new Error('Choose a limit between 5 and 30 actions.');
   return clean;
@@ -33,16 +42,26 @@ export function journeyReproduction(run, until) {
 }
 
 /** Browser identity and side-panel authorization are enforced by the caller. */
-export function createJourneyService({getSession, checkReady, createExecutor, readConfig, publish, refreshComments, reviews, startRecording,
-  store = localStore, runnerFactory = createJourneyRunner, decide = requestJourneyDecision}) {
+export function createJourneyService({getSession, checkReady, createExecutor, readConfig, publish, refreshComments, reviews, startRecording, prepareFork,
+  store = localStore, runnerFactory = createJourneyRunner, decide = requestJourneyDecision, followUp = requestJourneyFollowUp}) {
   let job = null;
   let starting = false;
+  let startupController = null;
+  let asking = null;
   let generation = 0;
   let lastRun = null;
   let mutation = Promise.resolve();
   const same = current => getSession() === current;
   const assertCurrent = current => { if (!same(current)) throw new Error('This review has ended. Reopen it to see its journey history.'); };
-  const serialize = task => { const operation = mutation.catch(() => {}).then(task); mutation = operation.catch(() => {}); return operation; };
+  const serialize = task => {
+    const requestedGeneration = generation;
+    const operation = mutation.catch(() => {}).then(() => {
+      if (requestedGeneration !== generation) throw new Error('The journey action was cancelled.');
+      return task();
+    });
+    mutation = operation.catch(() => {});
+    return operation;
+  };
   async function read(current, runId) {
     const id = runId || current.journey?.id;
     if (!id) return null;
@@ -59,7 +78,8 @@ export function createJourneyService({getSession, checkReady, createExecutor, re
     return run;
   }
   async function accept(current, message) {
-    if (job || starting) throw new Error('Stop the journey before adding findings to the review.');
+    assertCurrent(current);
+    if (job || starting || asking) throw new Error('Stop the journey before adding findings to the review.');
     const run = await read(current, message.runId);
     const finding = run?.findings?.[message.findingIndex];
     if (!Number.isInteger(message.findingIndex) || !finding) throw new Error('Choose a finding from this journey.');
@@ -89,20 +109,74 @@ export function createJourneyService({getSession, checkReady, createExecutor, re
     if (same(current)) { await refreshComments(current); await publish(); }
     return {ok: true, run, commentId: saved.id};
   }
+  async function ask(current, message) {
+    assertCurrent(current);
+    if (job || starting || asking) throw new Error('Wait for the current journey action before asking about the saved run.');
+    if (typeof message.runId !== 'string' || !message.runId || message.runId.length > 120 || typeof message.question !== 'string' || !message.question.trim() || message.question.length > 2000) throw new Error('Ask a question under 2,000 characters about a saved journey.');
+    const pending = {controller: new AbortController(), version: generation};
+    asking = pending;
+    let keepAlive;
+    const assertAsking = () => { assertCurrent(current); if (pending.version !== generation || pending.controller.signal.aborted) throw new Error('The journey question was cancelled.'); };
+    try {
+      const run = await read(current, message.runId);
+      if (!terminalStatus(run.status)) throw new Error('Finish or stop this journey before asking about it.');
+      if (message.stepIndex !== undefined && (!Number.isInteger(message.stepIndex) || !run.steps.some(step => step.index === message.stepIndex))) throw new Error('Choose an existing step from this journey.');
+      if ((run.followUps || []).length >= 20) throw new Error('This journey has reached its limit of 20 follow-up questions.');
+      const config = await readConfig();
+      if (!config.hasKey) throw new Error('Add your Anthropic API key in Settings before asking a journey question.');
+      if (message.question.includes(config.apiKey)) throw new Error('Remove your API key from the question.');
+      assertAsking();
+      let result;
+      keepAlive = setInterval(() => { if (same(current)) void publish().catch(() => {}); }, 20000);
+      try {
+        result = await followUp({apiKey: config.apiKey, model: config.model, run, question: message.question.trim(), stepIndex: message.stepIndex, signal: pending.controller.signal});
+      } catch (error) {
+        if (error instanceof JourneyError) throw error;
+        throw new Error('Diffuse could not answer this journey question. Try again.');
+      }
+      assertAsking();
+      result = validateJourneyFollowUp(result, run);
+      if (JSON.stringify(result).includes(config.apiKey)) throw new Error('The journey answer could not be saved. Try again.');
+      const now = new Date().toISOString();
+      const updated = {...run, updatedAt: now, followUps: [...(run.followUps || []), {id: crypto.randomUUID(), ...(message.stepIndex !== undefined ? {stepIndex: message.stepIndex} : {}), question: message.question.trim(), ...result, createdAt: now}]};
+      await store.putJourney(updated);
+      assertAsking();
+      lastRun = updated;
+      if (current.journey?.id === updated.id) current.journey.updatedAt = updated.updatedAt;
+      await publish();
+      return {ok: true, run: updated};
+    } finally { clearInterval(keepAlive); if (asking === pending) asking = null; }
+  }
   async function start(current, input) {
-    if (job || starting) throw new Error('Stop the current journey before starting another.');
+    if (job || starting || asking) throw new Error('Stop the current journey before starting another.');
     starting = true;
     const version = ++generation;
+    const startup = new AbortController(); startupController = startup;
     const assertStarting = () => { assertCurrent(current); if (version !== generation) throw new Error('The journey was cancelled before it started.'); };
     let executor, keepAlive, recorder;
     try {
-      const fields = journeyInput(input);
+      let fields = journeyInput(input);
       const tab = await checkReady(current);
-      const start = new URL(tab.url);
+      assertStarting();
+      let parent = null;
+      if (fields.fork) {
+        parent = await read(current, fields.fork.parentRunId);
+        if (!terminalStatus(parent.status)) throw new Error('Finish or stop the original journey before trying another route.');
+        if (fields.fork.stepIndex !== undefined && !parent.steps.some(step => step.index === fields.fork.stepIndex)) throw new Error('Choose an existing step from the original journey.');
+        fields = journeyInput({...fields, ...Object.fromEntries(['goal', 'successCriteria', 'testData', 'maxSteps'].filter(key => input[key] === undefined).map(key => [key, parent[key]]))});
+      }
+      const start = new URL(parent ? parent.startUrl : tab.url);
       if (!['http:', 'https:'].includes(start.protocol) || start.username || start.password || start.href.length > 2048) throw new Error('Open a website or local preview server with a supported address to test a journey.');
+      if (parent && start.origin !== new URL(tab.url).origin) throw new Error('Open the original journey’s website before trying another route.');
       const config = await readConfig();
       if (!config.hasKey) throw new Error('Add your Anthropic API key in Settings before testing a journey.');
       if (JSON.stringify(fields).includes(config.apiKey)) throw new Error('Remove your API key from the goal or test data.');
+      assertStarting();
+      if (parent) {
+        if (!prepareFork) throw new Error('Reopen the starting page before trying another route.');
+        await prepareFork(current, parent, {signal: startup.signal});
+        assertStarting();
+      }
       if ((await checkReady(current)).url !== start.href) throw new Error('The starting page changed. Start the journey again from the intended page.');
       assertStarting();
       const now = new Date().toISOString();
@@ -133,7 +207,7 @@ export function createJourneyService({getSession, checkReady, createExecutor, re
       const runner = runnerFactory({
         observe: options => executor.observe(options),
         execute: (action, observation, options) => executor.execute(action, observation, options),
-        decide: args => decide({...args, apiKey: config.apiKey, model: config.model}),
+        decide: args => decide({...args, routePreferences: fields.fork?.instructions || '', apiKey: config.apiKey, model: config.model}),
         onUpdate: async state => {
           const run = decorate(state);
           lastRun = run;
@@ -186,12 +260,14 @@ export function createJourneyService({getSession, checkReady, createExecutor, re
         await executor?.cleanup().catch(() => {});
       }
       throw error;
-    } finally { starting = false; }
+    } finally { starting = false; if (startupController === startup) startupController = null; }
   }
   return {
-    get busy() { return starting || Boolean(job); },
+    get busy() { return starting || Boolean(job) || Boolean(asking); },
     async interrupt() {
       generation++;
+      startupController?.abort();
+      asking?.controller.abort();
       if (!job) return;
       const entry = job;
       await entry.runner.stop();
@@ -231,6 +307,7 @@ export function createJourneyService({getSession, checkReady, createExecutor, re
       if (!current || current.id !== message.sessionId) throw new Error('Open the active review sidebar to test a journey.');
       if (message.type === 'JOURNEY_START') return start(current, message.input);
       if (message.type === 'JOURNEY_HISTORY') return {ok: true, runs: await store.listJourneys(current.reviewId)};
+      if (message.type === 'JOURNEY_ASK') return serialize(() => ask(current, message));
       if (message.type === 'JOURNEY_ACCEPT') return serialize(() => accept(current, message));
       if (message.type === 'JOURNEY_LOAD' || message.type === 'JOURNEY_STATE') {
         const run = await read(current, message.runId);

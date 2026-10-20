@@ -142,10 +142,35 @@ export function createJourneyExecutor({
       return response.result;
     } finally { clearTimeout(timer); }
   };
+  const pointer = (type, payload = {}) => chromeApi.tabs.sendMessage(tabId, {namespace: 'diffuse-recording-pointer', type, ...payload}, {frameId: 0});
+  async function clickLeadIn(action, observation) {
+    const preview = await send('PREVIEW_CLICK', {action, context: observation.context, origin});
+    current();
+    if (!Number.isFinite(preview?.point?.x) || !Number.isFinite(preview?.point?.y)) throw error('The click location could not be verified.', 'JOURNEY_STALE');
+    const signal = operationSignal;
+    const abort = () => { void pointer('CLEAR').catch(() => {}); };
+    signal?.addEventListener('abort', abort, {once: true});
+    try {
+      current();
+      const result = await pointer('PULSE', {point: preview.point});
+      if (!result?.ok) { current(); throw error('The recording pointer could not show this action.', 'JOURNEY_ACTION_FAILED'); }
+      // Give the actual recording several frames of context before navigation
+      // replaces the document. Revalidate below; this is never an action retry.
+      await delay(160);
+      current();
+      await page();
+      await send('VALIDATE', {context: observation.context});
+      current();
+      return preview.point;
+    } catch (failure) {
+      await pointer('CLEAR').catch(() => {});
+      throw failure;
+    } finally { signal?.removeEventListener('abort', abort); }
+  }
   async function install() {
     await page();
     await ensureDebugger();
-    await chromeApi.scripting.executeScript({target: {tabId, frameIds: [0]}, world: 'ISOLATED', files: ['journey-page.js']});
+    await chromeApi.scripting.executeScript({target: {tabId, frameIds: [0]}, world: 'ISOLATED', files: ['journey-page.js', 'recording-pointer.js']});
   }
   async function settled() {
     const end = Date.now() + 8000;
@@ -177,6 +202,7 @@ export function createJourneyExecutor({
   async function observe() {
     current();
     await settled();
+    await pointer('CLEAR').catch(() => {});
     const observation = await send('OBSERVE');
     if (journeyOrigin(observation.url) !== origin) throw error('The observation left the approved website.');
     await page();
@@ -211,11 +237,20 @@ export function createJourneyExecutor({
       visited.pop();
       result = {type: 'back', performed: true};
     } else {
+      let point;
+      try { point = action.type === 'click' ? await clickLeadIn(action, observation) : undefined; }
+      catch (failure) {
+        await pointer('CLEAR').catch(() => {});
+        if (failure.code) throw failure;
+        throw error('The page changed while preparing the click. Read the page again.', 'JOURNEY_STALE');
+      }
       // A rejected/disconnected click is never retried: it may already have
       // submitted a form before the old document disappeared.
       try {
-        result = await send('EXECUTE', {action, context: observation.context, origin}, 5000);
+        current();
+        result = await send('EXECUTE', {action, context: observation.context, origin, ...(point ? {point} : {})}, 5000);
       } catch (failure) {
+        await pointer('CLEAR').catch(() => {});
         if (failure.code || !/receiving end|message port|frame|context|closed/i.test(failure.message)) throw failure;
         result = {type: action.type, performed: true, navigation: true};
       }
@@ -233,6 +268,7 @@ export function createJourneyExecutor({
     cleanup: async () => {
       closed = true;
       latest = null;
+      await pointer('STOP').catch(() => {});
       await send('CLEANUP', {}, 1000).catch(() => {});
       if (listening) {
         chromeApi.debugger.onEvent.removeListener(onDebugEvent);

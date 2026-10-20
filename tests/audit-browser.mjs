@@ -224,7 +224,7 @@ try {
     chrome.tabCapture.getMediaStreamId = async () => { globalThis.__mediaCalls++; throw new Error('activeTab permission is required'); };
   });
   await overlay.locator('#comment-record').click();
-  await until(()=>overlay.locator('#comment-error').textContent().then(text=>text.includes('Enable capture')), 'composer recording permission failure');
+  await until(()=>overlay.locator('#comment-error').textContent().then(text=>text.includes('Start Diffuse')), 'composer recording permission failure');
   assert.equal(await overlay.locator('#comment-actual').inputValue(), 'Review this recorded state.');
   await overlay.locator('#evidence-screenshot').click();
   await worker.evaluate(async () => {

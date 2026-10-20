@@ -17,7 +17,12 @@ function fixture({owned = false} = {}) {
   const chromeApi = {
     tabs: {
       get: async () => ({url, status: 'complete', active}),
-      sendMessage: async (id, message, options) => { calls.push(['message', message, options]); return handler(message); },
+      sendMessage: async (id, message, options) => {
+        calls.push(['message', message, options]);
+        if (message.namespace === 'diffuse-recording-pointer') return {ok: true};
+        if (message.type === 'PREVIEW_CLICK') return {ok: true, result: {point: {x: 30, y: 40}}};
+        return handler(message);
+      },
       goBack: async () => { calls.push(['back']); url = 'https://example.test/dashboard'; },
     },
     scripting: {executeScript: async args => { calls.push(['inject', args]); }},
@@ -236,5 +241,43 @@ test('browser guard notifies the runner immediately only once', async () => {
   f.event('Page.windowOpen', {url: 'https://example.test/another'});
   await Promise.resolve();
   assert.equal(f.calls.filter(call => call[0] === 'blocked').length, 1);
+  await f.executor.cleanup();
+});
+
+test('recorded click shows a location before execution and passes that location for revalidation', async () => {
+  const f = fixture();
+  const observation = await f.executor.observe();
+  await f.executor.execute({type: 'click', targetId: 'control-1'}, observation);
+  const pulse = f.calls.findIndex(call => call[0] === 'message' && call[1].namespace === 'diffuse-recording-pointer' && call[1].type === 'PULSE');
+  const executed = f.calls.findIndex(call => call[0] === 'message' && call[1].type === 'EXECUTE');
+  assert.ok(pulse >= 0 && executed > pulse);
+  assert.deepEqual(f.calls[executed][1].point, {x: 30, y: 40});
+  await f.executor.cleanup();
+});
+
+test('cancelling during the visible click lead-in clears the marker and prevents the click', async () => {
+  const f = fixture(), controller = new AbortController();
+  const observation = await f.executor.observe();
+  const original = f.chromeApi.tabs.sendMessage;
+  f.chromeApi.tabs.sendMessage = async (...args) => {
+    const result = await original(...args);
+    if (args[1].type === 'PULSE') setTimeout(() => controller.abort(), 30);
+    return result;
+  };
+  await assert.rejects(f.executor.execute({type: 'click', targetId: 'control-1'}, observation, {signal: controller.signal}), {code: 'JOURNEY_CANCELLED'});
+  assert.equal(f.calls.some(call => call[0] === 'message' && call[1].type === 'EXECUTE'), false);
+  assert.ok(f.calls.some(call => call[0] === 'message' && call[1].namespace === 'diffuse-recording-pointer' && call[1].type === 'CLEAR'));
+  await f.executor.cleanup();
+});
+
+test('page changes during the click lead-in are rejected without executing', async () => {
+  const f = fixture();
+  const observation = await f.executor.observe();
+  let validation = 0;
+  f.setHandler(async message => message.type === 'VALIDATE' && ++validation > 1
+    ? {ok: false, code: 'JOURNEY_STALE', error: 'The page changed during the pulse.'}
+    : {ok: true, result: {}});
+  await assert.rejects(f.executor.execute({type: 'click', targetId: 'control-1'}, observation), {code: 'JOURNEY_STALE'});
+  assert.equal(f.calls.some(call => call[0] === 'message' && call[1].type === 'EXECUTE'), false);
   await f.executor.cleanup();
 });

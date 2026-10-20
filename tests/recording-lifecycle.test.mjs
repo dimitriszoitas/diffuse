@@ -70,7 +70,7 @@ async function backgroundHarness(options = {}) {
       },
     },
     permissions: {contains: async () => true},
-    scripting: {executeScript: async () => {}},
+    scripting: {executeScript: async input => options.executeScript?.(input)},
     tabCapture: {getMediaStreamId: async input => options.streamId ? options.streamId(input) : 'target-stream'},
   };
   const context = vm.createContext({createViewportController,
@@ -81,7 +81,7 @@ async function backgroundHarness(options = {}) {
   });
   vm.runInContext(backgroundSource.replace(/^import .*\n/gm, '') + `
     globalThis.api = {
-      ready, beginRecording, finishRecording, initializeTab, stopSession, handle, referenceBusyReason,
+      ready, beginRecording, finishRecording, initializeTab, stopSession, handle, referenceBusyReason, recordingPointer,
       setSession(value) { session = value; }, getSession() { return session; },
       setEvidenceBusy(value) {evidenceBusy=value;}, setAIJob(value) {aiJob=value;}
     };
@@ -360,4 +360,31 @@ test('saving passes screenshot-only choice to the transaction and rejects video 
   assert.equal(harness.saves.length,1);
   assert.equal(harness.saves[0].options.evidenceChoice,'screenshot');
   assert.equal(harness.saves[0].fields.title,'');
+});
+
+test('comment recording enables pointer feedback, restores it after navigation, and removes it when saved', async () => {
+  const h = await backgroundHarness();
+  h.session.recording = null;
+  const recording = await h.beginRecording();
+  const markers = () => h.messages.filter(message => message.namespace === 'diffuse-recording-pointer');
+  assert.equal(markers().at(-1).type, 'START');
+  assert.equal(markers().at(-1).trackPointer, true);
+  await h.initializeTab('target');
+  assert.equal(markers().filter(message => message.type === 'START').length, 2);
+  await h.finishRecording(recording.id, video);
+  assert.equal(markers().at(-1).type, 'STOP');
+});
+
+test('a delayed pointer injection cannot reactivate tracking after the recording ended', async () => {
+  let release, injected;
+  const entered = new Promise(resolve => { injected = resolve; });
+  const h = await backgroundHarness({executeScript: async input => {
+    if (input.files.includes('recording-pointer.js')) { injected(); await new Promise(resolve => { release = resolve; }); }
+  }});
+  const installing = h.recordingPointer(h.session, 'START');
+  await entered;
+  h.session.recording = null;
+  release();
+  await installing;
+  assert.equal(h.messages.filter(message => message.namespace === 'diffuse-recording-pointer' && message.type === 'START').length, 0);
 });

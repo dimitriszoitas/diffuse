@@ -1,4 +1,4 @@
-# Try Diffuse 0.13.0
+# Try Diffuse 0.14.0
 
 Compare a live prototype over production or audit one page. Leave pinned comments on elements or areas, record a short silent interaction, and share feedback through GitHub or Jira. Work through a shared PR review and capture updated evidence for recheck. Claude can suggest findings when you connect your own Anthropic API key.
 
@@ -6,24 +6,24 @@ Compare a live prototype over production or audit one page. Leave pinned comment
 
 For a first installation:
 
-1. Download and unzip [Diffuse-0.13.0.zip](https://github.com/dimitriszoitas/diffuse/releases/download/v0.13.0/Diffuse-0.13.0.zip). Keep the resulting **Diffuse** folder somewhere permanent.
+1. Download and unzip [Diffuse-0.14.0.zip](https://github.com/dimitriszoitas/diffuse/releases/download/v0.14.0/Diffuse-0.14.0.zip). Keep the resulting **Diffuse** folder somewhere permanent.
 2. In your normal Chrome browser, open `chrome://extensions`.
 3. Turn on **Developer mode**, then click **Load unpacked** and choose that **Diffuse** folder.
 4. Pin **Diffuse — Live design comparison** using Chrome’s extensions menu.
 
 **Updating an official 0.10.2, 0.11.0, or 0.12.0 installation?** Replace the files in the existing Diffuse folder, click **Reload** in `chrome://extensions`, then refresh reviewed pages. Keep the same installation to retain reviews and settings.
 
-**Upgrading from 0.10.1 or earlier?** First export the reviews you want to keep with **⋯ → Export review**. Keep the old extension and folder intact. Install 0.13.0 from a separate folder, import your files using **Load review**, and reconnect Jira and optional AI/Figma settings. Disable the old copy after checking the imported reviews. The shared identity introduced in 0.10.2 has separate storage, so replacing older files does not transfer their reviews.
+**Upgrading from 0.10.1 or earlier?** First export the reviews you want to keep with **⋯ → Export review**. Keep the old extension and folder intact. Install 0.14.0 from a separate folder, import your files using **Load review**, and reconnect Jira and optional AI/Figma settings. Disable the old copy after checking the imported reviews. The shared identity introduced in 0.10.2 has separate storage, so replacing older files does not transfer their reviews.
 
 You do not need to sign in to a special test browser or share a password with Diffuse.
 
 ## Start on the page you want to review
 
 1. Open the page you want to review in Chrome.
-2. Click the Diffuse extension icon, then **Start review**. Allow access to this page if requested.
+2. Click the Diffuse extension icon, then **Start Diffuse**. Allow access to this page if requested.
 3. Tap **C**, release it, then click anywhere on the page to leave a comment, or hold **C** and drag to select an area. Use the side drawer for recording, AI review and reports.
 
-There is no floating toolbar. If the sidebar is closed, click the Diffuse extension icon and **Open review sidebar** to return to the controls.
+There is no floating toolbar. If the sidebar is closed, click the Diffuse extension icon and **Start Diffuse** to return to the controls.
 
 There is no audit/comparison mode to choose. Without a reference, Diffuse reviews one page. Add a reference whenever you want to compare.
 
@@ -47,7 +47,7 @@ Open `chrome://extensions` → Diffuse → **Details**, then enable **Allow acce
 
 ## Use the side drawer
 
-**Start review** opens the sidebar. For an active review, use **Open review sidebar** in the extension popup. Chrome gives Diffuse its own resizable space beside the page. Review controls live here; comments are written in a popover beside their pin on the page.
+**Start Diffuse** opens the sidebar. For an active review, use **Start Diffuse** in the extension popup. Chrome gives Diffuse its own resizable space beside the page. Review controls live here; comments are written in a popover beside their pin on the page.
 
 Drag Chrome’s divider to resize the drawer. Close it using Chrome’s **×** above it to restore the page width. Closing keeps the active review and unfinished comment. **Stop** ends the review instead. Chrome controls which side the drawer uses.
 
@@ -61,7 +61,7 @@ Chrome asks for the updated extension's debugging permission and shows a notice 
 
 ## Add a comment
 
-Starting a review from the real Chrome toolbar grants capture for that page. If Chrome needs access again—for example after starting from a persistent drawer on a newly selected tab—click the actual Diffuse icon on the reviewed page, then **Enable capture & return**. Your draft stays available.
+Starting a review from the real Chrome toolbar grants capture for that page. If Chrome needs access again—for example after starting from a persistent drawer on a newly selected tab—click the actual Diffuse icon on the reviewed page, then **Start Diffuse**. Your draft stays available.
 
 1. Tap **C**, release it, then click an element to leave a comment. For an area, hold **C + left-click-drag** to draw a rectangle. Shortcuts are ignored while typing in editable inputs; Escape cancels.
 2. Write directly in the popover beside your selection. The comment field is focused immediately, and you can type while the screenshot is attached. Add an expected result if useful.
@@ -82,7 +82,7 @@ In the comment form, choose **Short recording**, then **Start recording**. Inter
 
 The silent clip captures the whole visible page, including Diffuse’s controls and any comparison overlay. Selecting a region does not crop the video. Preview the clip and save with **Short recording** selected. If you switch to **Screenshot** before saving, that comment excludes the clip.
 
-The drawer’s **Record page** control is also available. It captures starting screenshots and opens a comment form afterward. **Stop** ends the review; an unfinished recording is preserved in the report.
+A yellow pointer halo and click pulse make the interaction visible in the saved clip. The sidebar shows **Stop recording** while a clip is active. **Stop** ends the review; an unfinished recording is preserved in the report.
 
 ## Choose light or dark
 
@@ -103,9 +103,11 @@ New reviews ask for one actionable issue per finding. **Current** describes the 
 
 ## Test a journey across pages
 
-Before sharing, you can also ask Diffuse to try a task across the app. Open **Test a journey** in the sidebar, enter your goal and any test data, and choose **Start journey**. It uses your saved Anthropic key and may create records, so use a suitable test environment. Keep the reviewed tab visible.
+Before sharing, you can also ask Diffuse to try a task across the app. Open **Journey Testing with AI** in the sidebar, enter your goal and any test data, and choose **Start journey**. It uses your saved Anthropic key and may create records, so use a suitable test environment. Keep the reviewed tab visible.
 
 Each attempt keeps a silent video alongside its step notes and screenshots. **Watch this step** jumps to its moment in the video; **Download** saves the full movie. Pause/Resume affects actions and recording together. Inspect the outcome and AI assessments, then accept relevant findings into the review. Accepted findings keep their screenshot and reproduction path. Download the full journey movie separately when sharing the entire attempt. See the [journey guide](Diffuse/docs/journey-reviews.md).
+
+After a run, choose **Ask about this step** to discuss a recorded choice. The answer can offer **Fork journey…** with an editable alternative route. Starting it creates a separate run from the original starting page, keeping the original evidence. Existing app data is not reset. Yellow click pulses make the actions visible in both journey and comment recordings.
 
 ## Share a review file
 

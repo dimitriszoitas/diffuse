@@ -253,7 +253,7 @@ async function stopSession() {
 
 function captureError(error) {
   if (/activeTab|not been invoked|Either the|permission is required/i.test(error.message)) {
-    const result = new Error('Click Diffuse in Chrome’s toolbar on this production tab, then choose Enable capture & return. Chrome needs this once before screenshots or recording.');
+    const result = new Error('Click Diffuse in Chrome’s toolbar on this production tab, then choose Start Diffuse. Chrome needs this once before screenshots or recording.');
     result.code = 'NEEDS_CAPTURE_ACCESS';
     return result;
   }
@@ -360,6 +360,18 @@ async function preservePendingRecording(current, draftId = current.pendingDraftI
   try { await preserving; } finally { draftPreservations.delete(draftId); }
 }
 
+async function recordingPointer(current, type, {trackPointer = true} = {}) {
+  if (!Number.isInteger(current?.targetTabId)) return;
+  if (type === 'START') {
+    if (session !== current) throw new Error('The review ended before recording could start.');
+    const recordingId = (current.journeyRecording || current.recording)?.id;
+    if (!recordingId) return;
+    await chrome.scripting.executeScript({target: {tabId: current.targetTabId, frameIds: [0]}, world: 'ISOLATED', files: ['recording-pointer.js']});
+    if (session !== current || (current.journeyRecording || current.recording)?.id !== recordingId) return;
+  }
+  return chrome.tabs.sendMessage(current.targetTabId, {namespace: 'diffuse-recording-pointer', type, trackPointer}, {frameId: 0});
+}
+
 async function finishRecording(recordingId, video, {notify = false, interrupted = false} = {}) {
   let finishing = recordingFinishes.get(recordingId);
   if (!finishing) {
@@ -368,6 +380,7 @@ async function finishRecording(recordingId, video, {notify = false, interrupted 
       const current = session;
       const recordingState = current?.recording;
       if (!recordingState || recordingState.id !== recordingId) throw new Error('This recording is no longer part of the current comparison.');
+      await recordingPointer(current, 'STOP').catch(() => {});
       const draft = await reviews.getDraft(recordingState.draftId);
       if (!draft) throw new Error('The recording’s evidence draft was removed.');
       draft.evidence.video = video;
@@ -452,9 +465,12 @@ async function beginRecording(message = {}) {
     draft.evidenceChoice = 'video';
     await reviews.putDraft(draft);
     current.recording = {...response.recording, draftId: draft.id};
+    await recordingPointer(current, 'START');
+    if (session !== current || current.recording?.id !== recordingId) throw new Error('This recording ended while it was starting.');
     await publish();
     return current.recording;
   } catch (error) {
+    if (recordingId) await recordingPointer(current, 'STOP').catch(() => {});
     if (mediaStarted) await mediaMessage('STOP_RECORDING', {sessionId: current.id, recordingId}).catch(() => {});
     if (session === current && current.recording?.id === recordingId) current.recording = null;
     if (createdDraft && draft) {
@@ -486,6 +502,7 @@ async function endRecording(options = {}) {
   if (!current?.recording) throw new Error('There is no active recording.');
   if(current.recording.kind==='pr-proof'){if(prProofRecording)await discardPRProof(prProofRecording,{error:new Error('Recording cancelled. Start a new recording from the pull request check.')});else {await mediaMessage('DISCARD_RECORDING',{sessionId:current.id,recordingId:current.recording.id}).catch(()=>{});current.recording=null;await publish();}return null;}
   const recordingId = current.recording.id;
+  await recordingPointer(current, 'STOP').catch(() => {});
   const response = await mediaMessage('STOP_RECORDING', {sessionId: current.id, recordingId});
   return finishRecording(recordingId, response.video, options);
 }
@@ -504,6 +521,10 @@ async function initializeTab(role) {
   if (!response?.ok) throw new Error(response?.error || 'Could not prepare the page for comparison.');
   current[role] = {title: tab.title || tab.url, url: tab.url};
   current[role === 'source' ? 'sourceViewport' : 'targetViewport'] = response.viewport;
+  if (role === 'target' && (current.recording || current.journeyRecording)) {
+    await recordingPointer(current, 'START', {trackPointer: !current.journeyRecording}).catch(() => {});
+    if (current.journey?.status === 'paused') await recordingPointer(current, 'PAUSE').catch(() => {});
+  }
   await publish();
   if (role === 'target') { await syncPanelDocking({force: true}); await deliverPendingDraft(current); await revealPendingComment(current); }
 }
@@ -600,19 +621,22 @@ function savedCommentViewport(comment) {
   return !Number.isFinite(width) || width <= 0 ? null : width >= 1440 ? 'desktop' : width >= 1280 ? 'laptop' : width >= 768 ? 'tablet' : 'phone';
 }
 
-async function waitForReviewPage(tabId) {
+async function waitForReviewPage(tabId, {signal} = {}) {
   // Query after registering the listener so a fast local page cannot finish in
   // the gap. Same-document path/hash navigation is already complete here.
   return new Promise((resolve, reject) => {
     let done = false;
     const finish = (error, tab) => {
       if (done) return;
-      done = true; clearTimeout(timer); chrome.tabs.onUpdated.removeListener(updated);
+      done = true; clearTimeout(timer); chrome.tabs.onUpdated.removeListener(updated); signal?.removeEventListener('abort', abort);
       if (error) reject(error); else resolve(tab);
     };
     const updated = (id, change, tab) => {if (id === tabId && change.status === 'complete') finish(null, tab);};
+    const abort = () => finish(new Error('The journey was interrupted before it started.'));
     const timer = setTimeout(() => finish(new Error('The review page is still loading. Return to it and click the comment again.')), 20000);
     chrome.tabs.onUpdated.addListener(updated);
+    signal?.addEventListener('abort', abort, {once: true});
+    if (signal?.aborted) { abort(); return; }
     chrome.tabs.get(tabId).then(tab => {if (tab.status !== 'loading') finish(null, tab);}, error => finish(error));
   });
 }
@@ -1166,6 +1190,25 @@ function getJourneyService() {
   journeyService = createJourneyService({
     getSession: () => session,
     publish, refreshComments, reviews,
+    prepareFork: async (current, parent, {signal} = {}) => {
+      const assertCurrent = () => {
+        if (signal?.aborted || session !== current) throw new Error('The journey was interrupted before it started.');
+      };
+      assertCurrent();
+      const target = await requireActiveProduction(current);
+      const start = new URL(parent.startUrl);
+      if (!['http:', 'https:'].includes(start.protocol) || start.username || start.password || start.origin !== new URL(target.url).origin) throw new Error('Open the original website before trying another route.');
+      await assertPageAccess(start.href, chrome);
+      assertCurrent();
+      await chrome.tabs.update(target.id, {url: start.href});
+      await waitForReviewPage(target.id, {signal});
+      assertCurrent();
+      const arrived = await requireActiveProduction(current);
+      if (arrived.url !== start.href) throw new Error('The starting page redirected. Open the original page before trying another route.');
+      assertCurrent();
+      await initializeTab('target');
+      assertCurrent();
+    },
     startRecording: async (current, id) => {
       const target = await requireActiveProduction(current);
       let streamId;
@@ -1177,8 +1220,11 @@ function getJourneyService() {
         response = await mediaMessage('START_RECORDING', {sessionId: current.id, recordingId: id, streamId, viewport: current.targetViewport, journey: true});
         if (session !== current) throw new Error('This review ended before recording could start.');
         current.journeyRecording = {id, startedAt: response.recording.startedAt};
+        await recordingPointer(current, 'START', {trackPointer: false});
+        if (session !== current) throw new Error('This review ended before recording could start.');
         await persist();
       } catch (error) {
+        await recordingPointer(current, 'STOP').catch(() => {});
         await mediaMessage('DISCARD_RECORDING', {sessionId: current.id, recordingId: id}).catch(() => {});
         delete current.journeyRecording;
         throw error;
@@ -1187,11 +1233,11 @@ function getJourneyService() {
       let stopped;
       return {
         id, startedAt: response.recording.startedAt,
-        pause: () => control('PAUSE_JOURNEY_RECORDING'),
-        resume: () => control('RESUME_JOURNEY_RECORDING'),
+        pause: async () => { await recordingPointer(current, 'PAUSE').catch(() => {}); return control('PAUSE_JOURNEY_RECORDING'); },
+        resume: async () => { await recordingPointer(current, 'RESUME').catch(() => {}); return control('RESUME_JOURNEY_RECORDING'); },
         stop: () => stopped ||= (async () => {
           try { return (await control('STOP_RECORDING')).video; }
-          finally { delete current.journeyRecording; if (session === current) await persist(); }
+          finally { await recordingPointer(current, 'STOP').catch(() => {}); delete current.journeyRecording; if (session === current) await persist(); }
         })(),
       };
     },
