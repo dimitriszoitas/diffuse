@@ -71,6 +71,15 @@ export async function putDraft(draft, review) {
   return draft;
 }
 
+export async function ensureReview(review) {
+  const transaction = (await db()).transaction('reviews', 'readwrite');
+  const done = completion(transaction);
+  const store = transaction.objectStore('reviews');
+  const existing = await request(store.get(review.id));
+  if (!existing) store.put({...review, reviewKey: crypto.randomUUID(), count: 0});
+  await done;
+}
+
 export async function getDraft(id) {
   return request((await db()).transaction('drafts').objectStore('drafts').get(id));
 }

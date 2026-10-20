@@ -1603,7 +1603,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     if (contextInvalidated) return;
     if(root&&session)paintViewport();
     if (!root) return;
-    el('ai-review-glow').hidden=!(aiBusy||session?.aiRunning);
+    el('ai-review-glow').hidden=!(aiBusy||(session?.aiRunning&&session?.journey?.status!=='paused'));
     const diffReason=diffDisabledReason();
     el('diff').disabled=Boolean(diffReason);
     el('diff').title=diffReason||(hasReference()?'Choose a different reference tab':'Choose a reference tab to compare');

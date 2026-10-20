@@ -57,13 +57,39 @@ async function command(action, payload = {}) {
   assert.equal(result?.ok, true, result?.error);
   return result;
 }
+// This regression checks the standalone on-page audit controller and evidence.
+// Close the real drawer, rather than changing product DOM or CSS; native drawer
+// rendering and docking are exercised separately by sidepanel-browser.mjs.
+async function closeDrawer() {
+  await worker.evaluate(async () => {
+    const session = (await chrome.storage.session.get('comparison')).comparison;
+    const tab = await chrome.tabs.get(session.targetTabId);
+    await chrome.sidePanel.close({windowId: tab.windowId});
+  });
+  await page.bringToFront();
+  await until(() => overlay.getAttribute('data-docked').then(value => value === null), 'drawer closes');
+  let previous, stable = 0;
+  await until(async () => {
+    const size = await page.evaluate(() => `${innerWidth}x${innerHeight}`);
+    stable = size === previous ? stable + 1 : 0; previous = size;
+    return stable >= 4;
+  }, 'viewport settles after drawer close');
+}
+async function chooseCategory(value) {
+  await overlay.locator('[data-diffuse-select-for="comment-category"] .df-select-trigger').click();
+  await overlay.getByRole('option', {name: {'copy-change':'Copy change','design-mismatch':'Design mismatch','ux-issue':'UX issue'}[value], exact:true}).click();
+}
+async function openEvidence() {
+  await until(() => overlay.locator('#evidence-recording').isEnabled(), 'captured evidence is ready');
+  if (!await overlay.locator('#comment-evidence').evaluate(details => details.open)) await overlay.locator('#comment-evidence > summary').click();
+}
 async function until(check, label, timeout = 15000) {
   const start = Date.now();
   while (Date.now() - start < timeout) { if (await check()) return; await new Promise(resolve => setTimeout(resolve, 100)); }
   throw new Error(`Timed out: ${label}`);
 }
 try {
-  context = await chromium.launchPersistentContext(join(temp, 'profile'), {executablePath: chromium.executablePath(), headless: true, viewport: null, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`, '--enable-unsafe-extension-debugging', '--window-size=1440,1000', '--use-mock-keychain', '--password-store=basic']});
+  context = await chromium.launchPersistentContext(join(temp, 'profile'), {executablePath: chromium.executablePath(), headless: true, viewport: null, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`, '--enable-unsafe-extension-debugging', '--window-size=1440,1000', '--use-mock-keychain', '--password-store=basic', '--auto-select-tab-capture-source-by-title=Prototype demo']});
   worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
   const id = new URL(worker.url()).host;
   const browserCDP = await context.browser().newBrowserCDPSession();
@@ -75,10 +101,11 @@ try {
     const popup = await context.newPage(); await target.bringToFront(); await popup.goto(`chrome-extension://${id}/popup.html`); return popup;
   };
   let popup = await openPopup(page);
-  await popup.locator('#mode-audit').click();
+  assert.equal(await popup.locator('#mode-audit,#mode-comparison,#target-tab').count(), 0, 'Review starts on the current page without legacy mode or tab selection');
   await popup.locator('#start-comparison').click();
   overlay = page.locator('diffuse-live-overlay');
   await until(() => overlay.locator('#status').textContent({timeout: 1000}).then(text => text === 'Review ready').catch(() => false), 'audit start');
+  await closeDrawer();
   assert.equal(await overlay.locator('#layer').isVisible(), false);
   assert.equal(await overlay.locator('#source').isVisible(), false);
   pass('Standalone audit starts with one page and no prototype stream');
@@ -89,12 +116,11 @@ try {
   await page.mouse.up(); await page.keyboard.up('c');
   await until(() => overlay.locator('#comment-form').isVisible(), 'region evidence composer');
   assert.equal(await overlay.locator('#comment-category').inputValue(), 'ux-issue');
-  assert.equal(await overlay.locator('#comment-title').getAttribute('required'), null);
+  assert.equal(await overlay.locator('#comment-title,#comment-state,#comment-component').count(), 0, 'The inline composer focuses on the comment and compact category/severity badges');
   assert.equal(await overlay.locator('#comment-expected').inputValue(), '');
   assert.equal(await overlay.locator('#evidence-screenshot').getAttribute('aria-pressed'), 'true');
   await overlay.locator('#comment-actual').fill('This selected region needs clearer labels.');
-  await overlay.locator('#comment-category').selectOption('copy-change');
-  await overlay.locator('#comment-state').fill('Dashboard default');
+  await chooseCategory('copy-change');
   await overlay.locator('#save-comment').click();
   await until(() => overlay.locator('.comment-pin').count().then(count => count === 1), 'saved region pin');
   const reviewId = await worker.evaluate(async () => (await chrome.storage.session.get('comparison')).comparison.reviewId);
@@ -127,7 +153,7 @@ try {
   await settings.locator('#api-key').fill(fakeKey);
   assert.equal(await settings.locator('#remember-key').isChecked(), false);
   await settings.locator('#save').click();
-  await until(() => settings.locator('#feedback').textContent().then(text => text.includes('Settings saved')), 'AI key save');
+  await until(() => settings.locator('#ai-feedback').textContent().then(text => /settings saved/i.test(text)), 'AI key save');
   assert.equal(await settings.locator('#api-key').inputValue(), '');
   const safeStorage = await worker.evaluate(async () => ({remembered: !!(await chrome.storage.local.get('anthropicApiKey')).anthropicApiKey, temporary: !!(await chrome.storage.session.get('anthropicApiKey')).anthropicApiKey}));
   assert.deepEqual(safeStorage, {remembered: false, temporary: true});
@@ -184,8 +210,10 @@ try {
   await page.mouse.move(700, 280); await page.mouse.down(); await page.mouse.move(880, 380, {steps: 6}); await page.mouse.up();
   await until(() => overlay.locator('#comment-form').isVisible(), 'recording region composer');
   await overlay.locator('#comment-actual').fill('Review this recorded state.');
+  await overlay.locator('#comment-details > summary').click();
   await overlay.locator('#comment-steps').fill('Open the panel, then close it.');
-  await overlay.locator('#comment-category').selectOption('design-mismatch');
+  await chooseCategory('design-mismatch');
+  await openEvidence();
   await overlay.locator('#evidence-recording').click();
   await page.screenshot({path:join(artifacts,'comment-evidence-choice.png')});
   await overlay.locator('#save-comment').click();
@@ -218,10 +246,11 @@ try {
   await command('toggleRecording');
   await until(() => overlay.locator('#comment-form').isVisible(), 'composer recording restored');
   assert.equal(await overlay.locator('#comment-actual').inputValue(), 'Review this recorded state.');
-  assert.equal(await overlay.locator('#comment-title').inputValue(), '');
+  assert.equal(await overlay.locator('#comment-title').count(), 0);
   assert.equal(await overlay.locator('#comment-steps').inputValue(), 'Open the panel, then close it.');
   assert.equal(await overlay.locator('#comment-category').inputValue(), 'design-mismatch');
   assert.match(await overlay.locator('#selection-summary').textContent(), /180 × 100/);
+  await openEvidence();
   assert.equal(await overlay.locator('#recording-preview').isVisible(), true);
   await until(()=>overlay.locator('#recording-preview').evaluate(el=>el.readyState>=1),'recording preview decodes');
   await page.screenshot({path:join(artifacts,'comment-recording-preview.png')});
@@ -249,6 +278,7 @@ try {
   await command('toggleRecording');
   await until(()=>overlay.locator('#comment-form').isVisible(),'second clip composer');
   await overlay.locator('#comment-actual').fill('Only the screenshot is needed for this comment.');
+  await openEvidence();
   await overlay.locator('#evidence-screenshot').click();
   await overlay.locator('#save-comment').click();
   await until(async()=>(await summaries()).count===4,'screenshot-only save');
@@ -264,9 +294,22 @@ try {
   pass('Audit report exports categories, only accepted AI findings, screenshots and video without credentials');
   await page.bringToFront(); await command('stop'); await until(() => overlay.count().then(count => count === 0), 'stop audit');
   const source = await context.newPage(); await source.goto(`${origin}/prototype.html`);
-  popup = await openPopup(source);
-  const targetTabId = await worker.evaluate(async url => (await chrome.tabs.query({url}))[0].id, page.url());
-  await popup.locator('#target-tab').selectOption(String(targetTabId)); await popup.locator('#start-comparison').click();
+  popup = await openPopup(page);
+  await popup.locator('#start-comparison').click();
+  await until(() => overlay.locator('#status').textContent({timeout:1000}).then(text=>text==='Review ready').catch(()=>false), 'second page review');
+  await closeDrawer();
+  const sourceTabId = await worker.evaluate(async url => (await chrome.tabs.query({url}))[0].id, source.url());
+  const pickerPromise = context.waitForEvent('page');
+  await command('openDiff');
+  const picker = await pickerPromise; await picker.waitForLoadState();
+  await until(() => picker.locator('#reference-tab option').count().then(count => count > 1), 'reference choices loaded');
+  await picker.locator('#reference-tab').selectOption(String(sourceTabId));
+  await until(async () => {
+    const feedback = await picker.locator('#diff-feedback').textContent();
+    if (feedback) throw new Error(`Reference picker: ${feedback}`);
+    return picker.locator('#connect-reference').isEnabled();
+  }, 'selected reference is ready');
+  await picker.locator('#connect-reference').click();
   await until(() => overlay.locator('#status').textContent({timeout:1000}).then(text=>text==='Live').catch(()=>false), 'comparison restored', 25000);
   await command('openAi'); await until(() => overlay.locator('#ai-run').isEnabled(), 'comparison AI config'); await overlay.locator('#ai-run').click();
   await until(() => overlay.locator('.ai-suggestion').count().then(count => count === 1), 'two-screen AI result');

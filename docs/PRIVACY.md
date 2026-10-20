@@ -1,6 +1,6 @@
 # Diffuse Privacy Notice
 
-Updated: 19 October 2026
+Updated: 20 October 2026
 
 This notice covers the Diffuse Chrome extension and its hosted Jira and GitHub connection services. Diffuse helps you compare pages, save review evidence, and optionally use AI, Figma references, Jira, and shared PR reviews.
 
@@ -21,6 +21,18 @@ Opening the Jira export preview uses your configured Anthropic key and model to 
 Your Anthropic key is kept in Chrome session storage by default. **Remember my key on this device** saves it in local extension storage between sessions. This storage is restricted to trusted extension contexts, but is not an encrypted password vault. **Remove key** clears the stored key.
 
 Figma references use the MCP server you configure. The default Figma Desktop connection runs on your computer. A custom remote server receives connection requests, the selected file/node identifiers, and any bearer token you configure. **Save & connect** checks the server; running an AI review with a Figma link reads design context and available reference images. Diffuse uses supported read tools. Retrieved context can be sent to Anthropic and retained with accepted findings, exports, and selected Jira submissions. Custom MCP tokens use session storage unless you choose to remember them locally. Disconnecting the Figma configuration clears its saved settings and token. Figma and custom server operators have their own data practices.
+
+## AI journey reviews
+
+Clicking **Start journey** lets Diffuse operate the current website toward your goal across multiple pages. It sends your goal, optional success criteria and test data, visible page text and controls, page URLs, action history, and screenshots to Anthropic using your configured key. Each decision can incur API charges. Opening the journey panel does not start this process.
+
+Actions occur in your current signed-in browser session and can create records using the test data you supply. Use a test environment when appropriate. Diffuse limits each run to the starting website origin and a bounded number of actions. It does not send cookies, browser storage, passwords, or hidden application source to the model. Screenshots and visible text can still contain personal information.
+
+A silent recording captures the reviewed tab throughout the journey, including page navigation and any visible test data. It does not capture microphone or tab audio. The full movie stays on your device and is not sent to Anthropic. Individual screenshots and page observations are sent for AI decisions as described above.
+
+Pause stops further decisions and pauses recording until resumed; Stop ends the run and saves its movie. An action already dispatched cannot be undone. A run is limited to ten minutes and its selected action count; a recording is limited to 20 MiB. Journey history, screenshots, and recordings are stored in a separate local extension database, with at most ten recent runs and an approximate 80 MiB retention budget. Older history is removed as that budget is reached. Deleting the associated review removes its journey history. Removing the extension or clearing its data removes this local history too. Downloaded movies remain wherever you save them.
+
+Accepting a journey finding adds its screenshot and reproduction steps to the review. Accepted findings can then be included in your usual JSON/HTML exports, Jira tickets, or GitHub PR review. The complete journey history and movie are not automatically included in those exports or published to any of those destinations. You can download the full movie separately to share it.
 
 ## Jira account connections and submissions
 

@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="viewport-panel.css" />
     <script src="popup.js" defer></script>
     <script src="sidepanel.js" defer></script>
+    <script src="journey-panel.js" defer></script>
     <script src="review-loader.js" defer></script>
     <script src="viewport-panel.js" type="module"></script>
     <link rel="stylesheet" href="ui-chrome.css">
@@ -137,6 +138,7 @@
             <section class="panel-control-group capture-group" aria-labelledby="capture-group-title"><h2 id="capture-group-title" class="control-group-title">Capture &amp; review</h2>
             <div class="shortcut-cheatsheet" aria-label="Comment shortcuts"><p><span>Leave a comment</span><kbd>C</kbd></p><p><span>Comment on an area</span><span class="shortcut-keys"><kbd>C</kbd><span>+</span><kbd>Drag</kbd></span></p></div>
             <div class="tool-grid"><button id="panel-record" type="button">Record page</button><button id="panel-ai" type="button">AI review</button></div>
+            <button id="panel-journey" class="journey-entry" type="button" aria-controls="panel-journey-view"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="6" r="2"/><path d="M7 6h9a4 4 0 0 1 0 8H8a4 4 0 0 0 0 8h5M17 18l4 4-4 4" transform="translate(0 -2)"/><path d="M13 20h7"/></svg><span>Test a journey<small>Follow a task across pages</small></span><span class="journey-entry-tag" aria-hidden="true">AI</span></button>
             <p id="panel-instruction" class="muted" role="status" hidden></p>
             <button id="panel-cancel-selection" type="button" hidden>Cancel selection</button>
             <p id="panel-capture-error" class="feedback" role="alert" hidden></p>
@@ -159,6 +161,46 @@
             <div id="panel-ai-results"></div>
           </section>
         </div>
+        <section id="panel-journey-view" hidden aria-labelledby="journey-title">
+          <div class="journey-heading">
+            <button id="journey-back" class="journey-back" type="button" aria-label="Back to review"><span aria-hidden="true">←</span> Review</button>
+            <div class="section-heading"><h2 id="journey-title">Test a journey</h2><span class="journey-label">AI</span></div>
+          </div>
+          <p id="journey-error" class="feedback" role="alert" tabindex="-1" hidden></p>
+          <form id="journey-form">
+            <p class="journey-intro">Give Diffuse a goal. It will find a path through the app, try the task, and show you where it struggled.</p>
+            <label class="panel-field" for="journey-goal">What should the user achieve?<textarea id="journey-goal" rows="4" maxlength="2000" required placeholder="Add Oat milk to Ingredients, using ml as its unit. Start here and find the process yourself."></textarea></label>
+            <details class="journey-options">
+              <summary>Success criteria &amp; test data <span class="optional">Optional</span></summary>
+              <label class="panel-field" for="journey-success">How can we tell it worked?<textarea id="journey-success" rows="3" maxlength="2000" placeholder="The saved ingredient appears in the table and remains after refreshing."></textarea></label>
+              <label class="panel-field" for="journey-test-data">Test data &amp; constraints<textarea id="journey-test-data" rows="3" maxlength="4000" placeholder="Use a test record. Leave existing ingredients unchanged."></textarea></label>
+              <p class="journey-help">Include exact steps only if you want to test a specific path. A goal alone lets Diffuse assess how easy the path is to find.</p>
+            </details>
+            <div class="journey-limit"><label for="journey-max-steps">Action limit</label><select id="journey-max-steps" aria-describedby="journey-limit-help"><option value="10">10 actions</option><option value="20" selected>20 actions</option><option value="30">30 actions</option></select></div>
+            <p id="journey-limit-help" class="journey-help">The journey can cross pages within this site. It stops at the limit if the result is still unclear.</p>
+            <div class="journey-consent"><p>AI will operate the current site using your signed-in session and may create the test data you provide. Use a test environment.</p><p>Page content, screenshots, and your instructions go to Anthropic using your saved API key. API charges apply. A silent recording of the journey stays on this device. You can pause or stop at any time.</p></div>
+            <p id="journey-key-help" class="journey-help" hidden>Add your Anthropic API key in <a href="settings.html#ai" target="_blank" rel="noopener">AI settings ↗</a> to begin.</p>
+            <button id="journey-start" class="primary-button" type="submit">Start journey <span aria-hidden="true">→</span></button>
+          </form>
+          <section id="journey-run" hidden aria-labelledby="journey-run-goal">
+            <div class="journey-run-toolbar">
+              <div class="journey-status-line"><span id="journey-status" role="status" aria-live="polite"></span><span id="journey-progress"></span></div>
+              <p id="journey-recording-status" class="journey-recording-status" role="status" hidden></p>
+              <div id="journey-run-controls" class="journey-run-controls"><button id="journey-pause" type="button">Pause</button><button id="journey-resume" type="button" hidden>Resume</button><button id="journey-stop" type="button">Stop journey</button></div>
+            </div>
+            <h3 id="journey-run-goal"></h3>
+            <p id="journey-current-page" class="journey-help"></p>
+            <p id="journey-run-notice" class="journey-help" role="status" hidden></p>
+            <div id="journey-metrics" class="journey-metrics" aria-label="Observed journey metrics"></div>
+            <section id="journey-summary-section" class="journey-summary" hidden><h3>Task result</h3><p id="journey-summary"></p></section>
+            <section id="journey-recording-section" class="journey-recording-section" hidden aria-labelledby="journey-recording-title"><div class="journey-section-title"><h3 id="journey-recording-title">Journey recording</h3><a id="journey-video-download" class="journey-video-download" download="diffuse-journey.webm">Download ↧</a></div><video id="journey-video" controls preload="metadata" playsinline aria-label="Recording of this journey"></video><p class="journey-help">Watch the full attempt, or jump to a step below.</p></section>
+            <section class="journey-timeline-section" aria-labelledby="journey-timeline-title"><div class="journey-section-title"><h3 id="journey-timeline-title">The path taken</h3><span id="journey-step-count"></span></div><ol id="journey-timeline" class="journey-timeline"></ol><p id="journey-timeline-empty" class="journey-help">Reading the starting page…</p></section>
+            <section id="journey-assessment" hidden aria-labelledby="journey-assessment-title"><div class="journey-section-title"><h3 id="journey-assessment-title">Usability</h3><span class="journey-label">AI assessment</span></div><p class="journey-help">Scores describe this attempt, from 1 (difficult) to 5 (clear). They are not a substitute for testing with people.</p><div id="journey-scores"></div></section>
+            <section id="journey-findings-section" hidden aria-labelledby="journey-findings-title"><div class="journey-section-title"><h3 id="journey-findings-title">Suggested feedback</h3><span id="journey-findings-count"></span></div><p class="journey-help">Accept the findings worth sharing. Each comment keeps the captured page and evidence.</p><div id="journey-findings"></div></section>
+            <div id="journey-finished-actions" class="journey-finished-actions" hidden><button id="journey-use-goal" type="button">Use this goal again</button><button id="journey-new" type="button">New journey</button></div>
+          </section>
+          <details id="journey-history" class="journey-history" hidden><summary>Previous journeys</summary><div id="journey-history-list"></div></details>
+        </section>
       </section>
 
       <div class="feedback" id="feedback" role="alert" tabindex="-1" hidden></div>
@@ -175,5 +217,6 @@
       <div class="settings-access"><button class="settings-button" id="settings" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9.2 3-.6 2.3-2 .9-2.2-.6-2 3.5 1.7 1.7v2.4l-1.7 1.7 2 3.5 2.3-.6 2 .9.5 2.3h4l.6-2.3 2-.9 2.2.6 2-3.5-1.7-1.7v-2.4L20 9.1l-2-3.5-2.3.6-2-.9L13.2 3h-4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="11.2" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/></svg><span>Settings</span></button></div>
       <footer class="footer"><span class="footer-rule" aria-hidden="true"></span>FROM PROTOTYPE TO PRODUCTION<span class="footer-rule" aria-hidden="true"></span></footer>
     </main>
+    <dialog id="journey-evidence-dialog" class="journey-evidence-dialog" aria-labelledby="journey-evidence-title"><div class="journey-evidence-heading"><h2 id="journey-evidence-title">Captured page</h2><button id="journey-evidence-close" type="button" aria-label="Close captured page">×</button></div><p id="journey-evidence-caption"></p><img id="journey-evidence-image" alt="Page captured during the journey"><p class="journey-help">The page captured before this action.</p></dialog>
   </body>
 </html>

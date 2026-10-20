@@ -1,8 +1,8 @@
 # Diffuse — live design comparison and page audits
 
-**[Download Diffuse 0.12.0 for Chrome](https://github.com/dimitriszoitas/diffuse/releases/download/v0.12.0/Diffuse-0.12.0.zip).** Give and receive feedback on GitHub pull requests, with original and updated screenshots or recordings directly in the PR. Load shared findings back onto a working preview, make changes, and capture evidence for recheck. On-page comments, AI audits, live Diff, and Jira export remain included.
+**[Download Diffuse 0.13.0 for Chrome](https://github.com/dimitriszoitas/diffuse/releases/download/v0.13.0/Diffuse-0.13.0.zip).** Give AI a task to try across your app, then inspect the journey recording, notes, and suggested feedback. On-page comments, AI audits, live Diff, Jira export, and shared GitHub reviews with original and updated evidence remain included.
 
-Light, Dark, and System appearance and optional read-only Figma MCP references remain included. See the [release notes](docs/releases/0.12.0.md), [privacy policy](docs/PRIVACY.md), and [terms](docs/TERMS.md).
+Light, Dark, and System appearance and optional read-only Figma MCP references remain included. See the [release notes](docs/releases/0.13.0.md), [privacy policy](docs/PRIVACY.md), and [terms](docs/TERMS.md).
 
 Diffuse uses a native Chrome side drawer for review controls. **Start review** opens it; for an active review, click the extension icon and **Open review sidebar**. There is no floating toolbar. The webpage resizes beside Diffuse, and closing the drawer preserves the review and unfinished comment. Chrome chooses the drawer side and owns its resize handle.
 
@@ -14,16 +14,16 @@ Diffuse layers a **continuously running prototype** over a production page in Ch
 
 ## Install in Chrome
 
-1. Use Chrome 116 or later and unzip the [current release](https://github.com/dimitriszoitas/diffuse/releases/download/v0.12.0/Diffuse-0.12.0.zip). Keep the resulting **Diffuse** folder somewhere permanent.
+1. Use Chrome 116 or later and unzip the [current release](https://github.com/dimitriszoitas/diffuse/releases/download/v0.13.0/Diffuse-0.13.0.zip). Keep the resulting **Diffuse** folder somewhere permanent.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Choose **Load unpacked** and select the unzipped **Diffuse** folder. If developing from a source checkout instead, select its **`extension` folder**.
 4. Pin **Diffuse — Live design comparison** in Chrome’s extensions menu.
 
 The extension loads directly from its files; no build step is needed. If Diffuse updates while a page is open, its old controls stop and show a refresh notice. Unsaved comment text remains available to copy before refreshing; an interrupted Save is never retried automatically. After changing extension code, choose **Reload** on its card in `chrome://extensions`, then refresh both comparison pages.
 
-**Updating an official 0.10.2 or 0.11.0 installation:** replace the files in its existing Diffuse folder, choose **Reload** in `chrome://extensions`, and refresh the reviewed pages. Keep the same installation; its identity, saved reviews, and settings remain.
+**Updating an official 0.10.2, 0.11.0, or 0.12.0 installation:** replace the files in its existing Diffuse folder, choose **Reload** in `chrome://extensions`, and refresh the reviewed pages. Keep the same installation; its identity, saved reviews, and settings remain.
 
-**Moving from 0.10.1 or earlier:** export the reviews you want to keep using **⋯ → Export review** before upgrading. Leave the old extension and its folder intact, install 0.12.0 from a separate folder, then use **Load review** to import those files. Disable the old copy after checking your reviews in the new one. The stable identity introduced in 0.10.2 has its own storage, so reconnect Jira and any optional AI/Figma settings. Replacing the old files does not transfer old storage.
+**Moving from 0.10.1 or earlier:** export the reviews you want to keep using **⋯ → Export review** before upgrading. Leave the old extension and its folder intact, install 0.13.0 from a separate folder, then use **Load review** to import those files. Disable the old copy after checking your reviews in the new one. The stable identity introduced in 0.10.2 has its own storage, so reconnect Jira and any optional AI/Figma settings. Replacing the old files does not transfer old storage.
 
 ## Choose an appearance
 
@@ -37,6 +37,16 @@ Appearance is a local preference. It does not restyle the website, change captur
 <img src="https://raw.githubusercontent.com/dimitriszoitas/diffuse/main/docs/screenshots/diffuse-dark.png" width="360" alt="Diffuse review sidebar in its optional dark navy appearance">
 
 </details>
+
+## Test a journey across pages
+
+Open **Test a journey** in the review sidebar and give AI a goal, such as “Add Oat milk to the ingredients table with ml as its unit.” Add optional success criteria or test data, then let Diffuse find the route through the app using your configured Anthropic key and model.
+
+The result includes a silent movie of the attempt, a timeline with screenshots and notes, and observed page visits, click attempts, and backtracking. **Watch this step** seeks to that moment in the recording. Pause and Resume affect both the actions and the recording; download the full WebM movie to keep or share it.
+
+AI assesses discoverability, clarity, effort, feedback, and recovery with supporting evidence and confidence. It leaves untested dimensions unscored. Accept useful findings as ordinary review comments with their captured page, screenshot, and reproduction steps for Jira, GitHub, or exports. The full journey movie stays in local history and is downloaded separately.
+
+Journeys operate one visible tab within the starting website origin, for up to 30 actions or ten minutes. Use a test environment: the journey can fill forms and create records. Login, sensitive actions, unsupported controls, or uncertain outcomes may require human intervention. AI assessments describe the observed attempt; they do not replace human usability research. See the [journey guide](docs/journey-reviews.md).
 
 ## Review a local HTML file
 

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Diffuse — Live design comparison",
-  "version": "0.12.0",
-  "description": "Live comparison and page audits with comment pins, region evidence, exportable reports, and optional Anthropic review.",
+  "version": "0.13.0",
+  "description": "Live comparison, page audits and AI journey tests with comment pins, screenshot and video evidence, and shareable reviews.",
   "minimum_chrome_version": "116",
   "permissions": ["activeTab", "tabs", "scripting", "storage", "tabCapture", "offscreen", "clipboardWrite", "sidePanel", "identity", "debugger"],
   "optional_host_permissions": ["http://*/*", "https://*/*", "file:///*"],

@@ -13,7 +13,7 @@ try {
   await cp(join(project, 'QUICKSTART.md'), join(staging, 'START-HERE.md'));
   await cp(join(project, 'README.md'), join(staging, 'Diffuse', 'README.md'));
   await mkdir(join(staging, 'Diffuse', 'docs', 'releases'), {recursive: true});
-  for (const name of ['PRIVACY.md', 'TERMS.md', 'jira-integration.md', 'github-review.md']) await cp(join(project, 'docs', name), join(staging, 'Diffuse', 'docs', name));
+  for (const name of ['PRIVACY.md', 'TERMS.md', 'jira-integration.md', 'github-review.md', 'journey-reviews.md']) await cp(join(project, 'docs', name), join(staging, 'Diffuse', 'docs', name));
   await cp(join(project, 'docs', 'releases', `${manifest.version}.md`), join(staging, 'Diffuse', 'docs', 'releases', `${manifest.version}.md`));
   const archive = join(releases, `Diffuse-${manifest.version}.zip`);
   await rm(archive, {force: true});

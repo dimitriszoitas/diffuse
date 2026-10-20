@@ -10,6 +10,9 @@ import {projectReviewToPreview, mapPreviewUrl, cleanPreviewUrl} from './pr-revie
 import {createGitHubConnectionClient} from './github-connection.mjs';
 import {createGitHubWorker, isGitHubRequest} from './github-worker.mjs';
 import {formatGitHubSummary} from './github-format.mjs';
+import {createJourneyService, JOURNEY_MESSAGES} from './journey-service.mjs';
+import {createJourneyExecutor} from './journey-executor.mjs';
+import {deleteJourneys, getJourney, putJourney} from './journey-store.mjs';
 
 let session = null;
 let transitioning = false;
@@ -22,12 +25,14 @@ let aiJob = null;
 const acceptingSuggestions = new Set();
 let suggestionMutation = Promise.resolve();
 const recordingFinishes = new Map();
+const pendingRecordingFinishes = new Set();
 const draftPreservations = new Map();
 const panelPorts = new Map();
 let panelDocking = Promise.resolve();
 let panelDockState = null;
 let diffWindow = null;
 let githubWorker = null;
+let journeyService = null;
 const referenceRequests = new Map();
 const viewportController = createViewportController({chromeApi: chrome, assertPageAccess,
   onOwnershipChanged: async tabs => {if(session){session.viewportDebuggerTabs=tabs;await persist();}},
@@ -37,6 +42,20 @@ const PANEL_ACTIONS = new Set(['selectElement', 'selectArea', 'cancelSelection',
 const ready = chrome.storage.session.get('comparison').then(async data => {
   await protectAIStorage();
   session = data.comparison || null;
+  if (session?.journeyRecording) {
+    const interrupted = session.journeyRecording;
+    try {
+      const run = await getJourney(interrupted.id);
+      const {video} = await mediaMessage('STOP_RECORDING', {sessionId: session.id, recordingId: interrupted.id});
+      if (run && video) await putJourney({...run, video, recording: {startedAt: video.startedAt, status: 'saved'}, updatedAt: new Date().toISOString()});
+    } catch { /* Screenshots and steps remain available when a clip was interrupted. */ }
+    delete session.journeyRecording;
+  }
+  if (session?.journeyDebuggerTabId && !session.viewportDebuggerTabs?.includes(session.journeyDebuggerTabId)) {
+    await chrome.debugger.detach({tabId: session.journeyDebuggerTabId}).catch(() => {});
+    delete session.journeyDebuggerTabId;
+  }
+  if (session?.journey) await getJourneyService().recover(session);
   if(session?.viewportPreset||session?.viewportDebuggerTabs?.length){session.viewportPreset=await viewportController.resume(session);session.viewportDebuggerTabs=viewportController.ownedTabIds();session.viewportChanging=false;await publish();}
   // A provider request cannot survive a worker restart; retained suggestions can.
   if (session?.aiRunning) { session.aiRunning = false; await publish(); }
@@ -216,6 +235,7 @@ async function setStatus(status, error) {
 
 async function stopSession() {
   const old = session;
+  if (journeyService?.busy) await journeyService.interrupt();
   if (aiJob && old && aiJob.sessionId === old.id) aiJob.controller.abort();
   if (old) await preservePendingRecording(old);
   if (session !== old) return;
@@ -249,6 +269,7 @@ async function requireActiveProduction(current) {
 }
 
 async function captureDraft(selection, {pending = true, forAI = false, forRecording = false} = {}) {
+  if (journeyService?.busy) throw new Error('Stop the journey before capturing a separate comment.');
   if (transitioning) throw new Error('Finish choosing the reference before capturing evidence.');
   if (acceptingSuggestions.size) throw new Error('Wait for the AI suggestions to finish saving before capturing evidence.');
   if (recordingStart && !forRecording) throw new Error('Wait for the recording to start before capturing another comment.');
@@ -342,6 +363,7 @@ async function preservePendingRecording(current, draftId = current.pendingDraftI
 async function finishRecording(recordingId, video, {notify = false, interrupted = false} = {}) {
   let finishing = recordingFinishes.get(recordingId);
   if (!finishing) {
+    pendingRecordingFinishes.add(recordingId);
     finishing = (async () => {
       const current = session;
       const recordingState = current?.recording;
@@ -356,7 +378,13 @@ async function finishRecording(recordingId, video, {notify = false, interrupted 
       return {draft, current};
     })();
     recordingFinishes.set(recordingId, finishing);
-    finishing.then(() => setTimeout(() => recordingFinishes.delete(recordingId), 60000), () => recordingFinishes.delete(recordingId));
+    finishing.then(() => {
+      pendingRecordingFinishes.delete(recordingId);
+      setTimeout(() => recordingFinishes.delete(recordingId), 60000);
+    }, () => {
+      pendingRecordingFinishes.delete(recordingId);
+      recordingFinishes.delete(recordingId);
+    });
   }
   // Finalization is shared; each caller still performs its delivery/preservation.
   // In particular, a tab-close caller must not lose its interrupted intent.
@@ -379,6 +407,7 @@ function partialComposerFields(input = {}, previous = {}, mode) {
 }
 
 async function beginRecording(message = {}) {
+  if (journeyService?.busy) throw new Error('Stop the journey before recording another comment.');
   if (transitioning) throw new Error('Finish choosing the reference before recording.');
   if (!session || session.status !== 'live') throw new Error('Wait for the page to be ready before recording.');
   if (session.recording || recordingStart) throw new Error('A recording is already running or starting.');
@@ -849,9 +878,10 @@ function getGitHubWorker() {
 
 function referenceBusyReason(current = session, {ownTransition = false} = {}) {
   if (!current || session !== current) return 'This review is no longer active.';
+  if (journeyService?.busy) return 'Stop the journey before changing its reference or viewport.';
   if (transitioning && !ownTransition) return 'Finish choosing the reference before changing it again.';
   if (current.pendingDraftId) return 'Save or cancel the open comment before changing its reference.';
-  if (evidenceBusy || recordingStart || current.recording || recordingFinishes.size || draftPreservations.size) return 'Finish the screenshot or recording before changing its reference.';
+  if (evidenceBusy || recordingStart || current.recording || pendingRecordingFinishes.size || draftPreservations.size) return 'Finish the screenshot or recording before changing its reference.';
   if (aiJob || current.aiRunning || acceptingSuggestions.size) return 'Finish the AI review action before changing its reference.';
   return null;
 }
@@ -1040,6 +1070,7 @@ async function currentBatch(batchId = session?.aiBatchId) {
 
 async function runAIReview(message) {
   const current = session;
+  if (journeyService?.busy) throw new Error('Stop the journey before running a screenshot review.');
   if (transitioning) throw new Error('Finish choosing the reference before running AI review.');
   if (!current) throw new Error('Start an audit or comparison first.');
   if (recordingStart || evidenceBusy || current.recording) throw new Error('Wait for the capture or recording to finish before AI review.');
@@ -1128,6 +1159,105 @@ function selectionFromSuggestion(suggestion, context) {
   const width = suggestion.region.width * viewport.width, height = suggestion.region.height * viewport.height;
   const rect = {x, y, width, height, left: x, top: y, right: x + width, bottom: y + height};
   return {kind: 'region', component: {name: suggestion.component || 'Selected area', source: 'ai-region'}, rect: {viewport: rect, document: {...rect, x: x + scroll.x, y: y + scroll.y, left: x + scroll.x, top: y + scroll.y, right: rect.right + scroll.x, bottom: rect.bottom + scroll.y}}, context};
+}
+
+function getJourneyService() {
+  if (journeyService) return journeyService;
+  journeyService = createJourneyService({
+    getSession: () => session,
+    publish, refreshComments, reviews,
+    startRecording: async (current, id) => {
+      const target = await requireActiveProduction(current);
+      let streamId;
+      try { streamId = await chrome.tabCapture.getMediaStreamId({targetTabId: target.id}); }
+      catch (error) { throw captureError(error); }
+      if (session !== current) throw new Error('This review ended before recording could start.');
+      let response;
+      try {
+        response = await mediaMessage('START_RECORDING', {sessionId: current.id, recordingId: id, streamId, viewport: current.targetViewport, journey: true});
+        if (session !== current) throw new Error('This review ended before recording could start.');
+        current.journeyRecording = {id, startedAt: response.recording.startedAt};
+        await persist();
+      } catch (error) {
+        await mediaMessage('DISCARD_RECORDING', {sessionId: current.id, recordingId: id}).catch(() => {});
+        delete current.journeyRecording;
+        throw error;
+      }
+      const control = type => mediaMessage(type, {sessionId: current.id, recordingId: id});
+      let stopped;
+      return {
+        id, startedAt: response.recording.startedAt,
+        pause: () => control('PAUSE_JOURNEY_RECORDING'),
+        resume: () => control('RESUME_JOURNEY_RECORDING'),
+        stop: () => stopped ||= (async () => {
+          try { return (await control('STOP_RECORDING')).video; }
+          finally { delete current.journeyRecording; if (session === current) await persist(); }
+        })(),
+      };
+    },
+    checkReady: async (current, {resume = false} = {}) => {
+      if (session !== current) throw new Error('This review has ended.');
+      if (transitioning || recordingStart || evidenceBusy || current.recording || current.pendingDraftId || aiJob || acceptingSuggestions.size) throw new Error('Finish the current comment, capture or AI review before testing a journey.');
+      const tab = await requireActiveProduction(current);
+      const page = await softTabMessage(current.targetTabId, 'PANEL_STATE', {sessionId: current.id});
+      if (page?.state?.picking || page?.state?.areaArmed || page?.state?.commentOpen) throw new Error('Cancel the selection or save your comment before testing a journey.');
+      if (resume && current.journey?.status !== 'paused') throw new Error('Only a paused journey can be resumed.');
+      if (session !== current) throw new Error('This review has ended.');
+      return tab;
+    },
+    readConfig: async () => {
+      if (!await chrome.permissions.contains({origins: ['https://api.anthropic.com/*']})) throw new Error('Open AI settings and save your key to allow Anthropic access.');
+      return readAISettings({includeKey: true});
+    },
+    createExecutor: async (current, startUrl) => {
+      const previous = {hidden: current.settings.hidden, linked: current.settings.linked};
+      current.settings.hidden = true;
+      current.settings.linked = false;
+      try { await publish(); }
+      catch (error) { Object.assign(current.settings, previous); throw error; }
+      const executor = createJourneyExecutor({
+      chromeApi: chrome, tabId: current.targetTabId, startUrl, assertPageAccess,
+      isCurrent: () => session === current,
+      onBlocked: reason => journeyService?.blocked(reason),
+      debuggerOwned: () => viewportController.ownedTabIds().includes(current.targetTabId),
+      onDebuggerOwnership: async owned => {
+        if (owned) current.journeyDebuggerTabId = current.targetTabId;
+        else delete current.journeyDebuggerTabId;
+        if (session === current) await persist();
+      },
+      captureScreenshot: async observation => {
+        const target = await requireActiveProduction(current);
+        if (target.url !== observation.url || session !== current) throw new Error('The page changed before its journey screenshot.');
+        const delay = Math.max(0, lastScreenshotAt + 1050 - Date.now());
+        if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+        try {
+          await softTabMessage(current.targetTabId, 'PREPARE_EVIDENCE', {sessionId: current.id});
+          const before = await requireActiveProduction(current);
+          if (before.url !== observation.url || session !== current) throw new Error('The page changed before its journey screenshot.');
+          lastScreenshotAt = Date.now();
+          const dataUrl = await chrome.tabs.captureVisibleTab(target.windowId, {format: 'jpeg', quality: 80});
+          const after = await requireActiveProduction(current);
+          if (after.url !== observation.url || session !== current) throw new Error('The page changed while capturing its journey screenshot.');
+          const capturedAt = new Date().toISOString();
+          const prepared = await mediaMessage('PREPARE_AI_IMAGES', {sessionId: current.id, evidence: {production: {dataUrl, capturedAt}}});
+          if (!prepared.production?.dataUrl) throw new Error('Could not prepare the journey screenshot.');
+          return {...prepared.production, capturedAt};
+        } finally {
+          await softTabMessage(current.targetTabId, 'RESTORE_EVIDENCE', {sessionId: current.id});
+        }
+      },
+      });
+      const cleanup = executor.cleanup;
+      executor.cleanup = async () => {
+        try { await cleanup(); }
+        finally {
+          if (session === current) { Object.assign(current.settings, previous); await publish(); }
+        }
+      };
+      return executor;
+    },
+  });
+  return journeyService;
 }
 
 async function acceptSuggestion(message) {
@@ -1264,6 +1394,17 @@ async function handle(message, sender) {
   const isAISettings = isSettings || sender.url?.split(/[?#]/)[0] === chrome.runtime.getURL('ai-settings.html');
   const role = session && Number.isInteger(sender.tab?.id) ? sender.tab.id === session.targetTabId ? 'target' : sender.tab.id === session.sourceTabId ? 'source' : null : null;
   const isDiff = sender.id === chrome.runtime.id && sender.url?.split('?')[0] === chrome.runtime.getURL('diff.html');
+  if (message.type === 'JOURNEY_CAPTURE_ENDED' && isMedia && sender.id === chrome.runtime.id && message.sessionId === session?.id) {
+    await journeyService?.recordingEnded(message.recordingId);
+    return {ok: true};
+  }
+  if (typeof message.type === 'string' && message.type.startsWith('JOURNEY_')) {
+    if (!JOURNEY_MESSAGES.has(message.type) || !isPanel || sender.id !== chrome.runtime.id) throw new Error('Open the review sidebar to test a journey.');
+    attachedPanel(sender, message.windowId);
+    if (!session || message.sessionId !== session.id) throw new Error('This review has ended. Open the current review sidebar.');
+    // Pause and Stop remain reachable when the website is loading or loses focus.
+    return getJourneyService().handle(message);
+  }
   if (message.type?.startsWith('GITHUB_') && isGitHubRequest(message.type)) {
     if (sender.id !== chrome.runtime.id || !isReport || (sender.frameId != null && sender.frameId !== 0)) throw new Error('Open Review reports to work with a GitHub pull request.');
     return getGitHubWorker().handle(message);
@@ -1341,8 +1482,10 @@ async function handle(message, sender) {
     }
     if (message.type === 'DELETE_REVIEW') {
       if (transitioning && session?.reviewId === message.reviewId) throw new Error('Finish choosing the reference before deleting this review.');
+      if (session?.reviewId === message.reviewId && journeyService?.busy) throw new Error('Stop the journey before deleting this review.');
       if (session?.reviewId === message.reviewId && (session.recording || recordingStart || aiJob || acceptingSuggestions.size)) throw new Error('Stop the recording or wait for the AI review action before deleting this review.');
       await reviews.deleteReview(message.reviewId);
+      await deleteJourneys(message.reviewId);
       if (session?.reviewId === message.reviewId) { session.commentCount = 0; session.comments = []; session.pendingDraftId = null; session.aiBatchId = null; await publish(); }
       return {ok: true};
     }
@@ -1652,6 +1795,7 @@ chrome.tabs.onUpdated.addListener((tabId, change) => {
   (async () => {
     await ready;
     if (!session || transitioning) return;
+    if (tabId === session.targetTabId && change.url && journeyService?.busy) await journeyService.routeChanged(change.url);
     const role = tabId === session.targetTabId ? 'target' : tabId === session.sourceTabId ? 'source' : null;
     if (!role) return;
     if (change.status === 'loading') await setStatus('reconnecting');

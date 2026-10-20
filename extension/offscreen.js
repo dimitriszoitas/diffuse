@@ -5,6 +5,7 @@ let peer = null;
 let currentSessionId = null;
 let connectionId = null;
 let recording = null;
+let recordingRequest = null;
 let lastRecording = null;
 let stagedReference = null;
 let displayRequest = null;
@@ -70,6 +71,7 @@ async function reviewerImage(evidence) {
 }
 
 function stop() {
+  recordingRequest = null;
   discardReference();
   const old = stream;
   stream = null;
@@ -81,6 +83,7 @@ function stop() {
   if (recording) {
     clearTimeout(recording.timer);
     recording.notify = false;
+    recording.discarded = true;
     if (recording.recorder.state !== 'inactive') recording.recorder.stop();
     recording.media.getTracks().forEach(track => track.stop());
   }
@@ -141,14 +144,19 @@ async function annotateProduction(message) {
 }
 
 async function startRecording(message) {
-  if (recording) throw new Error('A recording is already running.');
-  const size = captureSize(message.viewport),proof=message.proof===true;
-  if(proof){const scale=Math.min(1,1920/size.width,1080/size.height);size.width=Math.max(2,Math.floor(size.width*scale/2)*2);size.height=Math.max(2,Math.floor(size.height*scale/2)*2);}
-  const media = await navigator.mediaDevices.getUserMedia({audio: false, video: {mandatory: {chromeMediaSource: 'tab', chromeMediaSourceId: message.streamId, maxWidth: size.width, maxHeight: size.height, maxFrameRate: 24}}});
+  if (recording || recordingRequest) throw new Error('A recording is already running.');
+  const request = {sessionId: currentSessionId};
+  recordingRequest = request;
+  let media;
+  try {
+  const size = captureSize(message.viewport),proof=message.proof===true,journey=message.journey===true;
+  if(proof||journey){const scale=Math.min(1,1920/size.width,1080/size.height);size.width=Math.max(2,Math.floor(size.width*scale/2)*2);size.height=Math.max(2,Math.floor(size.height*scale/2)*2);}
+  media = await navigator.mediaDevices.getUserMedia({audio: false, video: {mandatory: {chromeMediaSource: 'tab', chromeMediaSourceId: message.streamId, maxWidth: size.width, maxHeight: size.height, maxFrameRate: 24}}});
+  if (recordingRequest !== request || currentSessionId !== request.sessionId) throw new Error('This review ended before recording could start.');
   const mimeType = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find(type => MediaRecorder.isTypeSupported(type));
   if (!mimeType) { media.getTracks().forEach(track => track.stop()); throw new Error('This browser cannot record WebM video.'); }
-  const recorder = new MediaRecorder(media, {mimeType, videoBitsPerSecond: proof?300000:3000000});
-  const item = {id: message.recordingId, sessionId: currentSessionId, proof, media, recorder, dimensions:media.getVideoTracks()[0].getSettings(), chunks: [], bytes: 0, startedAt: new Date().toISOString(), notify: false, reason: 'manual'};
+  const recorder = new MediaRecorder(media, {mimeType, videoBitsPerSecond: proof?300000:journey?600000:3000000});
+  const item = {id: message.recordingId, sessionId: currentSessionId, proof, journey, pausedAt: null, pausedMs: 0, media, recorder, dimensions:media.getVideoTracks()[0].getSettings(), chunks: [], bytes: 0, startedAt: new Date().toISOString(), notify: false, reason: 'manual'};
   item.finished = new Promise((resolve, reject) => { item.resolve = resolve; item.reject = reject; });
   // Auto-stop errors are reported to the worker rather than becoming unhandled.
   item.finished.catch(() => {});
@@ -159,7 +167,7 @@ async function startRecording(message) {
   };
   recorder.ondataavailable = event => {
     if (event.data.size) { item.chunks.push(event.data); item.bytes += event.data.size; }
-    if (item.bytes > (item.proof?1300*1024:16*1024*1024)) autoStop('size-limit');
+    if (item.bytes > (item.proof?1300*1024:item.journey?18*1024*1024:16*1024*1024)) autoStop('size-limit');
   };
   recorder.onerror = event => {
     clearTimeout(item.timer); media.getTracks().forEach(track => track.stop());
@@ -167,7 +175,7 @@ async function startRecording(message) {
     if (recording === item) recording = null;
     const error = new Error(event.error?.message || 'The recording could not be saved.');
     item.reject(error);
-    report('RECORDING_ERROR', {sessionId: item.sessionId, recordingId: item.id, error: error.message}).catch(() => {});
+    report(item.journey?'JOURNEY_CAPTURE_ENDED':'RECORDING_ERROR', {sessionId: item.sessionId, recordingId: item.id, reason: 'capture-error', error: error.message}).catch(() => {});
   };
   recorder.onstop = async () => {
     clearTimeout(item.timer); media.getTracks().forEach(track => track.stop());
@@ -177,23 +185,33 @@ async function startRecording(message) {
       if(item.discarded){if(recording===item)recording=null;item.resolve(null);return;}
       if(item.proof&&Date.now()-Date.parse(item.startedAt)>30000)throw new Error('The proof recording exceeded 30 seconds. Try a shorter recording.');
       if(item.proof&&blob.size>1500*1024)throw new Error('The proof recording is too large. Try a shorter recording.');
+      if(item.journey&&blob.size>20*1024*1024)throw new Error('The journey recording exceeded its size limit. Its screenshots remain available.');
       if (!blob.size) throw new Error('The recording was empty. The paired screenshots are still available.');
       const stoppedAt = new Date().toISOString();
-      const video = {dataUrl: await dataURL(blob), mimeType, durationMs: Date.parse(stoppedAt) - Date.parse(item.startedAt), filename: `diffuse-${item.id.slice(0, 8)}.webm`, kind: item.proof?'pr-proof':'comparison-recording', width:Math.round(item.dimensions.width||size.width),height:Math.round(item.dimensions.height||size.height), startedAt: item.startedAt, stoppedAt, stopReason: item.reason, bytes: blob.size};
+      const durationMs = Date.parse(stoppedAt) - Date.parse(item.startedAt) - item.pausedMs - (item.pausedAt ? Date.parse(stoppedAt) - item.pausedAt : 0);
+      const video = {dataUrl: await dataURL(blob), mimeType, durationMs, filename: `diffuse-${item.journey?'journey-':''}${item.id.slice(0, 8)}.webm`, kind: item.journey?'journey-recording':item.proof?'pr-proof':'comparison-recording', width:Math.round(item.dimensions.width||size.width),height:Math.round(item.dimensions.height||size.height), startedAt: item.startedAt, stoppedAt, stopReason: item.reason, bytes: blob.size};
+      if (item.discarded) { if (recording === item) recording = null; item.resolve(null); return; }
       lastRecording = {id: item.id, video};
       if (recording === item) recording = null;
       item.resolve(video);
-      if (item.notify) await report('RECORDING_FINISHED', {sessionId: item.sessionId, recordingId: item.id, video});
+      if (item.notify) await report(item.journey?'JOURNEY_CAPTURE_ENDED':'RECORDING_FINISHED', {sessionId: item.sessionId, recordingId: item.id, ...(item.journey?{reason:item.reason}:{video})});
     } catch (error) {
       if (recording === item) recording = null;
       item.reject(error);
-      report('RECORDING_ERROR', {sessionId: item.sessionId, recordingId: item.id, error: error.message}).catch(() => {});
+      report(item.journey?'JOURNEY_CAPTURE_ENDED':'RECORDING_ERROR', {sessionId: item.sessionId, recordingId: item.id, reason:'capture-error', error: error.message}).catch(() => {});
     }
   };
   media.getVideoTracks()[0].onended = () => autoStop('capture-ended');
   recorder.start(500);
-  item.timer = setTimeout(() => autoStop('time-limit'), proof?29000:30000);
+  item.timer = setTimeout(() => autoStop('time-limit'), proof?29000:journey?600000:30000);
   return {ok: true, recording: {id: item.id, startedAt: item.startedAt}};
+  } catch (error) {
+    media?.getTracks().forEach(track => track.stop());
+    if (recording?.media === media) recording = null;
+    throw error;
+  } finally {
+    if (recordingRequest === request) recordingRequest = null;
+  }
 }
 
 function gathered(pc) {
@@ -253,6 +271,16 @@ async function receive(message) {
     item.notify = false;
     if (item.recorder.state !== 'inactive') item.recorder.stop();
     return {ok: true, video: await item.finished};
+  }
+  if (message.type === 'PAUSE_JOURNEY_RECORDING' || message.type === 'RESUME_JOURNEY_RECORDING') {
+    if (message.sessionId !== currentSessionId || !recording?.journey || recording.id !== message.recordingId) throw new Error('The journey recording is no longer active.');
+    const item = recording;
+    if (message.type === 'PAUSE_JOURNEY_RECORDING' && item.recorder.state === 'recording') {
+      item.pausedAt = Date.now(); item.recorder.pause();
+    } else if (message.type === 'RESUME_JOURNEY_RECORDING' && item.recorder.state === 'paused') {
+      item.pausedMs += Date.now() - item.pausedAt; item.pausedAt = null; item.recorder.resume();
+    }
+    return {ok: true, paused: item.recorder.state === 'paused'};
   }
   if (message.sessionId !== currentSessionId) throw new Error('This audit or comparison is no longer active.');
   if (message.type === 'SNAPSHOT_EVIDENCE') {

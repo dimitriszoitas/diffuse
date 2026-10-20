@@ -20,12 +20,17 @@ async function backgroundHarness(options = {}) {
   const messages = [];
   const mediaMessages = [];
   const saves = [];
+  const draftWrites = [];
   let screenshots = 0;
   let rejectDelivery = false;
   const reviews = {
     getReview: async id => ({id, comments: structuredClone(comments), count: comments.length}),
     getDraft: async id => structuredClone(drafts.get(id)),
-    putDraft: async draft => { drafts.set(draft.id, structuredClone(draft)); },
+    putDraft: async draft => {
+      draftWrites.push(structuredClone(draft));
+      if (options.putDraft) await options.putDraft(draft);
+      drafts.set(draft.id, structuredClone(draft));
+    },
     discardDraft: async id => {drafts.delete(id);},
     addComment: async (id, fields, saveOptions) => {
       const draft = drafts.get(id);
@@ -76,7 +81,7 @@ async function backgroundHarness(options = {}) {
   });
   vm.runInContext(backgroundSource.replace(/^import .*\n/gm, '') + `
     globalThis.api = {
-      ready, beginRecording, finishRecording, initializeTab, stopSession, handle,
+      ready, beginRecording, finishRecording, initializeTab, stopSession, handle, referenceBusyReason,
       setSession(value) { session = value; }, getSession() { return session; },
       setEvidenceBusy(value) {evidenceBusy=value;}, setAIJob(value) {aiJob=value;}
     };
@@ -90,7 +95,7 @@ async function backgroundHarness(options = {}) {
   drafts.set('draft', {id: 'draft', reviewId: 'review', recordingId: 'recording', evidence: {}});
   context.api.setSession(session);
   return {
-    ...context.api, session, drafts, comments, messages, mediaMessages, saves,
+    ...context.api, session, drafts, comments, messages, mediaMessages, saves, draftWrites,
     screenshots() {return screenshots;},
     rejectDelivery(value) { rejectDelivery = value; },
   };
@@ -149,6 +154,36 @@ test('a concurrent automatic finish and tab closure preserve exactly one comment
   assert.equal(harness.session.recording, null);
   await harness.finishRecording('recording', video, {interrupted: true});
   assert.equal(harness.comments.length, 1, 'A repeated closure cannot duplicate preserved evidence');
+});
+
+test('only active recording finalization blocks Diff, while cached retries remain idempotent', async () => {
+  let release;
+  const gate = new Promise(resolve => {release = resolve;});
+  const harness = await backgroundHarness({putDraft: () => gate});
+  const finishing = harness.finishRecording('recording', video);
+  await new Promise(setImmediate);
+  assert.equal(harness.draftWrites.length, 1);
+
+  // The in-flight write must independently retain the lock, even if another
+  // lifecycle event has already removed the live recording indicator.
+  harness.session.recording = null;
+  assert.match(harness.referenceBusyReason(), /Finish the screenshot or recording/);
+  const concurrentRetry = harness.finishRecording('recording', video);
+  release();
+  const [finished, retried] = await Promise.all([finishing, concurrentRetry]);
+  assert.equal(finished.id, retried.id);
+  assert.equal(harness.draftWrites.length, 1, 'Concurrent finish callbacks share one evidence write');
+  assert.match(harness.referenceBusyReason(), /Save or cancel the open comment/);
+
+  await harness.handle({type: 'DISCARD_DRAFT', sessionId: 'comparison', draftId: 'draft'}, {
+    tab: {id: 2}, url: 'https://example.test/app',
+  });
+  assert.equal(harness.session.pendingDraftId, null);
+  assert.equal(harness.referenceBusyReason(), null, 'A settled 60-second retry cache must not block a new Diff');
+  await harness.finishRecording('recording', video);
+  assert.equal(harness.draftWrites.length, 1, 'A late finish retry must reuse the cached result');
+  assert.equal(harness.drafts.has('draft'), false, 'A cached retry cannot resurrect a consumed draft');
+  assert.equal(harness.referenceBusyReason(), null);
 });
 
 test('a late error for an old recording cannot clear the current recording', async () => {

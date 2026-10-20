@@ -45,7 +45,7 @@ async function harness(initial = initialSession()) {
   vm.runInContext(source.replace(/^import .*\n/gm, '') + `globalThis.api = {ready, handle, referenceBusyReason,
     current() {return session;}, replace(value) {session = value;},
     expire(id) {referenceRequests.get(id).expiresAt = 0;},
-    busy(kind) {if(kind==='capture')evidenceBusy=true; if(kind==='recordingStart')recordingStart={}; if(kind==='ai')aiJob={}; if(kind==='accept')acceptingSuggestions.add('test'); if(kind==='finalizing')recordingFinishes.set('clip',{}); if(kind==='transition')transitioning=true;}
+    busy(kind) {if(kind==='capture')evidenceBusy=true; if(kind==='recordingStart')recordingStart={}; if(kind==='ai')aiJob={}; if(kind==='accept')acceptingSuggestions.add('test'); if(kind==='finalizing')pendingRecordingFinishes.add('clip'); if(kind==='transition')transitioning=true;}
   };`, context);
   await context.api.ready;
   const sender = id => ({id: 'test', url: `chrome-extension://test/diff.html?session=${encodeURIComponent(id)}`});

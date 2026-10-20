@@ -81,7 +81,7 @@ function recorderHarness(){
   const state={options:null,trackStopped:false,report:[],timer:null};
   const track={getSettings:()=>({width:1280,height:720}),stop(){state.trackStopped=true;}};
   class Recorder{static isTypeSupported(){return true;}constructor(media,options){state.options=options;state.recorder=this;this.state='inactive';}start(){this.state='recording';}stop(){this.state='inactive';this.onstop?.();}}
-  const sandbox={recording:null,lastRecording:null,currentSessionId:'session',navigator:{mediaDevices:{async getUserMedia(constraints){state.constraints=constraints;return {getTracks:()=>[track],getVideoTracks:()=>[track]};}}},MediaRecorder:Recorder,Blob,Date,
+  const sandbox={recording:null,recordingRequest:null,lastRecording:null,currentSessionId:'session',navigator:{mediaDevices:{async getUserMedia(constraints){state.constraints=constraints;return {getTracks:()=>[track],getVideoTracks:()=>[track]};}}},MediaRecorder:Recorder,Blob,Date,
     captureSize:viewport=>({width:viewport.width,height:viewport.height}),dataURL:async blob=>`data:${blob.type};base64,${Buffer.from(await blob.arrayBuffer()).toString('base64')}`,
     report:async(type,data)=>state.report.push({type,data}),setTimeout:(fn,delay)=>{state.timer=fn;state.timerDelay=delay;return 1;},clearTimeout(){}};
   vm.createContext(sandbox);vm.runInContext(startRecorder,sandbox);return {state,sandbox};
