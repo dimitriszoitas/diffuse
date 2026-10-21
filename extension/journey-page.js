@@ -14,22 +14,23 @@
     }
     return false;
   };
-  const visible = el => {
-    if (!el?.isConnected || ignored(el)) return false;
-    const rect = el.getBoundingClientRect();
+  const visibleBounds = (el, rect = el?.getBoundingClientRect(), includeSelfClip = false) => {
+    if (!el?.isConnected || ignored(el) || !rect) return null;
     let left = Math.max(0, rect.left), top = Math.max(0, rect.top);
     let right = Math.min(innerWidth, rect.right), bottom = Math.min(innerHeight, rect.bottom);
     for (let node = el; node; node = parent(node)) {
       const style = getComputedStyle(node);
-      if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse' || Number(style.opacity) === 0) return false;
-      if (node !== el && node !== document.documentElement && node !== document.body) {
+      if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse' || Number(style.opacity) === 0) return null;
+      if ((node !== el || includeSelfClip) && node !== document.documentElement && node !== document.body) {
         const bounds = node.getBoundingClientRect();
         if (/(hidden|clip|scroll|auto)/.test(style.overflowX)) { left = Math.max(left, bounds.left); right = Math.min(right, bounds.right); }
         if (/(hidden|clip|scroll|auto)/.test(style.overflowY)) { top = Math.max(top, bounds.top); bottom = Math.min(bottom, bounds.bottom); }
       }
     }
-    return right > left && bottom > top;
+    return right > left && bottom > top ? {left, top, right, bottom, width: right - left, height: bottom - top} : null;
   };
+  const visible = el => Boolean(visibleBounds(el));
+  const ACTIONABLE = 'a[href],button,input:not([type="hidden"]),textarea,select,summary,[contenteditable="true"],[role="button"],[role="link"],[role="checkbox"],[role="radio"],[role="combobox"],[role="tab"],[role="menuitem"],[role="option"]';
   function allElements() {
     const result = [];
     const visit = root => {
@@ -91,9 +92,43 @@
     }
     return '';
   }
-  function descriptor(el, id) {
-    const item = {id, role: role(el), label: label(el) || '(unlabelled control)'};
-    const reason = blockReason(el);
+  function scrollState(el, page = false) {
+    const style = getComputedStyle(el), bodyStyle = page && document.body ? getComputedStyle(document.body) : null;
+    const maxX = Math.max(0, el.scrollWidth - el.clientWidth), maxY = Math.max(0, el.scrollHeight - el.clientHeight);
+    const x = el.scrollLeft, y = el.scrollTop;
+    const allows = axis => page
+      ? !/(hidden|clip)/.test(style[`overflow${axis}`]) && !/(hidden|clip)/.test(bodyStyle?.[`overflow${axis}`] || '')
+      : /(auto|scroll|overlay)/.test(style[`overflow${axis}`]);
+    const rtl = style.direction === 'rtl';
+    return {x, y, maxX, maxY,
+      canScrollUp: allows('Y') && y > 1, canScrollDown: allows('Y') && y < maxY - 1,
+      canScrollLeft: allows('X') && (rtl ? x > -maxX + 1 : x > 1),
+      canScrollRight: allows('X') && (rtl ? x < -1 : x < maxX - 1)};
+  }
+  function scrollable(el) {
+    if (el === document.scrollingElement || el === document.documentElement || el === document.body ||
+      /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable || !visible(el)) return false;
+    const state = scrollState(el);
+    return state.canScrollUp || state.canScrollDown || state.canScrollLeft || state.canScrollRight;
+  }
+  function scrollLabel(el) {
+    const named = compact(el.getAttribute('aria-label') || (el.getAttribute('aria-labelledby') || '').split(/\s+/)
+      .map(id => el.getRootNode().getElementById?.(id)).filter(node => node && visible(node))
+      .map(node => node.innerText).join(' '), 160);
+    if (named) return named;
+    // Never use the container's innerText: it also contains clipped/offscreen
+    // options, which the model has not actually seen yet.
+    for (let scope = el; scope && scope !== document.body; scope = parent(scope)) {
+      const heading = [...scope.querySelectorAll('h1,h2,h3,h4,[role="heading"]')].find(node => visible(node));
+      if (heading) return `${compact(heading.innerText, 120)} · scrollable region`;
+      if (scope.matches('dialog,[role="dialog"],[role="listbox"]')) break;
+    }
+    return 'Scrollable region';
+  }
+  function descriptor(el, id, scrollOnly = false, scroll = null) {
+    const item = {id, role: scrollOnly ? 'scroll-region' : role(el), label: scrollOnly ? scrollLabel(el) : label(el) || '(unlabelled control)'};
+    const reason = scrollOnly ? '' : blockReason(el);
+    if (scroll) item.scroll = scroll;
     if (el.type) item.type = el.type;
     if (reason) item.blockedReason = reason;
     if (el.disabled || el.getAttribute('aria-disabled') === 'true') item.disabled = true;
@@ -106,23 +141,44 @@
     item.bounds = {x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height)};
     return item;
   }
-  function signature(el) {
-    return JSON.stringify([role(el), label(el), el.type, el.getAttribute('href'), el.getAttribute('formaction'),
-      el.closest?.('form')?.getAttribute('action'), el.disabled, el.getAttribute('aria-disabled'), el.value, el.checked]);
+  function signature(el, scrollOnly = false, hasScroll = false) {
+    return JSON.stringify([role(el), scrollOnly ? scrollLabel(el) : label(el), el.type, el.getAttribute('href'), el.getAttribute('formaction'),
+      el.closest?.('form')?.getAttribute('action'), el.disabled, el.getAttribute('aria-disabled'), el.value, el.checked,
+      hasScroll ? scrollState(el) : null]);
+  }
+  function visibleNodeText(el, node, budget) {
+    const range = document.createRange(); range.selectNodeContents(node);
+    const rect = range.getBoundingClientRect(), bounds = visibleBounds(el, rect, true);
+    if (!bounds) return '';
+    if (rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1 && rect.top >= bounds.top - 1 && rect.bottom <= bounds.bottom + 1) {
+      return compact(node.textContent, 600);
+    }
+    // Text directly inside a clipped container may span many unseen lines.
+    // Read only rendered words, with a fixed inspection/output budget.
+    const words = [], pattern = /\S+/g, text = node.textContent;
+    let match, inspected = 0, size = 0;
+    while ((match = pattern.exec(text)) && inspected++ < 2000 && budget.remaining-- > 0) {
+      range.setStart(node, match.index); range.setEnd(node, match.index + match[0].length);
+      const wordRect = range.getBoundingClientRect();
+      // The clipping ancestors are fixed for this synchronous observation.
+      // Reuse their intersection instead of re-reading computed styles for
+      // every word in a long, partially visible text node.
+      if (wordRect.right <= bounds.left || wordRect.left >= bounds.right || wordRect.bottom <= bounds.top || wordRect.top >= bounds.bottom) continue;
+      words.push(match[0]); size += match[0].length + 1;
+      if (size >= 600) break;
+    }
+    return compact(words.join(' '), 600);
   }
   function readText(elements) {
     const output = [];
+    const budget = {remaining: 6000};
     let size = 0;
     for (const el of elements) {
       if (!visible(el) || /^(INPUT|TEXTAREA|SELECT|OPTION)$/.test(el.tagName) || el.isContentEditable) continue;
       for (const node of el.childNodes) {
         if (node.nodeType !== Node.TEXT_NODE) continue;
-        const text = compact(node.textContent, 600);
+        const text = visibleNodeText(el, node, budget);
         if (!text) continue;
-        const range = document.createRange();
-        range.selectNodeContents(node);
-        const rect = range.getBoundingClientRect();
-        if (rect.bottom <= 0 || rect.top >= innerHeight || rect.width <= 0) continue;
         output.push(text); size += text.length;
         if (size >= 14000) return output.join('\n').slice(0, 14000);
       }
@@ -133,13 +189,17 @@
     const elements = allElements();
     const observationId = crypto.randomUUID();
     const refs = new Map();
-    const candidates = elements.filter(el => visible(el) && el.matches(
-      'a[href],button,input:not([type="hidden"]),textarea,select,summary,[contenteditable="true"],[role="button"],[role="link"],[role="checkbox"],[role="radio"],[role="combobox"],[role="tab"],[role="menuitem"],[role="option"],[tabindex="0"]',
-    )).slice(0, 180);
+    const regions = elements.filter(el => {
+      if (!scrollable(el)) return false;
+      try { scrollPoint(el); return true; } catch { return false; }
+    }).slice(0, 24);
+    const candidates = elements.filter(el => visible(el) && el.matches(`${ACTIONABLE},[tabindex="0"]`)).slice(0, 180 - regions.length);
+    for (const el of regions) if (!candidates.includes(el)) candidates.push(el);
     const controls = candidates.map((el, i) => {
       const id = `control-${i + 1}`;
-      refs.set(id, {el, signature: signature(el)});
-      return descriptor(el, id);
+      const hasScroll = regions.includes(el), scrollOnly = hasScroll && !el.matches(ACTIONABLE);
+      refs.set(id, {el, scrollOnly, hasScroll, signature: signature(el, scrollOnly, hasScroll)});
+      return descriptor(el, id, scrollOnly, hasScroll ? scrollState(el) : null);
     });
     snapshot = {observationId, url: location.href, refs, createdAt: Date.now()};
     return {
@@ -147,7 +207,7 @@
       context: {
         documentId, observationId, url: location.href, title: compact(document.title, 300),
         viewport: {width: innerWidth, height: innerHeight, dpr: devicePixelRatio, visualScale: visualViewport?.scale || 1},
-        scroll: {x: scrollX, y: scrollY},
+        scroll: scrollState(document.scrollingElement, true),
         documentSize: {width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight},
         limitations: elements.some(el => visible(el) && el.tagName === 'IFRAME') ? ['Embedded frames cannot be operated in this version.'] : [],
       },
@@ -159,12 +219,14 @@
       throw fail('The page changed since it was observed. Read the page again before acting.', 'JOURNEY_STALE');
     }
   }
-  function targetFor(id) {
+  function targetFor(id, actionType) {
     const saved = snapshot?.refs.get(id);
-    if (!saved || !visible(saved.el) || signature(saved.el) !== saved.signature) throw fail('The selected control changed. Read the page again.', 'JOURNEY_STALE');
+    if (!saved || !visible(saved.el) || signature(saved.el, saved.scrollOnly, saved.hasScroll) !== saved.signature) throw fail('The selected control changed. Read the page again.', 'JOURNEY_STALE');
+    if (actionType === 'scroll' && !saved.hasScroll) throw fail('Choose a scrollable region from the current observation.', 'JOURNEY_INVALID_ACTION');
+    if (saved.scrollOnly && actionType !== 'scroll') throw fail('This region supports scrolling. Choose one of its visible controls to interact.', 'JOURNEY_INVALID_ACTION');
     const el = saved.el;
     if (el.disabled || el.getAttribute('aria-disabled') === 'true') throw fail('The selected control is disabled.');
-    const reason = blockReason(el);
+    const reason = actionType === 'scroll' ? '' : blockReason(el);
     if (reason) throw fail(reason);
     return el;
   }
@@ -185,9 +247,10 @@
     }
   }
   function unobstructed(el) {
-    const rect = el.getBoundingClientRect();
-    const x = Math.max(1, Math.min(innerWidth - 1, rect.left + rect.width / 2));
-    const y = Math.max(1, Math.min(innerHeight - 1, rect.top + rect.height / 2));
+    const bounds = visibleBounds(el);
+    if (!bounds) throw fail('The control is no longer visible.', 'JOURNEY_STALE');
+    const x = bounds.left + bounds.width / 2;
+    const y = bounds.top + bounds.height / 2;
     let hit = document.elementFromPoint(x, y);
     while (hit?.shadowRoot) {
       const next = hit.shadowRoot.elementFromPoint?.(x, y);
@@ -196,6 +259,18 @@
     }
     for (let node = hit; node; node = parent(node)) if (node === el) return {x, y};
     throw fail('The control is covered by another element. Read the page again.', 'JOURNEY_STALE');
+  }
+  function scrollPoint(el) {
+    const bounds = visibleBounds(el);
+    if (!bounds) throw fail('The scrollable region is no longer visible.', 'JOURNEY_STALE');
+    const points = [[.5, .5], [.15, .15], [.85, .15], [.15, .85], [.85, .85]];
+    for (const [x, y] of points) {
+      const point = {x: bounds.left + bounds.width * x, y: bounds.top + bounds.height * y};
+      let hit = document.elementFromPoint(point.x, point.y);
+      while (hit?.shadowRoot) { const next = hit.shadowRoot.elementFromPoint?.(point.x, point.y); if (!next || next === hit) break; hit = next; }
+      for (let node = hit; node; node = parent(node)) if (node === el) return point;
+    }
+    throw fail('The scrollable region is covered. Read the page again.', 'JOURNEY_STALE');
   }
   function setText(el, text) {
     if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) || el.readOnly ||
@@ -212,7 +287,7 @@
   function previewClick(message) {
     validateContext(message.context);
     if (location.origin !== message.origin) throw fail('This page is outside the approved website.');
-    const el = targetFor(message.action?.targetId);
+    const el = targetFor(message.action?.targetId, 'click');
     assertTargetNavigation(el, message.origin);
     return {point: unobstructed(el)};
   }
@@ -220,8 +295,9 @@
     validateContext(message.context);
     if (location.origin !== message.origin) throw fail('This page is outside the approved website.');
     const action = message.action;
-    const el = action.targetId ? targetFor(action.targetId) : null;
-    if (el) assertTargetNavigation(el, message.origin);
+    const el = action.targetId ? targetFor(action.targetId, action.type) : null;
+    if (el && action.type !== 'scroll') assertTargetNavigation(el, message.origin);
+    let scrollResult = null;
     if (action.type === 'click') {
       const point = unobstructed(el);
       if (message.point && (!Number.isFinite(message.point.x) || !Number.isFinite(message.point.y) ||
@@ -247,13 +323,22 @@
     } else if (action.type === 'scroll') {
       const container = el || document.scrollingElement;
       const horizontal = ['left', 'right'].includes(action.direction);
-      const distance = Math.round((horizontal ? innerWidth : innerHeight) * .7) * (['up', 'left'].includes(action.direction) ? -1 : 1);
-      container.scrollBy({[horizontal ? 'left' : 'top']: distance, behavior: 'instant'});
+      if (el) scrollPoint(el);
+      const state = scrollState(container, !el), before = {x: state.x, y: state.y};
+      const directionFlag = `canScroll${action.direction[0].toUpperCase()}${action.direction.slice(1)}`;
+      const bounds = el ? visibleBounds(el) : {width: innerWidth, height: innerHeight};
+      const visibleExtent = horizontal ? Math.min(bounds.width, container.clientWidth) : Math.min(bounds.height, container.clientHeight);
+      const distance = Math.max(1, Math.round(visibleExtent * .7)) * (['up', 'left'].includes(action.direction) ? -1 : 1);
+      if (state[directionFlag]) container.scrollBy({[horizontal ? 'left' : 'top']: distance, behavior: 'instant'});
+      const afterState = scrollState(container, !el), after = {x: afterState.x, y: afterState.y};
+      scrollResult = {targetId: action.targetId || null, before, after, delta: {x: after.x - before.x, y: after.y - before.y}, atBoundary: !afterState[directionFlag]};
     } else if (action.type !== 'wait') {
       throw fail('Unsupported page action.');
     }
     snapshot = null; // One action per observation, even if the page looks unchanged.
-    return {type: action.type, url: location.href, targetLabel: el ? label(el) : '', performed: true};
+    return {type: action.type, url: location.href, targetLabel: el ? (action.type === 'scroll' ? scrollLabel(el) : label(el)) : '',
+      performed: scrollResult ? Math.abs(scrollResult.delta.x) > .5 || Math.abs(scrollResult.delta.y) > .5 : true,
+      ...(scrollResult ? {scroll: scrollResult} : {})};
   }
   async function settle() {
     const start = Date.now();

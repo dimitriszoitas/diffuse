@@ -1,6 +1,8 @@
 import {createJourneyRunner} from './journey-runner.mjs';
 import {JourneyError, requestJourneyDecision, requestJourneyFollowUp, validateJourneyFollowUp} from './journey-ai.mjs';
 import * as localStore from './journey-store.mjs';
+import {normalizeJourneyPersona, journeyPersonaSummary} from './journey-persona.mjs';
+import {normalizeJourneySettings, JOURNEY_FOCUS_CHECKS} from './journey-settings.mjs';
 
 export const JOURNEY_MESSAGES = new Set(['JOURNEY_START', 'JOURNEY_STATE', 'JOURNEY_HISTORY', 'JOURNEY_LOAD', 'JOURNEY_PAUSE', 'JOURNEY_RESUME', 'JOURNEY_STOP', 'JOURNEY_ACCEPT', 'JOURNEY_ASK']);
 const activeStatus = status => ['running', 'paused'].includes(status);
@@ -8,6 +10,7 @@ const terminalStatus = status => ['completed', 'failed', 'blocked', 'inconclusiv
 export function journeyInput(input = {}) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Describe the task you want Diffuse to complete.');
   const clean = {};
+  if (input.fork !== undefined && input.continuation !== undefined) throw new Error('Choose either another route from the start or a continuation from the current page.');
   if (input.fork !== undefined) {
     const fork = input.fork;
     if (!fork || typeof fork !== 'object' || Array.isArray(fork) || typeof fork.parentRunId !== 'string' || !fork.parentRunId.trim() || fork.parentRunId.length > 120 ||
@@ -15,17 +18,29 @@ export function journeyInput(input = {}) {
         (fork.stepIndex !== undefined && (!Number.isInteger(fork.stepIndex) || fork.stepIndex < 1 || fork.stepIndex > 31))) throw new Error('Choose a saved journey and describe the alternative route in under 2,000 characters.');
     clean.fork = {parentRunId: fork.parentRunId.trim(), ...(fork.stepIndex !== undefined ? {stepIndex: fork.stepIndex} : {}), instructions: fork.instructions.trim()};
   }
+  if (input.continuation !== undefined) {
+    const continuation = input.continuation;
+    if (!continuation || typeof continuation !== 'object' || Array.isArray(continuation) ||
+        typeof continuation.parentRunId !== 'string' || !continuation.parentRunId.trim() || continuation.parentRunId.length > 120 ||
+        typeof continuation.instructions !== 'string' || !continuation.instructions.trim() || continuation.instructions.length > 2000) throw new Error('Choose a saved journey and describe how to continue in under 2,000 characters.');
+    clean.continuation = {parentRunId: continuation.parentRunId.trim(), instructions: continuation.instructions.trim()};
+  }
   for (const [name, limit] of [['goal', 2000], ['successCriteria', 2000], ['testData', 4000]]) {
     if (input[name] !== undefined && (typeof input[name] !== 'string' || input[name].length > limit)) throw new Error(`Keep ${name === 'goal' ? 'the goal' : name === 'testData' ? 'test data' : 'success criteria'} under ${limit} characters.`);
     clean[name] = (input[name] || '').trim();
   }
-  if (!clean.goal && (!clean.fork || input.goal !== undefined)) throw new Error('Describe the task you want Diffuse to complete.');
+  if (!clean.goal && ((!clean.fork && !clean.continuation) || input.goal !== undefined)) throw new Error('Describe the task you want Diffuse to complete.');
   clean.maxSteps = input.maxSteps ?? 20;
   if (!Number.isInteger(clean.maxSteps) || clean.maxSteps < 5 || clean.maxSteps > 30) throw new Error('Choose a limit between 5 and 30 actions.');
+  clean.persona = normalizeJourneyPersona(input.persona);
+  Object.assign(clean, normalizeJourneySettings(input));
   return clean;
 }
 export function journeyReproduction(run, until) {
   const lines = [`Goal: ${run.goal}`, `Start: ${run.startUrl}`];
+  lines.push(run.persona === undefined ? 'Persona: No persona was recorded for this saved run.' : `Persona: ${journeyPersonaSummary(run.persona)}`);
+  if (run.continuation) lines.push(`Continuation of journey ${run.continuation.parentRunId}. These steps begin from the existing application state at the address above.`);
+  if (run.focusChecks) lines.push(`Requested checks: ${run.focusChecks.map(key => JOURNEY_FOCUS_CHECKS.find(item => item.key === key)?.label || key).join(', ')}. Only recorded observations establish which checks were performed.`);
   if (run.successCriteria) lines.push(`Expected result: ${run.successCriteria}`);
   for (const step of run.steps.filter(item => item.index < until && !['error', 'interrupted'].includes(item.executionStatus))) {
     const action = step.action || {};
@@ -159,20 +174,21 @@ export function createJourneyService({getSession, checkReady, createExecutor, re
       const tab = await checkReady(current);
       assertStarting();
       let parent = null;
-      if (fields.fork) {
-        parent = await read(current, fields.fork.parentRunId);
-        if (!terminalStatus(parent.status)) throw new Error('Finish or stop the original journey before trying another route.');
-        if (fields.fork.stepIndex !== undefined && !parent.steps.some(step => step.index === fields.fork.stepIndex)) throw new Error('Choose an existing step from the original journey.');
-        fields = journeyInput({...fields, ...Object.fromEntries(['goal', 'successCriteria', 'testData', 'maxSteps'].filter(key => input[key] === undefined).map(key => [key, parent[key]]))});
+      if (fields.fork || fields.continuation) {
+        parent = await read(current, (fields.fork || fields.continuation).parentRunId);
+        if (fields.continuation && !['stopped', 'blocked', 'inconclusive'].includes(parent.status)) throw new Error('Only a stopped, blocked or inconclusive journey can continue from the current page.');
+        if (fields.fork && !terminalStatus(parent.status)) throw new Error('Finish or stop the original journey before trying another route.');
+        if (fields.fork?.stepIndex !== undefined && !parent.steps.some(step => step.index === fields.fork.stepIndex)) throw new Error('Choose an existing step from the original journey.');
+        fields = journeyInput({...fields, ...Object.fromEntries(['goal', 'successCriteria', 'testData', 'maxSteps', 'persona', 'exploration', 'allowRecordMoves', 'extraInstructions', 'focusChecks'].filter(key => input[key] === undefined).map(key => [key, parent[key]]))});
       }
-      const start = new URL(parent ? parent.startUrl : tab.url);
+      const start = new URL(fields.fork ? parent.startUrl : tab.url);
       if (!['http:', 'https:'].includes(start.protocol) || start.username || start.password || start.href.length > 2048) throw new Error('Open a website or local preview server with a supported address to test a journey.');
-      if (parent && start.origin !== new URL(tab.url).origin) throw new Error('Open the original journey’s website before trying another route.');
+      if (parent && new URL(parent.startUrl).origin !== new URL(tab.url).origin) throw new Error('Open the original journey’s website before trying another route or continuing.');
       const config = await readConfig();
       if (!config.hasKey) throw new Error('Add your Anthropic API key in Settings before testing a journey.');
       if (JSON.stringify(fields).includes(config.apiKey)) throw new Error('Remove your API key from the goal or test data.');
       assertStarting();
-      if (parent) {
+      if (fields.fork) {
         if (!prepareFork) throw new Error('Reopen the starting page before trying another route.');
         await prepareFork(current, parent, {signal: startup.signal});
         assertStarting();
@@ -207,7 +223,9 @@ export function createJourneyService({getSession, checkReady, createExecutor, re
       const runner = runnerFactory({
         observe: options => executor.observe(options),
         execute: (action, observation, options) => executor.execute(action, observation, options),
-        decide: args => decide({...args, routePreferences: fields.fork?.instructions || '', apiKey: config.apiKey, model: config.model}),
+        decide: args => decide({...args, persona: fields.persona, exploration: fields.exploration, allowRecordMoves: fields.allowRecordMoves,
+          extraInstructions: fields.extraInstructions, focusChecks: fields.focusChecks, routePreferences: fields.fork?.instructions || '',
+          continuation: fields.continuation || null, priorJourney: fields.continuation ? parent : null, apiKey: config.apiKey, model: config.model}),
         onUpdate: async state => {
           const run = decorate(state);
           lastRun = run;

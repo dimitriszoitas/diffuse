@@ -1,4 +1,4 @@
-import {JourneyError, validateJourneyDecision, journeyControlBounds} from './journey-ai.mjs';
+import {JourneyError, validateJourneyDecision, journeyControlBounds, journeyControlScroll} from './journey-ai.mjs';
 
 const ACTIVE = new Set(['running', 'paused']);
 const MAX_EVIDENCE_BYTES = 24 * 1024 * 1024;
@@ -33,6 +33,7 @@ function cleanObservation(value) {
       ...(control.blockedReason ? {blockedReason: String(control.blockedReason).slice(0, 300)} : {}),
       ...(typeof control.checked === 'boolean' ? {checked: control.checked} : {}),
       ...journeyControlBounds(control.bounds),
+      ...journeyControlScroll(control.scroll),
       ...(!['password', 'file'].includes(control.type) && control.value !== undefined ? {value: String(control.value).slice(0, 2000)} : {}),
       ...(Array.isArray(control.options) ? {options: control.options.slice(0, 100).map(option => typeof option === 'string' ? option.slice(0, 500) : {value: String(option.value || '').slice(0, 500), label: String(option.label || '').slice(0, 300)})} : {}),
     })),
@@ -51,7 +52,8 @@ function cleanObservation(value) {
 function fingerprint(observation) {
   // Control IDs can be regenerated on every observation, so compare visible
   // control identity and values instead. Screenshots/video pixels can animate.
-  return JSON.stringify([observation.url, observation.text, observation.controls.map(({role, label, type, value, checked}) => [role, label, type, value, checked])]);
+  return JSON.stringify([observation.url, observation.text, observation.context?.scroll,
+    observation.controls.map(({role, label, type, value, checked, scroll}) => [role, label, type, value, checked, scroll?.x, scroll?.y])]);
 }
 
 export function createJourneyRunner({observe, execute, decide, onUpdate = () => {}, maxDurationMs = 10 * 60 * 1000} = {}) {

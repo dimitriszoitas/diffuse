@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {createJourneyService, journeyInput, journeyReproduction} from '../extension/journey-service.mjs';
 import {createJourneyRunner} from '../extension/journey-runner.mjs';
 import {JOURNEY_DIMENSIONS} from '../extension/journey-ai.mjs';
+import {DEFAULT_JOURNEY_PERSONA} from '../extension/journey-persona.mjs';
+import {DEFAULT_JOURNEY_SETTINGS} from '../extension/journey-settings.mjs';
 
 const KEY = 'sk-ant-journey-service-not-real-key';
 const copy = value => structuredClone(value);
@@ -87,7 +89,7 @@ function harness(overrides = {}) {
 }
 
 test('journey fields are allowlisted and validated before starting', () => {
-  assert.deepEqual(journeyInput({goal: ' Add Oat milk. ', maxSteps: 10, apiKey: KEY, tabId: 99, url: 'https://evil.test', id: 'injected'}), {goal: 'Add Oat milk.', successCriteria: '', testData: '', maxSteps: 10});
+  assert.deepEqual(journeyInput({goal: ' Add Oat milk. ', maxSteps: 10, apiKey: KEY, tabId: 99, url: 'https://evil.test', id: 'injected'}), {goal: 'Add Oat milk.', successCriteria: '', testData: '', maxSteps: 10, persona: {...DEFAULT_JOURNEY_PERSONA}, ...DEFAULT_JOURNEY_SETTINGS});
   for (const input of [{}, {goal: ''}, {goal: 'a'.repeat(2001)}, {goal: 'x', successCriteria: 'x'.repeat(2001)}, {goal: 'x', testData: 'x'.repeat(4001)}, {goal: 'x', maxSteps: 4}, {goal: 'x', maxSteps: 31}, {goal: 'x', maxSteps: '20'}, {goal: {text: 'x'}}]) assert.throws(() => journeyInput(input));
 });
 
@@ -559,4 +561,122 @@ test('concurrent questions serialize their saved context without dropping either
   assert.equal(questions.length, 2);
   assert.equal(questions[1].run.followUps[0].question, 'First question');
   assert.deepEqual(h.records.get('run-saved').followUps.map(item => item.question), ['First question', 'Second question']);
+});
+
+const novice = {...DEFAULT_JOURNEY_PERSONA, description: 'A restaurant manager adding ingredients for the first time', technicalConfidence: 2, taskFamiliarity: 5, persistence: 2};
+const explicitSettings = {exploration: 'thorough', allowRecordMoves: true, extraInstructions: 'Move only the Oat milk test record to the Demo project.', focusChecks: ['completion', 'layout']};
+
+test('new runs persist the selected persona and scope through updates, finalization and every decision', async () => {
+  for (const input of [{}, {persona: novice, ...explicitSettings}]) {
+    const h = harness();
+    const started = await h.start(input);
+    const expectedPersona = input.persona || DEFAULT_JOURNEY_PERSONA;
+    try {
+      assert.deepEqual(started.run.persona, expectedPersona);
+      await h.runnerOptions.decide({observation: {}, history: [], persona: {description: 'Untrusted runner override'}});
+      await h.runnerOptions.decide({observation: {}, history: [{index: 1}]});
+      for (const call of h.calls.decisions) {
+        assert.deepEqual(call.persona, expectedPersona);
+        assert.equal(call.exploration, input.exploration || 'balanced');
+        assert.deepEqual(call.focusChecks, input.focusChecks || DEFAULT_JOURNEY_SETTINGS.focusChecks);
+      }
+      await h.finish();
+      assert.deepEqual(h.records.get(started.run.id).persona, expectedPersona);
+      assert.equal(h.records.get(started.run.id).status, 'completed');
+    } finally { await h.service.interrupt(); }
+  }
+});
+
+test('invalid persona or execution preferences and pasted credentials cannot start page execution', async () => {
+  const h = harness();
+  for (const input of [{persona: null}, {persona: {...novice, technicalConfidence: '2'}}, {persona: {...novice, description: KEY}}, {exploration: 'unlimited'}, {focusChecks: []}, {allowRecordMoves: 'true'}, {extraInstructions: KEY}]) {
+    await assert.rejects(h.start(input));
+  }
+  assert.equal(h.records.size, 0);
+  assert.equal(h.runnerOptions, undefined);
+  assert.equal(h.service.busy, false);
+});
+
+test('forks inherit the original profile and scope unless explicitly overridden, without modifying the original', async () => {
+  for (const override of [{}, {persona: {...novice, description: 'Frequent user', productFamiliarity: 5}, exploration: 'balanced', allowRecordMoves: false, extraInstructions: '', focusChecks: ['feedback']}]) {
+    const h = harness({service: {prepareFork: async () => {}}});
+    const parent = savedRun({persona: novice, ...explicitSettings}); h.records.set(parent.id, copy(parent));
+    const result = await h.start({fork: {parentRunId: parent.id, instructions: 'Try the table shortcut.'}, ...override});
+    try {
+      assert.deepEqual(result.run.persona, override.persona || parent.persona);
+      assert.equal(result.run.allowRecordMoves, override.allowRecordMoves ?? true);
+      assert.deepEqual(result.run.focusChecks, override.focusChecks || parent.focusChecks);
+      assert.equal(result.run.extraInstructions, override.extraInstructions ?? parent.extraInstructions);
+      assert.deepEqual(h.records.get(parent.id), parent);
+    } finally { await h.service.interrupt(); }
+  }
+});
+
+test('accepted findings carry the simulated persona and requested checks, while older runs remain accurately unidentified', async () => {
+  const h = harness();
+  const run = savedRun({persona: novice, ...explicitSettings}); h.records.set(run.id, run);
+  await h.message('JOURNEY_ACCEPT', {runId: run.id, findingIndex: 0});
+  assert.match(h.comments[0].steps, /restaurant manager/);
+  assert.match(h.comments[0].steps, /Technical confidence: 2\/5/);
+  assert.match(h.comments[0].steps, /AI-simulated perspective/);
+  assert.match(h.comments[0].steps, /Task completion, Layout and readability/);
+  assert.match(journeyReproduction(savedRun(), 2), /No persona was recorded/);
+});
+
+test('multi-turn discussion preserves the saved profile, scope and preceding answers without starting actions', async () => {
+  const calls = [];
+  const h = harness({service: {followUp: async input => { calls.push(copy({...input, signal: undefined})); return answer(); }}});
+  const run = savedRun({persona: novice, ...explicitSettings}); h.records.set(run.id, run);
+  await h.message('JOURNEY_ASK', {runId: run.id, question: 'Why was this difficult for this user?'});
+  const result = await h.message('JOURNEY_ASK', {runId: run.id, question: 'What would help them?', persona: {...novice, productFamiliarity: 5}});
+  assert.deepEqual(calls[1].run.persona, novice);
+  assert.deepEqual(calls[1].run.focusChecks, run.focusChecks);
+  assert.equal(calls[1].run.followUps[0].question, 'Why was this difficult for this user?');
+  assert.deepEqual(result.run.persona, novice);
+  assert.equal(h.calls.execute, 0);
+});
+
+test('a continuation uses current page and prior evidence without restarting or changing the original', async () => {
+  let navigation = 0;
+  const h = harness({service: {
+    checkReady: async () => ({url: 'https://example.test/projects/demo/recipes'}),
+    prepareFork: async () => { navigation++; throw new Error('Continuation must not navigate to start'); },
+  }});
+  const original = savedRun({status: 'blocked', persona: novice, ...explicitSettings, testData: 'Name: Oat milk', maxSteps: 10}); h.records.set(original.id, copy(original));
+  const result = await h.service.handle({type: 'JOURNEY_START', sessionId: h.current.id, input: {continuation: {parentRunId: original.id, instructions: 'Use the recipe search. The Demo project already exists.'}}});
+  try {
+    assert.notEqual(result.run.id, original.id);
+    assert.equal(result.run.startUrl, 'https://example.test/projects/demo/recipes');
+    assert.equal(result.run.goal, original.goal);
+    assert.deepEqual(result.run.persona, original.persona);
+    assert.deepEqual(result.run.focusChecks, original.focusChecks);
+    assert.equal(result.run.allowRecordMoves, true);
+    assert.equal(result.run.maxSteps, 10);
+    assert.equal(result.run.continuation.parentRunId, original.id);
+    assert.equal(navigation, 0);
+    await h.runnerOptions.decide({observation: {}, history: []});
+    assert.deepEqual(h.calls.decisions[0].priorJourney.steps, original.steps);
+    assert.equal(h.calls.decisions[0].continuation.instructions, 'Use the recipe search. The Demo project already exists.');
+    assert.equal(h.calls.decisions[0].routePreferences, '');
+    assert.deepEqual(h.records.get(original.id), original);
+    assert.deepEqual(result.run.steps, [], 'The new segment must not relabel old screenshots as new evidence.');
+  } finally { await h.service.interrupt(); }
+});
+
+test('continuation rejects unauthorized parents, origins and instructions before recording', async () => {
+  let captures = 0;
+  const h = harness({service: {startRecording: async () => { captures++; }}});
+  for (const original of [savedRun({status: 'completed'}), savedRun({status: 'failed'}), savedRun({status: 'running'}), savedRun({status: 'paused'}), savedRun({status: 'blocked', reviewId: 'other'}), savedRun({status: 'blocked', startUrl: 'https://other.test/'})]) {
+    h.records.set(original.id, original);
+    await assert.rejects(h.start({continuation: {parentRunId: original.id, instructions: 'Continue searching.'}}));
+  }
+  h.records.set('run-saved', savedRun({status: 'stopped'}));
+  for (const input of [
+    {continuation: null}, {continuation: {}}, {continuation: {parentRunId: 'run-saved', instructions: ''}},
+    {continuation: {parentRunId: 'run-saved', instructions: 'x'.repeat(2001)}},
+    {continuation: {parentRunId: 'run-saved', instructions: KEY}},
+    {continuation: {parentRunId: 'run-saved', instructions: 'Continue.'}, fork: {parentRunId: 'run-saved', instructions: 'Restart.'}},
+  ]) await assert.rejects(h.start(input));
+  assert.equal(captures, 0);
+  assert.equal(h.service.busy, false);
 });

@@ -57,10 +57,20 @@ document.querySelector('form').addEventListener('submit',event=>{
  event.preventDefault();if(!nameValue){document.querySelector('#error').textContent='Name is required';return}
  localStorage.setItem('ingredient',nameValue+' ('+document.querySelector('select').value+')');location.href='/ingredients';
 });</script>`);
+const picker = shell(`<div style="height:1800px">Background workspace</div>
+<dialog id="picker" aria-labelledby="picker-title" style="width:460px;padding:24px">
+<h2 id="picker-title">Choose a recipe</h2><p>Browse the available recipes.</p>
+<div id="recipes" role="listbox" aria-label="Recipes" tabindex="0" style="height:192px;overflow-y:auto;border:1px solid #aaa">
+${Array.from({length:20},(_,i)=>`<button style="display:block;width:100%;height:48px;margin:0;padding:8px" onclick="document.querySelector('#chosen').textContent=this.textContent">${i===16?'Chickpea stew':`Recipe ${i+1}`}</button>`).join('')}
+</div><p id="chosen"></p>
+<div aria-label="Recipe notes" style="height:44px;overflow:auto;white-space:pre;line-height:22px">Visible note\nSecond note\nAnother note\nOffscreen notes must stay unread</div>
+<div hidden style="height:40px;overflow:auto" aria-label="Hidden scroll region"><div style="height:400px">Hidden recipe secret</div></div>
+<div style="height:20px;overflow:hidden" aria-label="Clipped non-scroll region"><div style="height:200px">Clipped preview</div></div>
+</dialog><script>document.body.style.overflow='hidden';document.querySelector('dialog').showModal();</script>`);
 const server = http.createServer((request, response) => {
   response.setHeader('content-type', 'text/html');
   const path = new URL(request.url, 'http://localhost').pathname;
-  response.end(path === '/ingredients' ? ingredients : path === '/new' ? form : dashboard);
+  response.end(path === '/ingredients' ? ingredients : path === '/new' ? form : path === '/picker' ? picker : dashboard);
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
@@ -127,8 +137,72 @@ try {
   console.log('PASS multi-page navigation, native controlled input, selection, save, persisted result, and fresh screenshot evidence');
   console.log('PASS hidden text, offscreen text, extension UI, password values, destructive controls, outside-origin links, shadow DOM, stale targets');
   await worker.evaluate(() => journey.cleanup());
+
+  await page.goto(`${origin}/picker`);
+  await worker.evaluate(url => beginJourney(url), page.url());
+  observation = await observe();
+  assert.equal(observation.context.scroll.canScrollDown, false, 'The modal locks page scrolling');
+  assert.ok(!observation.text.includes('Chickpea stew'), 'A clipped recipe must not be exposed before scrolling it into view');
+  assert.ok(!observation.text.includes('Hidden recipe secret'));
+  assert.ok(observation.text.includes('Visible note'));
+  assert.ok(!observation.text.includes('Offscreen notes must stay unread'), 'Clipped text nodes must not leak unseen lines');
+  assert.ok(!observation.controls.some(item => /Hidden scroll|Clipped non-scroll/.test(item.label)));
+  let region = observation.controls.find(item => item.role === 'scroll-region' && item.label === 'Recipes');
+  assert.ok(region, 'The visible list exposes an explicit scroll target');
+  assert.equal(region.scroll.y, 0); assert.equal(region.scroll.canScrollDown, true);
+  assert.ok(!region.label.includes('Chickpea'), 'The region label must not reveal clipped children');
+  assert.ok(observation.controls.length <= 180);
+  const lockedPage = await action({type:'scroll',direction:'down'});
+  assert.equal(lockedPage.ok,true); assert.equal(lockedPage.result.performed,false);
+  assert.deepEqual(lockedPage.result.scroll.delta,{x:0,y:0}); assert.equal(await page.evaluate(()=>scrollY),0);
+  let innerScrolls = 0;
+  do {
+    observation = await observe();
+    region = observation.controls.find(item => item.role === 'scroll-region' && item.label === 'Recipes');
+    if (!region.scroll.canScrollDown) break;
+    const moved = await action({type:'scroll',targetId:region.id,direction:'down'});
+    assert.equal(moved.ok,true,moved.error); assert.equal(moved.result.performed,true);
+    assert.equal(moved.result.scroll.targetId,region.id);
+    assert.ok(moved.result.scroll.delta.y>0 && moved.result.scroll.delta.y<=Math.round(192*.7));
+    assert.equal(moved.result.scroll.after.y,await page.locator('#recipes').evaluate(el=>el.scrollTop));
+    assert.equal(await page.evaluate(()=>scrollY),0,'Inner list movement must not scroll the document');
+    assert.ok(++innerScrolls<12,'The finite list must reach its end');
+  } while (true);
+  assert.ok(innerScrolls>1);
+  const boundary = await action({type:'scroll',targetId:region.id,direction:'down'});
+  assert.equal(boundary.ok,true); assert.equal(boundary.result.performed,false);
+  assert.equal(boundary.result.scroll.atBoundary,true); assert.equal(boundary.result.scroll.delta.y,0);
+  observation = await observe();
+  region = observation.controls.find(item=>item.role==='scroll-region');
+  await page.locator('#recipes').evaluate(el=>{el.scrollTop-=10;});
+  assert.equal((await action({type:'scroll',targetId:region.id,direction:'up'})).code,'JOURNEY_STALE');
+  observation = await observe();
+  region = observation.controls.find(item=>item.role==='scroll-region');
+  await page.locator('dialog').evaluate(el=>{const cover=document.createElement('div');cover.id='cover';cover.style.cssText='position:absolute;inset:0;z-index:100;background:white';el.append(cover);});
+  assert.equal((await action({type:'scroll',targetId:region.id,direction:'up'})).code,'JOURNEY_STALE');
+  await page.locator('#cover').evaluate(el=>el.remove());
+  for (let tries=0;tries<4;tries++) {
+    observation = await observe();
+    const recipe = observation.controls.find(item=>item.label==='Chickpea stew');
+    if(recipe){const picked=await action({type:'click',targetId:recipe.id});assert.equal(picked.ok,true,picked.error);break;}
+    region = observation.controls.find(item=>item.role==='scroll-region');
+    assert.equal((await action({type:'scroll',targetId:region.id,direction:'up'})).ok,true);
+  }
+  assert.equal(await page.locator('#chosen').textContent(),'Chickpea stew');
+  console.log('PASS nested modal list scrolling reveals clipped options, records exact movement/boundaries, preserves page position and rejects stale/covered regions');
+  await worker.evaluate(() => journey.cleanup());
+
   await page.goto(`${origin}/`);
   await worker.evaluate(url => beginJourney(url), page.url());
+  observation = await observe();
+  assert.equal(observation.context.scroll.canScrollDown,true);
+  const pageScroll = await action({type:'scroll',direction:'down'});
+  assert.equal(pageScroll.ok,true); assert.equal(pageScroll.result.performed,true);
+  assert.equal(pageScroll.result.scroll.targetId,null);
+  assert.equal(pageScroll.result.scroll.after.y,await page.evaluate(()=>scrollY));
+  assert.ok(pageScroll.result.scroll.delta.y>0);
+  console.log('PASS untargeted scroll falls back to the page and reports actual movement');
+  await page.evaluate(()=>scrollTo(0,0));
   observation = await observe();
   control = observation.controls.find(control => control.label === 'Continue');
   const dialog = await action({type: 'click', targetId: control.id});

@@ -62,6 +62,7 @@ test('journey scope allows only a single HTTP(S) origin without credentials', ()
 test('only bounded structured actions can reach the executor', () => {
   assert.deepEqual(validateJourneyAction({type: 'click', targetId: 'control-12'}), {type: 'click', targetId: 'control-12'});
   assert.deepEqual(validateJourneyAction({type: 'scroll', direction: 'down'}), {type: 'scroll', direction: 'down'});
+  assert.deepEqual(validateJourneyAction({type: 'scroll', targetId: 'control-3', direction: 'down'}), {type: 'scroll', targetId: 'control-3', direction: 'down'});
   assert.deepEqual(validateJourneyAction({type: 'type', targetId: 'control-1', text: ''}), {type: 'type', targetId: 'control-1', text: ''});
   for (const action of [
     {type: 'evaluate', expression: 'alert(1)'}, {type: 'navigate', url: 'https://evil.test'},
@@ -279,5 +280,38 @@ test('page changes during the click lead-in are rejected without executing', asy
     : {ok: true, result: {}});
   await assert.rejects(f.executor.execute({type: 'click', targetId: 'control-1'}, observation), {code: 'JOURNEY_STALE'});
   assert.equal(f.calls.some(call => call[0] === 'message' && call[1].type === 'EXECUTE'), false);
+  await f.executor.cleanup();
+});
+
+test('nested scroll requires an observed scroll region and preserves measured movement', async () => {
+  const f = fixture();
+  const scroll = {targetId: 'control-2', before: {x: 0, y: 0}, after: {x: 0, y: 140}, delta: {x: 0, y: 140}, atBoundary: false};
+  f.setHandler(async message => {
+    if (message.type === 'OBSERVE') {
+      const result = f.observationResult();
+      result.controls.push({id: 'control-2', role: 'scroll-region', label: 'Recipe options', scroll: {x: 0, y: 0, maxX: 0, maxY: 600, canScrollDown: true}});
+      return {ok: true, result};
+    }
+    return {ok: true, result: message.type === 'EXECUTE' ? {type: 'scroll', performed: true, scroll} : {}};
+  });
+  const observation = await f.executor.observe();
+  await assert.rejects(f.executor.execute({type: 'scroll', targetId: 'control-1', direction: 'down'}, observation), {code: 'JOURNEY_INVALID_ACTION'});
+  await assert.rejects(f.executor.execute({type: 'click', targetId: 'control-2'}, observation), {code: 'JOURNEY_INVALID_ACTION'});
+  assert.equal(f.calls.some(call => call[0] === 'message' && call[1].type === 'EXECUTE'), false);
+  const result = await f.executor.execute({type: 'scroll', targetId: 'control-2', direction: 'down'}, observation);
+  assert.deepEqual(result.scroll, scroll);
+  assert.equal(result.performed, true);
+  await f.executor.cleanup();
+});
+
+test('page fallback preserves a measured no-op instead of claiming the page moved', async () => {
+  const f = fixture();
+  const observation = await f.executor.observe();
+  f.setHandler(async message => ({ok: true, result: message.type === 'EXECUTE' ? {
+    performed: false, scroll: {targetId: null, before: {x: 0, y: 0}, after: {x: 0, y: 0}, delta: {x: 0, y: 0}, atBoundary: true},
+  } : {}}));
+  const result = await f.executor.execute({type: 'scroll', direction: 'down'}, observation);
+  assert.equal(result.performed, false); assert.equal(result.scroll.atBoundary, true);
+  assert.deepEqual(result.scroll.delta, {x: 0, y: 0});
   await f.executor.cleanup();
 });

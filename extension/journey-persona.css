@@ -1,0 +1,166 @@
+/* The persona is an explicit, editable assumption for a journey attempt. */
+body[data-surface=sidepanel] .popup #journey-persona {
+  margin: 16px 0 20px;
+  padding: 13px;
+  border: 1px solid var(--ui-line);
+  border-radius: 7px;
+  background: var(--ui-surface);
+}
+body[data-surface=sidepanel] .popup .journey-persona-heading {
+  display: block;
+  margin: 0 0 8px;
+  color: var(--ui-ink);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+body[data-surface=sidepanel] .popup #journey-persona-description {
+  display: block;
+  width: 100%;
+  min-height: 61px;
+  margin: 0;
+  padding: 9px 10px;
+  border-color: var(--ui-line-strong);
+  background: var(--ui-surface-muted);
+  color: var(--ui-ink);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  resize: vertical;
+}
+body[data-surface=sidepanel] .popup .journey-persona-help,
+body[data-surface=sidepanel] .popup .journey-persona-note {
+  margin: 6px 0 14px;
+  color: var(--ui-muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+body[data-surface=sidepanel] .popup .journey-persona-sliders { display: grid; gap: 15px; }
+body[data-surface=sidepanel] .popup .journey-persona-trait-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+body[data-surface=sidepanel] .popup .journey-persona-trait-heading label {
+  min-width: 0;
+  color: var(--ui-ink);
+  font-weight: 500;
+}
+body[data-surface=sidepanel] .popup .journey-persona-trait-heading output {
+  flex: 0 0 auto;
+  max-width: 45%;
+  color: var(--ui-accent);
+  font-size: 10px;
+  font-weight: 500;
+  text-align: right;
+}
+body[data-surface=sidepanel] .popup .journey-persona-trait input[type=range] {
+  --persona-progress: 50%;
+  display: block;
+  appearance: none;
+  width: 100%;
+  height: 28px;
+  min-height: 28px;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+}
+body[data-surface=sidepanel] .popup .journey-persona-trait input[type=range]::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--ui-accent) 0 var(--persona-progress), var(--ui-line) var(--persona-progress) 100%);
+}
+body[data-surface=sidepanel] .popup .journey-persona-trait input[type=range]::-webkit-slider-thumb {
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  margin-top: -5px;
+  border: 2px solid var(--ui-surface);
+  border-radius: 50%;
+  background: var(--ui-accent);
+  box-shadow: 0 0 0 1px var(--ui-accent), 0 1px 3px #172b4526;
+}
+body[data-surface=sidepanel] .popup .journey-persona-anchors {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: -2px;
+  color: var(--ui-muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+body[data-surface=sidepanel] .popup .journey-persona-anchors span:last-child { text-align: right; }
+body[data-surface=sidepanel] .popup .journey-persona-note {
+  margin: 14px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--ui-line);
+  font-size: 9px;
+}
+body[data-surface=sidepanel] .popup #journey-persona.is-disabled { opacity: .65; }
+body[data-surface=sidepanel] .popup #journey-persona input:disabled { cursor: default; }
+@media (forced-colors: active) {
+  body[data-surface=sidepanel] .popup .journey-persona-trait input[type=range] { appearance: auto; }
+  body[data-surface=sidepanel] .popup .journey-persona-trait input[type=range]::-webkit-slider-thumb { appearance: auto; }
+}
+
+body[data-surface=sidepanel] .popup .journey-run-options {
+  margin: 12px 0;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--ui-line);
+  border-bottom: 1px solid var(--ui-line);
+  border-radius: 0;
+  background: transparent;
+}
+body[data-surface=sidepanel] .popup .journey-run-options > summary {
+  min-height: 42px;
+  padding: 11px 1px;
+  background: transparent;
+  color: var(--ui-ink);
+  font-size: 12px;
+  font-weight: 550;
+}
+body[data-surface=sidepanel] .popup .journey-option-label {
+  display: block;
+  margin: 10px 0 7px;
+  color: var(--ui-ink);
+  font-size: 11px;
+  font-weight: 500;
+}
+body[data-surface=sidepanel] .popup .journey-run-options :is(select,textarea) {
+  width: 100%;
+  border-color: var(--ui-line-strong);
+  background: var(--ui-surface);
+  color: var(--ui-ink);
+  font-size: 12px;
+}
+body[data-surface=sidepanel] .popup .journey-run-options textarea { margin: 0 0 13px; resize: vertical; }
+body[data-surface=sidepanel] .popup .journey-record-moves {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  margin-top: 13px;
+  color: var(--ui-ink);
+  font-size: 11px;
+  line-height: 1.5;
+}
+body[data-surface=sidepanel] .popup .journey-record-moves input {
+  width: 15px;
+  height: 15px;
+  min-height: 15px;
+  flex: 0 0 15px;
+  margin: 0;
+}
+body[data-surface=sidepanel] .popup .journey-run-options .journey-persona-help { margin: 5px 0 13px; }
+body[data-surface=sidepanel] .popup .journey-run-options.is-disabled { opacity: .65; }
+body[data-surface=sidepanel] .popup .journey-check-count { float: right; margin-left: 8px; color: var(--ui-muted); font-size: 10px; font-weight: 400; }
+body[data-surface=sidepanel] .popup .journey-check-list { display: grid; gap: 2px; padding: 1px 0 5px; }
+body[data-surface=sidepanel] .popup .journey-check-list .journey-record-moves { margin: 0; min-height: 31px; }

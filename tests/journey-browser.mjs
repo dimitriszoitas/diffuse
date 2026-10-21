@@ -6,6 +6,8 @@ import {mkdtemp, cp, readFile, writeFile, mkdir, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {createRequire} from 'node:module';
+import {DEFAULT_JOURNEY_PERSONA} from '../extension/journey-persona.mjs';
+import {DEFAULT_JOURNEY_SETTINGS} from '../extension/journey-settings.mjs';
 const require = createRequire(import.meta.url);
 const {chromium} = process.env.PLAYWRIGHT_MODULE ? require(process.env.PLAYWRIGHT_MODULE) : await import('playwright');
 const project = resolve(import.meta.dirname, '..');
@@ -80,6 +82,11 @@ async function nativeView(path) {
     visible: selector => evaluate(`Boolean(document.querySelector(${JSON.stringify(selector)})?.checkVisibility())`),
     text: selector => evaluate(`document.querySelector(${JSON.stringify(selector)})?.textContent||''`),
     fill: (selector, value) => evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));})()`),
+    enter: async selector => {
+      await evaluate(`document.querySelector(${JSON.stringify(selector)}).focus()`);
+      await send('Input.dispatchKeyEvent', {type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13});
+      await send('Input.dispatchKeyEvent', {type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13});
+    },
     click: async selector => {
       const point = await evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e||!e.checkVisibility()||e.disabled)throw new Error('Unavailable control '+${JSON.stringify(selector)});e.scrollIntoView({block:'center'});const b=e.getBoundingClientRect();return{x:b.x+b.width/2,y:b.y+b.height/2}})()`);
       await send('Input.dispatchMouseEvent', {type: 'mousePressed', button: 'left', clickCount: 1, ...point});
@@ -90,6 +97,32 @@ async function nativeView(path) {
       await writeFile(join(artifacts, `${name}.png`), Buffer.from(data, 'base64'));
     },
   };
+}
+async function checkNarrowChat() {
+  // Freeze the actual rendered native panel, then inspect its shipped styles
+  // in a separate browser. Resizing Chrome's native sidebar through CDP is not
+  // supported, so this is a responsive layout check rather than a second flow.
+  let html = await panel.evaluate(`(()=>{const root=document.documentElement.cloneNode(true);for(const script of root.querySelectorAll('script'))script.remove();for(const video of root.querySelectorAll('video')){video.removeAttribute('src');video.replaceChildren()}return root.outerHTML})()`);
+  for (const match of [...html.matchAll(/<link\b[^>]*href="([^\"]+)"[^>]*>/g)]) {
+    if (!/rel="stylesheet"/.test(match[0])) continue;
+    const css = await readFile(join(extension, match[1]), 'utf8');
+    html = html.replace(match[0], `<style>${css}</style>`);
+  }
+  const browser = await chromium.launch({headless: true});
+  try {
+    const preview = await browser.newPage({viewport: {width: 320, height: 740}});
+    await preview.setContent(html);
+    for (const theme of ['light', 'dark']) {
+      await preview.evaluate(value => {document.documentElement.dataset.theme=value;document.querySelector('#journey-conversation').scrollTop=99999;}, theme);
+      assert(await preview.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Chat must fit a 320px sidebar');
+      for (const selector of ['#journey-chat-back', '#journey-question', '#journey-ask']) {
+        const bounds = await preview.locator(selector).boundingBox();
+        assert(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 321 && bounds.y >= 0 && bounds.y + bounds.height <= 741, `Narrow chat control clipped: ${selector} ${JSON.stringify(bounds)}`);
+      }
+      await preview.screenshot({path: join(artifacts, `journey-chat-320-${theme}.png`)});
+    }
+    console.log('PASS actual conversation layout keeps Back, composer and Send visible at 320px in light and dark');
+  } finally { await browser.close(); }
 }
 try {
   context = await chromium.launchPersistentContext(join(temporary, 'profile'), {
@@ -109,9 +142,12 @@ try {
   await worker.evaluate(async () => {
     await chrome.storage.session.set({anthropicApiKey: 'sk-ant-fixture-not-a-real-key'});
     globalThis.__journeyDecisionCalls = 0;
-    globalThis.__journeyDecide = async ({observation, history, routePreferences}) => {
+    globalThis.__journeyProfiles = [];
+    globalThis.__journeyFollowUpRequests = [];
+    globalThis.__journeyDecide = async ({goal, observation, history, routePreferences, persona, exploration, allowRecordMoves, extraInstructions, focusChecks, continuation}) => {
       globalThis.__journeyDecisionCalls++;
-      const ingredient = routePreferences ? 'Rice milk' : 'Oat milk';
+      globalThis.__journeyProfiles.push({persona, exploration, allowRecordMoves, extraInstructions, focusChecks, continuation});
+      const ingredient = goal.includes('Rice milk') ? 'Rice milk' : goal.includes('Soy milk') ? 'Soy milk' : 'Oat milk';
       const controls = observation.controls;
       const byLabel = label => controls.find(item => item.label === label);
       const click = label => ({action: {type: 'click', targetId: byLabel(label).id}, reason: `Follow the visible ${label} control.`});
@@ -126,8 +162,8 @@ try {
         return click('Save ingredient');
       }
       const dimensions = ['discoverability', 'clarity', 'effort', 'feedback', 'recovery'];
-      return {reason: 'The resulting table contains Oat milk and its ml unit.', action: {
-        type: 'finish', outcome: 'completed', summary: 'Oat milk was created and appears in the ingredients table with unit ml.',
+      return {reason: `The resulting table contains ${ingredient} and its ml unit.`, action: {
+        type: 'finish', outcome: 'completed', summary: `${ingredient} was created and appears in the ingredients table with unit ml.`,
         findings: [{title: 'Name the creation action', comment: 'The Ingredients page labels its creation action only “New”. The destination is clearer after opening the form.', expected: 'Label the action “Add ingredient” so the object being created is explicit.', category: 'copy-change', severity: 'minor', stepIndex: 2, confidence: .9}],
         scores: dimensions.map(dimension => ({dimension, score: dimension === 'recovery' ? null : dimension === 'clarity' ? 3 : 4,
           reason: dimension === 'recovery' ? 'No error recovery was needed.' : 'Evidence from the observed task path.',
@@ -135,7 +171,9 @@ try {
       }};
     };
     globalThis.__journeyFollowUp = async ({stepIndex, question, run}) => {
-      await new Promise(resolve => setTimeout(resolve, 500));
+      globalThis.__journeyFollowUpRequests.push({stepIndex, question, previousAnswers: run.followUps?.length || 0, persona: run.persona});
+      await new Promise(resolve => setTimeout(resolve, 900));
+      if (globalThis.__journeyFollowUpFailOnce) { globalThis.__journeyFollowUpFailOnce = false; throw new Error('Temporary test connection failure. Please try again.'); }
       return {answer: 'The recorded step used New on Ingredients. The starting page also offered Setup wizard; that route was not tested in this attempt.', evidenceSteps: [1, 2], routeSuggestion: question.includes('wizard') ? {label: 'Try the setup wizard', instructions: 'Start with Setup wizard, then Add ingredient. Use Rice milk as a separate test entry.'} : null};
     };
   });
@@ -152,6 +190,28 @@ try {
   await until(() => panel.evaluate(`document.getElementById('popup')?.getAttribute('aria-busy')==='false'`), 'native panel ready');
   await until(() => panel.visible('#panel-journey'), 'journey entry');
   await panel.click('#panel-journey');
+  // Let the initial state response settle with no saved journey. A comparison
+  // of two absent IDs must not try to read timestamps from a null run.
+  await until(() => panel.evaluate(`!document.querySelector('#journey-start').disabled`), 'AI settings loaded for empty journey');
+  await pause(1600);
+  assert.equal(await panel.text('#journey-error'), '', 'Opening a journey with no previous run must not show an error');
+  assert.equal(await panel.visible('#journey-form'), true);
+  assert.equal(await panel.visible('#journey-run'), false);
+  assert.deepEqual(await panel.evaluate('window.diffuseJourneyPersona.read()'), DEFAULT_JOURNEY_PERSONA);
+  assert.deepEqual(await panel.evaluate('window.diffuseJourneyOptions.read()'), DEFAULT_JOURNEY_SETTINGS);
+  console.log('PASS empty journey setup settles without a null-state error');
+  const persona = {description: 'A new inventory teammate who already knows ingredient catalogues.', technicalConfidence: 2, productFamiliarity: 1, taskFamiliarity: 4, persistence: 3};
+  const settings = {exploration: 'thorough', allowRecordMoves: true, extraInstructions: 'Keep existing entries intact. Use only the ingredient supplied for this task.', focusChecks: ['completion', 'discoverability', 'feedback', 'interaction']};
+  await panel.fill('#journey-persona-description', persona.description);
+  for (const key of ['technicalConfidence', 'productFamiliarity', 'taskFamiliarity', 'persistence']) await panel.fill(`#journey-persona-${key}`, String(persona[key]));
+  await panel.click('#journey-focus-checks summary');
+  await panel.click('#journey-check-interaction');
+  await panel.click('#journey-exploration-options summary');
+  await panel.fill('#journey-exploration', settings.exploration);
+  await panel.click('#journey-allow-record-moves');
+  await panel.fill('#journey-extra-instructions', settings.extraInstructions);
+  assert.deepEqual(await panel.evaluate('window.diffuseJourneyPersona.read()'), persona);
+  assert.deepEqual(await panel.evaluate('window.diffuseJourneyOptions.read()'), settings);
   await panel.fill('#journey-goal', 'Add Oat milk to the Ingredients table, with ml as its unit. Find the path yourself and confirm the saved row.');
   await until(() => panel.evaluate(`!document.querySelector('#journey-start').disabled`), 'AI settings loaded for journey');
   await panel.screenshot('journey-setup');
@@ -182,6 +242,14 @@ try {
   }, 'journey completed', 60000);
   const run = await currentRun();
   assert.equal(run.status, 'completed', run.summary);
+  assert.deepEqual(run.persona, persona);
+  for (const [key, value] of Object.entries(settings)) assert.deepEqual(run[key], value, `Saved ${key}`);
+  const decisionProfiles = await worker.evaluate(() => __journeyProfiles);
+  assert.ok(decisionProfiles.length > 3);
+  for (const profile of decisionProfiles) {
+    assert.deepEqual(profile.persona, persona);
+    for (const [key, value] of Object.entries(settings)) assert.deepEqual(profile[key], value, `Decision ${key}`);
+  }
   assert.equal(page.url(), `${origin}/ingredients`);
   assert.match(await page.locator('tbody').textContent(), /Oat milk.*ml/);
   assert.equal(new Set(run.steps.map(step => new URL(step.observation.url).pathname)).size, 3);
@@ -233,20 +301,48 @@ try {
   await panel.click('#journey-timeline li[data-step="2"] .journey-ask-step');
   await panel.fill('#journey-question', 'Why did you choose New instead of the setup wizard?');
   await panel.click('#journey-ask');
+  await until(() => panel.visible('.journey-pending-exchange'), 'immediate pending user message');
+  assert.equal(await panel.visible('.journey-chat-typing'), true);
+  assert.equal(await panel.evaluate('document.querySelector("#journey-question").value'), '');
   await until(() => panel.text('#journey-conversation').then(value => value.includes('that route was not tested')), 'grounded follow-up answer');
-  const answered = await currentRun();
-  assert.equal(answered.followUps.length, 1);
-  assert.equal(answered.followUps[0].stepIndex, 2);
+  assert.equal((await currentRun()).followUps.length, 1);
+  assert.equal((await currentRun()).followUps[0].stepIndex, 2);
   assert.equal(page.url(), `${origin}/ingredients`, 'Asking a question must not operate the app');
+  await panel.fill('#journey-question', 'How would a new teammate interpret that action?');
+  await panel.enter('#journey-question');
+  await until(async () => (await currentRun()).followUps?.length === 2, 'second answer submitted with Enter');
+  assert.equal((await worker.evaluate(() => __journeyFollowUpRequests))[1].previousAnswers, 1, 'Follow-up request includes the preceding exchange');
+  await worker.evaluate(() => { globalThis.__journeyFollowUpFailOnce = true; });
+  const retryQuestion = 'What label would make the next step clearer?';
+  await panel.fill('#journey-question', retryQuestion);
+  await panel.enter('#journey-question');
+  await until(() => panel.visible('#journey-question-error'), 'failed answer shows a retryable error');
+  assert.equal(await panel.evaluate('document.querySelector("#journey-question").value'), retryQuestion, 'A failed request restores the question');
+  assert.equal(await panel.visible('.journey-pending-exchange'), false);
+  assert.equal((await currentRun()).followUps.length, 2, 'Failed follow-ups do not duplicate the transcript');
+  await panel.enter('#journey-question');
+  await until(async () => (await currentRun()).followUps?.length === 3, 'retry answer persisted');
+  await until(() => panel.evaluate('!document.querySelector("#journey-ask").disabled'), 'chat request finished');
+  const answered = await currentRun();
+  assert.equal(answered.followUps[2].question, retryQuestion);
+  assert.equal(page.url(), `${origin}/ingredients`, 'Multi-turn discussion must not operate the app');
   await panel.screenshot('journey-follow-up');
+  const chatViewport = await panel.evaluate(`(()=>{const selectors=['#journey-chat-back','#journey-question','#journey-ask'];return selectors.map(selector=>{const el=document.querySelector(selector),r=el.getBoundingClientRect();return{selector,visible:el.checkVisibility(),left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:innerWidth,height:innerHeight}})})()`);
+  for (const control of chatViewport) assert.ok(control.visible && control.left >= 0 && control.right <= control.width + 1 && control.top >= 0 && control.bottom <= control.height + 1, `Chat control clipped: ${JSON.stringify(control)}`);
+  await checkNarrowChat();
+  console.log('PASS dedicated chat shows pending messages, keeps multi-turn context, submits with Enter and safely retries a failed answer');
   await panel.click('.journey-fork-proposal');
   assert.match(await panel.text('#journey-fork-description'), /Existing app data is not reset/);
+  assert.deepEqual(await panel.evaluate('window.diffuseJourneyPersona.read()'), persona);
+  assert.deepEqual(await panel.evaluate('window.diffuseJourneyOptions.read()'), settings);
   await panel.fill('#journey-goal', 'Add Rice milk to Ingredients using ml. Use the setup wizard and verify the saved row.');
   assert.equal(await panel.evaluate('document.querySelector("#journey-route").value'), answered.followUps[0].routeSuggestion.instructions);
   await panel.screenshot('journey-fork-setup');
   await panel.click('#journey-start');
   await until(async () => (await currentRun())?.id !== run.id && (await currentRun())?.status === 'completed' && (await currentRun())?.recording?.status === 'saved', 'fork completed', 60000);
   const forked = await currentRun();
+  assert.deepEqual(forked.persona, persona);
+  for (const [key, value] of Object.entries(settings)) assert.deepEqual(forked[key], value, `Fork inherited ${key}`);
   assert.equal(forked.fork.parentRunId, run.id);
   assert.equal(forked.fork.stepIndex, 2);
   assert.equal(forked.startUrl, `${origin}/`);
@@ -254,7 +350,7 @@ try {
   assert.ok(forked.steps.some(step => step.observation.url === `${origin}/wizard`));
   assert.match(await page.locator('tbody').textContent(), /Oat milk.*Rice milk/s);
   const retained = await worker.evaluate(id => __journeyStore.getJourney(id), run.id);
-  assert.equal(retained.followUps.length, 1);
+  assert.equal(retained.followUps.length, 3);
   assert.equal(retained.video.dataUrl, run.video.dataUrl, 'Fork keeps the original recording intact');
   await until(() => panel.text('#journey-lineage').then(value => value.includes('Alternative route')), 'fork lineage');
   await panel.screenshot('journey-fork-completed');
@@ -264,7 +360,10 @@ try {
   const originalHistoryIndex = await panel.evaluate(`Array.from(document.querySelectorAll('#journey-history-list button')).findIndex(button => button.textContent.includes('Add Oat milk')) + 1`);
   await panel.click(`#journey-history-list button:nth-child(${originalHistoryIndex})`);
   await until(() => panel.text('#journey-run-goal').then(value => value.includes('Oat milk')), 'original journey restored');
+  await panel.click('#journey-chat-open');
   assert.match(await panel.text('#journey-conversation'), /setup wizard/);
+  assert.match(await panel.text('#journey-conversation'), /new teammate/);
+  assert.match(await panel.text('#journey-conversation'), /next step clearer/);
   await panel.click('.journey-fork-proposal');
   await until(() => panel.visible('#journey-fork-fields'), 'older journey fork form');
   await panel.fill('#journey-route', 'Try the wizard with another test ingredient.');
@@ -274,6 +373,38 @@ try {
   await panel.click('#journey-fork-cancel');
   assert.match(await panel.text('#journey-run-goal'), /Oat milk/);
   console.log('PASS saved conversation reloads with its original journey and an older fork draft survives polling');
+  await panel.click('#journey-new');
+  assert.deepEqual(await panel.evaluate('window.diffuseJourneyPersona.read()'), DEFAULT_JOURNEY_PERSONA, 'A new journey starts with the default persona');
+  assert.deepEqual(await panel.evaluate('window.diffuseJourneyOptions.read()'), DEFAULT_JOURNEY_SETTINGS, 'A new journey resets exploration and checks');
+  await panel.fill('#journey-goal', 'Add Soy milk to Ingredients using ml. Confirm that exactly one matching record exists.');
+  const callsBeforeStop = await worker.evaluate(() => __journeyDecisionCalls);
+  const continuationStartUrl = page.url();
+  await panel.click('#journey-start');
+  await until(() => worker.evaluate(previous => __journeyDecisionCalls > previous, callsBeforeStop), 'new journey awaiting its first decision');
+  await until(() => panel.evaluate('document.querySelector("#journey-stop").checkVisibility() && !document.querySelector("#journey-stop").disabled'), 'Stop ready after journey creation');
+  await panel.click('#journey-stop');
+  await until(async () => (await currentRun())?.status === 'stopped' && (await currentRun())?.recording?.status === 'saved', 'stopped journey and recording saved');
+  const stopped = await currentRun();
+  assert.equal(page.url(), continuationStartUrl, 'Stop cancels the outstanding decision before navigation');
+  assert.equal(await page.locator('tbody').textContent().then(value => value.includes('Soy milk')), false);
+  await until(() => panel.visible('#journey-continue'), 'continue a stopped journey');
+  await panel.click('#journey-continue');
+  assert.deepEqual(await panel.evaluate('window.diffuseJourneyPersona.read()'), stopped.persona);
+  assert.equal(await panel.evaluate('document.querySelector("#journey-goal").value'), stopped.goal);
+  await panel.fill('#journey-route', 'Continue from Ingredients and create Soy milk only if it is absent.');
+  await panel.click('#journey-start');
+  await until(async () => {const current = await currentRun(); return current?.id !== stopped.id && current?.status === 'completed' && current?.recording?.status === 'saved';}, 'continued journey completed', 60000);
+  const continued = await currentRun();
+  assert.equal(continued.continuation.parentRunId, stopped.id);
+  assert.equal(continued.startUrl, continuationStartUrl, 'Continuation keeps the current page instead of returning to the original journey start');
+  assert.equal(continued.steps[0].observation.url, continuationStartUrl);
+  assert.deepEqual(continued.persona, stopped.persona);
+  for (const key of Object.keys(DEFAULT_JOURNEY_SETTINGS)) assert.deepEqual(continued[key], stopped[key], `Continuation inherited ${key}`);
+  const savedEntries = await page.evaluate(() => JSON.parse(localStorage.getItem('ingredients')));
+  assert.equal(savedEntries.filter(entry => entry.name === 'Soy milk').length, 1);
+  assert.equal((await worker.evaluate(id => __journeyStore.getJourney(id), stopped.id)).video.dataUrl, stopped.video.dataUrl, 'Continue preserves the previous recording');
+  await panel.screenshot('journey-continued');
+  console.log('PASS stopped journey continues as a linked recording from the current page, inherits its profile and checks, and preserves the original evidence');
   await writeFile(join(artifacts, 'journey-browser-verification.json'), JSON.stringify({
     status: run.status, pages: [...new Set(run.steps.map(step => step.observation.url))],
     steps: run.steps.length, findings: run.findings.length, metrics: run.metrics,

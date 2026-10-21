@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {JOURNEY_DIMENSIONS, JOURNEY_DECISION_SCHEMA, requestJourneyDecision, validateJourneyDecision, requestJourneyFollowUp, validateJourneyFollowUp, JOURNEY_FOLLOW_UP_SCHEMA} from '../extension/journey-ai.mjs';
 import {DEFAULT_AI_MODEL} from '../extension/ai-client.mjs';
+import {DEFAULT_JOURNEY_PERSONA} from '../extension/journey-persona.mjs';
 
 const KEY = 'sk-ant-not-a-real-journey-test-key';
 const screenshot = {dataUrl: 'data:image/png;base64,aW1hZ2U=', width: 1200, height: 800};
@@ -186,5 +187,85 @@ test('explicit fork route preferences reach the decision model with unchanged sa
     assert.match(body.system, /previous application data may still exist/);
     assert.match(body.system, /not proof that a control exists or permission for sensitive actions/);
     return response(finish());
+  }});
+});
+
+test('decisions and final assessment receive the selected persona and bounded inspection scope', async () => {
+  const persona = {...DEFAULT_JOURNEY_PERSONA, description: 'New kitchen manager', technicalConfidence: 2, taskFamiliarity: 5};
+  await requestJourneyDecision(request({persona, exploration: 'thorough', allowRecordMoves: true, extraInstructions: 'Move the sample recipe only.', focusChecks: ['layout', 'accessibility']}), {fetchImpl: async (url, init) => {
+    const body = JSON.parse(init.body), data = JSON.parse(body.messages[0].content[0].text);
+    assert.deepEqual(data.persona, persona);
+    assert.equal(data.exploration, 'thorough');
+    assert.equal(data.allowRecordMoves, true);
+    assert.deepEqual(data.focusChecks, ['layout', 'accessibility']);
+    assert.match(body.system, /Do not manufacture mistakes, delays, confusion or failures/);
+    assert.match(body.system, /not a real participant/);
+    assert.match(body.system, /inspect.*search, filters, navigation and nested scroll regions/);
+    assert.match(body.system, /only the specific test records explicitly identified/);
+    assert.match(body.system, /does not measure human hesitation/);
+    assert.match(body.system, /Do not pretend to have performed hover, keyboard\/Tab/);
+    assert.match(body.system, /Stop as blocked for login, permission changes/);
+    return response(finish());
+  }});
+  for (const extra of [{persona: null}, {persona: {...persona, persistence: '3'}}, {persona: {...persona, description: KEY}}, {focusChecks: ['unknown']}, {allowRecordMoves: 'true'}, {extraInstructions: KEY}]) {
+    let fetched = false;
+    await assert.rejects(requestJourneyDecision(request(extra), {fetchImpl: async () => { fetched = true; return response(finish()); }}));
+    assert.equal(fetched, false);
+  }
+});
+
+test('follow-ups keep the recorded profile and previous discussion without inventing a legacy profile', async () => {
+  for (const persona of [undefined, {...DEFAULT_JOURNEY_PERSONA, persistence: 1}]) {
+    const run = conversationRun();
+    if (persona) run.persona = persona;
+    run.focusChecks = ['interaction']; run.exploration = 'thorough';
+    await requestJourneyFollowUp({apiKey: KEY, run, question: 'Would a confident user understand this faster?'}, {fetchImpl: async (url, init) => {
+      const body = JSON.parse(init.body), data = JSON.parse(body.messages[0].content[0].text);
+      assert.deepEqual(data.journey.persona, persona || DEFAULT_JOURNEY_PERSONA);
+      assert.equal(data.journey.personaWasRecorded, Boolean(persona));
+      assert.deepEqual(data.journey.focusChecks, ['interaction']);
+      assert.equal(data.journey.followUps[0].answer, run.followUps[0].answer);
+      assert.match(body.system, /cannot change or rescore the saved run/);
+      assert.match(body.system, /default is only a discussion fallback/);
+      assert.match(body.system, /not measure human hesitation/);
+      return response(discussion());
+    }});
+  }
+});
+
+test('continuation sends bounded prior actions as context without relabelling them as new evidence', async () => {
+  const priorJourney = {...conversationRun(), status: 'blocked', summary: 'Project created. Recipe not yet located.'};
+  priorJourney.steps[0].index = 17;
+  const continuation = {parentRunId: priorJourney.id, instructions: 'Search within the existing project; do not create it again.'};
+  await requestJourneyDecision(request({continuation, priorJourney}), {fetchImpl: async (url, init) => {
+    const body = JSON.parse(init.body), data = JSON.parse(body.messages[0].content[0].text);
+    assert.equal(data.currentStep, 1);
+    assert.deepEqual(data.continuation, continuation);
+    assert.equal(data.priorJourney.steps[0].index, 17);
+    assert.equal(data.priorJourney.steps[0].observation.actionTarget, 'New ingredient');
+    assert.equal(data.priorJourney.steps[0].observation.screenshot, undefined);
+    assert.match(body.system, /Do not restart the flow or duplicate/);
+    assert.match(body.system, /Prior step numbers belong to their prior run ID/);
+    return response(finish());
+  }});
+  const invalidEvidence = finish(); invalidEvidence.action.scores[0].evidenceSteps = [17];
+  await assert.rejects(requestJourneyDecision(request({continuation, priorJourney}), {fetchImpl: async () => response(invalidEvidence)}), error => error.code === 'JOURNEY_OUTPUT');
+  await assert.rejects(requestJourneyDecision(request({continuation: {...continuation, parentRunId: 'wrong'}, priorJourney}), {fetchImpl: async () => { throw new Error('Must not request'); }}), error => error.code === 'JOURNEY_INPUT');
+});
+
+test('nested scrolling uses only current observed scroll controls and preserves actual boundaries for the model', async () => {
+  const observed = observation();
+  const scroll = {x: 0, y: 20, maxX: 0, maxY: 1000, canScrollUp: true, canScrollDown: true, canScrollLeft: false, canScrollRight: false};
+  observed.controls.push({id: 'recipes', role: 'scroll-region', label: 'Available recipes', scroll});
+  observed.context = {scroll: {...scroll, y: 0, maxY: 0, canScrollDown: false}};
+  const action = {type: 'scroll', direction: 'down', targetId: 'recipes'};
+  assert.deepEqual(validateJourneyDecision({action, reason: 'Inspect more recipes.'}, {observation: observed}).action, action);
+  assert.deepEqual(validateJourneyDecision({action: {type: 'scroll', direction: 'down'}, reason: 'Inspect the page.'}, {observation: observed}).action, {type: 'scroll', direction: 'down'});
+  for (const unsafe of [{...action, targetId: 'missing'}, {...action, targetId: 'c1'}, {type: 'click', targetId: 'recipes'}]) assert.throws(() => validateJourneyDecision({action: unsafe, reason: 'Try.'}, {observation: observed}));
+  await requestJourneyDecision(request({observation: observed}), {fetchImpl: async (url, init) => {
+    const data = JSON.parse(JSON.parse(init.body).messages[0].content[0].text);
+    assert.deepEqual(data.observation.controls.at(-1).scroll, scroll);
+    assert.equal(data.observation.scroll.canScrollDown, false);
+    return response({action, reason: 'Inspect more recipes.'});
   }});
 });

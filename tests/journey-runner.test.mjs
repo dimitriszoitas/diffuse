@@ -214,3 +214,19 @@ test('checkbox changes remain visible to the model and count as observed progres
   assert.equal(result.status, 'completed');
   assert.equal(actions, 3);
 });
+
+test('nested scroll offsets are retained and count as progress when the visible labels remain the same', async () => {
+  let actions = 0;
+  const runner = createJourneyRunner({
+    observe: async () => ({...screen(), controls: [{id: 'recipes', role: 'scroll-region', label: 'Recipes', scroll: {x: 0, y: actions * 100, maxX: 0, maxY: 1000, canScrollDown: true, canScrollUp: actions > 0}}]}),
+    execute: async action => { assert.equal(action.targetId, 'recipes'); actions++; return {performed: true}; },
+    decide: async ({observation}) => {
+      assert.equal(observation.controls[0].scroll.y, actions * 100);
+      return actions === 4 ? done(5) : {action: {type: 'scroll', targetId: 'recipes', direction: 'down'}, reason: 'Inspect the next recipes.'};
+    },
+  });
+  const result = await runner.start(input());
+  assert.equal(result.status, 'completed');
+  assert.equal(result.metrics.scrolls, 4);
+  assert.equal(result.steps[4].observation.controls[0].scroll.y, 400);
+});

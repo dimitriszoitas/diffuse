@@ -225,7 +225,11 @@ export function createJourneyExecutor({
     if (action.targetId) {
       const control = latest.controls.find(item => item.id === action.targetId);
       if (!control) throw error('That control is not in the latest observation.', 'JOURNEY_STALE');
-      if (control.blockedReason) throw error(control.blockedReason);
+      if (action.type === 'scroll' && (!control.scroll || !['x', 'y', 'maxX', 'maxY'].every(key => Number.isFinite(control.scroll[key])))) {
+        throw error('Choose a scrollable region from the current observation.', 'JOURNEY_INVALID_ACTION');
+      }
+      if (action.type !== 'scroll' && control.role === 'scroll-region') throw error('Choose a visible control inside this region, or scroll it.', 'JOURNEY_INVALID_ACTION');
+      if (action.type !== 'scroll' && control.blockedReason) throw error(control.blockedReason);
       if (control.disabled) throw error('The selected control is disabled.');
     }
     let result;

@@ -44,3 +44,16 @@ test('normal writes obey count and byte budgets and cannot retain an unrelated r
   const other = saved(0, {id: 'other', reviewId: 'other-review'});
   assert.deepEqual([...retainedJourneyIds([other, current], current.id, {maxBytes: 1})], [current.id]);
 });
+
+test('continuation finalization retains its original evidence and independent configured personas', () => {
+  const parent = saved(0, {persona: {description: 'First visit', persistence: 2}, video: {dataUrl: 'original-video'}});
+  const child = saved(10, {continuation: {parentRunId: parent.id, instructions: 'Search the existing project.'}, persona: {description: 'First visit', persistence: 4}, video: {dataUrl: 'continuation-video'}});
+  const records = [parent, ...Array.from({length: 9}, (_, index) => saved(index + 1)), child];
+  const originals = structuredClone(records);
+  assert.equal(retainedJourneyIds(records, child.id).size, 10);
+  const kept = retainedJourneyIds(records, child.id, {maxBytes: 1});
+  assert.deepEqual([...kept].sort(), [parent.id, child.id].sort());
+  assert.deepEqual(records, originals);
+  assert.equal(parent.persona.persistence, 2);
+  assert.equal(child.persona.persistence, 4);
+});

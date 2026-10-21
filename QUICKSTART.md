@@ -1,4 +1,4 @@
-# Try Diffuse 0.14.0
+# Try Diffuse 0.15.0
 
 Compare a live prototype over production or audit one page. Leave pinned comments on elements or areas, record a short silent interaction, and share feedback through GitHub or Jira. Work through a shared PR review and capture updated evidence for recheck. Claude can suggest findings when you connect your own Anthropic API key.
 
@@ -6,14 +6,14 @@ Compare a live prototype over production or audit one page. Leave pinned comment
 
 For a first installation:
 
-1. Download and unzip [Diffuse-0.14.0.zip](https://github.com/dimitriszoitas/diffuse/releases/download/v0.14.0/Diffuse-0.14.0.zip). Keep the resulting **Diffuse** folder somewhere permanent.
+1. Download and unzip [Diffuse-0.15.0.zip](https://github.com/dimitriszoitas/diffuse/releases/download/v0.15.0/Diffuse-0.15.0.zip). Keep the resulting **Diffuse** folder somewhere permanent.
 2. In your normal Chrome browser, open `chrome://extensions`.
 3. Turn on **Developer mode**, then click **Load unpacked** and choose that **Diffuse** folder.
 4. Pin **Diffuse — Live design comparison** using Chrome’s extensions menu.
 
 **Updating an official 0.10.2, 0.11.0, or 0.12.0 installation?** Replace the files in the existing Diffuse folder, click **Reload** in `chrome://extensions`, then refresh reviewed pages. Keep the same installation to retain reviews and settings.
 
-**Upgrading from 0.10.1 or earlier?** First export the reviews you want to keep with **⋯ → Export review**. Keep the old extension and folder intact. Install 0.14.0 from a separate folder, import your files using **Load review**, and reconnect Jira and optional AI/Figma settings. Disable the old copy after checking the imported reviews. The shared identity introduced in 0.10.2 has separate storage, so replacing older files does not transfer their reviews.
+**Upgrading from 0.10.1 or earlier?** First export the reviews you want to keep with **⋯ → Export review**. Keep the old extension and folder intact. Install 0.15.0 from a separate folder, import your files using **Load review**, and reconnect Jira and optional AI/Figma settings. Disable the old copy after checking the imported reviews. The shared identity introduced in 0.10.2 has separate storage, so replacing older files does not transfer their reviews.
 
 You do not need to sign in to a special test browser or share a password with Diffuse.
 
@@ -103,11 +103,11 @@ New reviews ask for one actionable issue per finding. **Current** describes the 
 
 ## Test a journey across pages
 
-Before sharing, you can also ask Diffuse to try a task across the app. Open **Journey Testing with AI** in the sidebar, enter your goal and any test data, and choose **Start journey**. It uses your saved Anthropic key and may create records, so use a suitable test environment. Keep the reviewed tab visible.
+Before sharing, you can also ask Diffuse to try a task across the app. Open **Journey Testing with AI** in the sidebar, describe the persona, adjust the four sliders, select what AI should check, and enter your goal and any test data. Choose **Start journey** when ready. Under **How should it explore?**, choose thorough exploration, add instructions, or allow moving the test records required by the task. It uses your saved Anthropic key and may create records, so use a suitable test environment. Keep the reviewed tab visible.
 
 Each attempt keeps a silent video alongside its step notes and screenshots. **Watch this step** jumps to its moment in the video; **Download** saves the full movie. Pause/Resume affects actions and recording together. Inspect the outcome and AI assessments, then accept relevant findings into the review. Accepted findings keep their screenshot and reproduction path. Download the full journey movie separately when sharing the entire attempt. See the [journey guide](Diffuse/docs/journey-reviews.md).
 
-After a run, choose **Ask about this step** to discuss a recorded choice. The answer can offer **Fork journey…** with an editable alternative route. Starting it creates a separate run from the original starting page, keeping the original evidence. Existing app data is not reset. Yellow click pulses make the actions visible in both journey and comment recordings.
+After a run, choose **Ask AI about this step** to open a chat about a recorded choice. You can keep asking follow-up questions there. The answer can offer **Fork journey…** with an editable alternative route. Starting it creates a separate run from the original starting page, keeping the original evidence. Existing app data is not reset. Yellow click pulses make the actions visible in both journey and comment recordings.
 
 ## Share a review file
 
@@ -183,3 +183,5 @@ Enable Desktop MCP in the matching file's Figma Dev Mode, then connect it in **D
 ## Jira ticket titles
 
 When you open the Jira export preview, Diffuse uses your configured Anthropic key and model to suggest a concise title from each full comment, expected result, and reproduction steps. Review or edit the title before creating tickets. Existing titles are preserved. Without AI access, an excerpt from the comment is used, and Jira export still works. Saving comments never calls AI.
+
+For a stopped, blocked, or inconclusive run, choose **Continue journey**, explain what to try next, and continue from the page currently open on the same website. This keeps the previous attempt and starts a linked continuation with its own recording and counts. It does not restart the task or reset the app.

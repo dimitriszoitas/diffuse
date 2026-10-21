@@ -25,7 +25,8 @@ export async function getJourney(id) {
 // cap; a fork must never delete its own original while saving its recording.
 export function retainedJourneyIds(runs, writtenId, {maxRuns = 10, maxBytes = 80 * 1024 * 1024} = {}) {
   const written = runs.find(run => run.id === writtenId);
-  const parent = written?.fork?.parentRunId ? runs.find(run => run.id === written.fork.parentRunId && run.reviewId === written.reviewId) : null;
+  const parentId = written?.fork?.parentRunId || written?.continuation?.parentRunId;
+  const parent = parentId ? runs.find(run => run.id === parentId && run.reviewId === written.reviewId) : null;
   const protectedRuns = [written, parent].filter(Boolean);
   const kept = new Set(protectedRuns.map(run => run.id));
   let bytes = protectedRuns.reduce((total, run) => total + JSON.stringify(run).length, 0);
@@ -51,7 +52,10 @@ export async function putJourney(run) {
 }
 export async function listJourneys(reviewId) {
   const all = await request((await db()).transaction('runs').objectStore('runs').index('reviewId').getAll(reviewId));
-  return all.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(({id, goal, status, createdAt, updatedAt, fork}) => ({id, goal, status, createdAt, updatedAt, ...(fork ? {fork: {parentRunId: fork.parentRunId, stepIndex: fork.stepIndex, instructions: fork.instructions?.slice(0, 100)}} : {})}));
+  return all.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(({id, goal, status, createdAt, updatedAt, fork, continuation, persona}) => ({id, goal, status, createdAt, updatedAt,
+    ...(persona ? {persona} : {}),
+    ...(fork ? {fork: {parentRunId: fork.parentRunId, stepIndex: fork.stepIndex, instructions: fork.instructions?.slice(0, 100)}} : {}),
+    ...(continuation ? {continuation: {parentRunId: continuation.parentRunId, instructions: continuation.instructions?.slice(0, 100)}} : {})}));
 }
 export async function deleteJourneys(reviewId) {
   const transaction = (await db()).transaction('runs', 'readwrite');

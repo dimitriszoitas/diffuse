@@ -29,3 +29,37 @@
 .popup .journey-ask-submit:hover, .popup .journey-fork-proposal:hover { border-color: var(--ui-accent); }
 .popup .journey-discussion [hidden], .popup .journey-fork-fields[hidden], .popup .journey-lineage[hidden] { display: none; }
 @media (forced-colors: active) { .popup .journey-route-offer, .popup .journey-lineage { border-color: CanvasText; } }
+/* A conversation is a dedicated view: the transcript scrolls, the composer stays. */
+body[data-journey-view="open"][data-journey-chat="open"] .drawer-scroll { display: flex; flex-direction: column; overflow: hidden; }
+body[data-journey-view="open"][data-journey-chat="open"] #dock-workspace,
+body[data-journey-view="open"][data-journey-chat="open"] #panel-journey-view { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+body[data-journey-chat="open"] #panel-journey-view > :not(#journey-discussion),
+body[data-journey-chat="open"] .reports-access,
+body[data-journey-chat="open"] .drawer-hint { display: none !important; }
+.popup .journey-discussion { flex: 1; min-height: 0; display: flex; flex-direction: column; margin: 0; padding: 0; border: 0; }
+.popup .journey-chat-header { flex: none; padding: 8px 0 10px; border-bottom: 1px solid var(--ui-line); }
+.popup .journey-chat-header .journey-section-title { margin: 10px 0 4px; }
+.popup .journey-chat-header .journey-help { margin: 4px 0 8px; font-size: 12px; line-height: 1.5; }
+.popup .journey-chat-back { min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--ui-muted); font-size: 12px; }
+.popup .journey-question-context { margin: 0; min-height: 26px; }
+.popup .journey-conversation { flex: 1; min-height: 80px; overflow-y: auto; overscroll-behavior: contain; padding: 16px 4px 4px 0; scrollbar-gutter: stable; }
+.popup .journey-chat-empty { margin: 18px 8px; font-size: 13px; line-height: 1.6; color: var(--ui-muted); }
+.popup .journey-chat-empty strong { color: var(--ui-ink); }
+.popup .journey-chat-typing { color: var(--ui-muted); font-size: 12px; }
+.popup .journey-chat-typing::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%; background: var(--ui-accent); animation: journey-chat-pulse 1.4s ease-in-out infinite; }
+.popup .journey-question-form { flex: none; padding: 10px 0 0; border: 0; border-top: 1px solid var(--ui-line); border-radius: 0; background: transparent; }
+.popup .journey-question-form label { font-size: 11px; margin-bottom: 5px; }
+.popup .journey-question-form textarea { width: 100%; min-height: 62px; max-height: 140px; resize: vertical; font-size: 13px; line-height: 1.5; }
+.popup .journey-question-form .journey-help { font-size: 10px; line-height: 1.5; margin: 6px 0 0; }
+.popup .journey-ask-submit { margin-top: 6px; }
+.popup .journey-chat-entry { width: 100%; min-height: 40px; margin: 12px 0; background: var(--ui-accent-soft); border-color: var(--ui-line-strong); color: var(--ui-accent); }
+.popup .journey-persona-summary { margin: 8px 0 12px; color: var(--ui-muted); font-size: 11px; line-height: 1.6; }
+.popup .journey-persona-summary summary { cursor: pointer; color: var(--ui-accent); }
+.popup .journey-persona-summary p { margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.popup .journey-chat-entry[hidden], .popup .journey-discussion[hidden] { display: none; }
+@keyframes journey-chat-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .popup .journey-chat-typing::before { animation: none; } }
+
+.popup .journey-runtime-note { margin: -8px 0 16px; color: var(--ui-muted); font-size: 10px; line-height: 1.6; }
+.popup .journey-chat-header > .journey-help { max-height: 54px; overflow-y: auto; overflow-wrap: anywhere; }
+.popup #journey-chat-continue { margin-bottom: 6px; min-height: 30px; padding: 4px 7px; font-size: 11px; color: var(--ui-accent); }
