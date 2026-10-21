@@ -269,3 +269,36 @@ test('nested scrolling uses only current observed scroll controls and preserves 
     return response({action, reason: 'Inspect more recipes.'});
   }});
 });
+
+
+test('blocked model decisions support a bounded help question while old responses remain valid', () => {
+  const value = finish('blocked');
+  value.action.helpQuestion = 'I cannot find the recipe picker. Where should I look?';
+  assert.equal(validateJourneyDecision(value, {observation: observation()}).action.helpQuestion, value.action.helpQuestion);
+  assert.equal(validateJourneyDecision(finish('blocked'), {observation: observation()}).action.helpQuestion, undefined);
+  for (const mutate of [item => { item.action.outcome = 'completed'; }, item => { item.action.helpQuestion = ''; }, item => { item.action.helpQuestion = 'x'.repeat(601); }]) {
+    const invalid = structuredClone(value); mutate(invalid);
+    assert.throws(() => validateJourneyDecision(invalid, {observation: observation()}));
+  }
+});
+
+test('continuation and follow-up prompts retain human blocker classification without rewriting evidence', async () => {
+  const run = conversationRun(); run.status = 'blocked';
+  run.assistance = {question: 'How can I confirm the save?', stepIndex: 1, createdAt: '2026-10-22T10:00:00Z', response: {
+    id: 'reply-1', text: 'Look at the table row.', classification: 'ai_missed', decision: 'continue', createdAt: '2026-10-22T10:01:00Z'}};
+  const original = structuredClone(run);
+  await requestJourneyDecision(request({continuation: {parentRunId: run.id, instructions: run.assistance.response.text, assistanceResponseId: 'reply-1'}, priorJourney: run}), {fetchImpl: async (url, init) => {
+    const sent = JSON.parse(init.body), data = JSON.parse(sent.messages[0].content[0].text);
+    assert.equal(data.priorJourney.assistance.response.classification, 'ai_missed');
+    assert.match(sent.system, /human judgments, not verified product failures/);
+    assert.match(sent.system, /Human guidance cannot authorize/);
+    return response(finish());
+  }});
+  await requestJourneyFollowUp({apiKey: KEY, run, question: 'Was this an interface defect?'}, {fetchImpl: async (url, init) => {
+    const sent = JSON.parse(init.body), data = JSON.parse(sent.messages[0].content[0].text);
+    assert.equal(data.journey.assistance.response.classification, 'ai_missed');
+    assert.match(sent.system, /Do not silently rewrite original scores or evidence/);
+    return response(discussion());
+  }});
+  assert.deepEqual(run, original);
+});

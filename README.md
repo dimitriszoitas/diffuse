@@ -1,8 +1,8 @@
 # Diffuse — live design comparison and page audits
 
-**[Download Diffuse 0.15.0 for Chrome](https://github.com/dimitriszoitas/diffuse/releases/download/v0.15.0/Diffuse-0.15.0.zip).** Choose a persona and review checklist, give AI a task across your app, then discuss its choices in chat or continue an unfinished journey with new instructions. On-page comments, AI audits, live Diff, Jira export, and shared GitHub reviews with original and updated evidence remain included.
+**[Download Diffuse 0.16.0 for Chrome](https://github.com/dimitriszoitas/diffuse/releases/download/v0.16.0/Diffuse-0.16.0.zip).** Give AI a task across your app. When it gets stuck, answer its question, classify the blocker, and choose Stop journey or Continue. Choose a persona and review checklist, then inspect its journey recording. Diffuse also includes on-page comments, AI audits, live Diff, Jira export, and shared GitHub reviews with original and updated evidence.
 
-Light, Dark, and System appearance and optional read-only Figma MCP references remain included. See the [release notes](docs/releases/0.15.0.md), [privacy policy](docs/PRIVACY.md), and [terms](docs/TERMS.md).
+Light, Dark, and System appearance and optional read-only Figma MCP references remain included. See the [release notes](docs/releases/0.16.0.md), [privacy policy](docs/PRIVACY.md), and [terms](docs/TERMS.md).
 
 Diffuse uses a native Chrome side drawer for review controls. **Start Diffuse** opens it; for an active review, click the extension icon and **Start Diffuse**. There is no floating toolbar. The webpage resizes beside Diffuse, and closing the drawer preserves the review and unfinished comment. Chrome chooses the drawer side and owns its resize handle.
 
@@ -14,7 +14,7 @@ Diffuse layers a **continuously running prototype** over a production page in Ch
 
 ## Install in Chrome
 
-1. Use Chrome 116 or later and unzip the [current release](https://github.com/dimitriszoitas/diffuse/releases/download/v0.15.0/Diffuse-0.15.0.zip). Keep the resulting **Diffuse** folder somewhere permanent.
+1. Use Chrome 116 or later and unzip the [current release](https://github.com/dimitriszoitas/diffuse/releases/download/v0.16.0/Diffuse-0.16.0.zip). Keep the resulting **Diffuse** folder somewhere permanent.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Choose **Load unpacked** and select the unzipped **Diffuse** folder. If developing from a source checkout instead, select its **`extension` folder**.
 4. Pin **Diffuse — Live design comparison** in Chrome’s extensions menu.
@@ -23,7 +23,7 @@ The extension loads directly from its files; no build step is needed. If Diffuse
 
 **Updating an official 0.10.2 or later installation:** replace the files in its existing Diffuse folder, choose **Reload** in `chrome://extensions`, and refresh the reviewed pages. Keep the same installation; its identity, saved reviews, and settings remain.
 
-**Moving from 0.10.1 or earlier:** export the reviews you want to keep using **⋯ → Export review** before upgrading. Leave the old extension and its folder intact, install 0.15.0 from a separate folder, then use **Load review** to import those files. Disable the old copy after checking your reviews in the new one. The stable identity introduced in 0.10.2 has its own storage, so reconnect Jira and any optional AI/Figma settings. Replacing the old files does not transfer old storage.
+**Moving from 0.10.1 or earlier:** export the reviews you want to keep using **⋯ → Export review** before upgrading. Leave the old extension and its folder intact, install 0.16.0 from a separate folder, then use **Load review** to import those files. Disable the old copy after checking your reviews in the new one. The stable identity introduced in 0.10.2 has its own storage, so reconnect Jira and any optional AI/Figma settings. Replacing the old files does not transfer old storage.
 
 ## Choose an appearance
 
@@ -45,6 +45,8 @@ Open **Journey Testing with AI** in the review sidebar and give AI a goal, such 
 The result includes a silent movie of the attempt, a timeline with screenshots and notes, and observed page visits, click attempts, and backtracking. **Watch this step** seeks to that moment in the recording. Pause and Resume affect both the actions and the recording; download the full WebM movie to keep or share it.
 
 After a run, choose **Ask AI** or **Ask AI about this step** to open a continuing chat about the recorded attempt. The answer can offer **Fork journey…** with an editable alternative route. Starting it creates a separate run from the original starting page, keeping the original evidence. Existing app data is not reset. Yellow click pulses make the actions visible in both journey and comment recordings.
+
+**When blocked, Diffuse asks for help in chat.** Reply and classify the blocker as **Issue with the experience**, **AI missed something**, or **Not sure yet**, then choose **Stop journey** or **Continue**. Your judgment is saved separately from the original evidence. Continue uses the saved guidance from the current page; retries do not duplicate the continuation.
 
 **Continue journey** resumes a stopped, blocked, or inconclusive task from the current page with additional instructions and the previous steps as context. It creates a linked continuation with its own recording and action count, without restarting the task or changing the original evidence.
 

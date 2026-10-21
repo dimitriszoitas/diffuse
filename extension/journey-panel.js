@@ -17,6 +17,9 @@
   let questionStep = null, conversationRun = null, conversationKey = '', asking = false;
   let questionGeneration = 0, forkContext = null;
   let chatOpen = false, pendingQuestion = null, chatReturnStep = null;
+  let shownHelp = new Set();
+  const helpLabels = {experience_issue: 'Issue with the experience', ai_missed: 'AI missed something', unsure: 'Not sure yet'};
+  const needsHelp = value => value?.status === 'blocked' && Boolean(value.assistance) && !value.assistance.response;
   const continuable = value => ['stopped', 'blocked', 'inconclusive'].includes(value?.status);
   const node = (tag, content, className) => {
     const element = document.createElement(tag);
@@ -72,7 +75,24 @@
   questionError.id = 'journey-question-error'; questionError.setAttribute('role', 'alert'); questionError.hidden = true;
   const askButton = node('button', 'Ask AI', 'journey-ask-submit');
   askButton.type = 'submit'; askButton.id = 'journey-ask';
-  questionForm.append(questionLabel, questionInput, questionError, askButton, questionStatus);
+  const helpClassificationLabel = node('label', 'How would you classify this blocker?', 'journey-help-classification-label');
+  helpClassificationLabel.htmlFor = 'journey-help-classification';
+  const helpClassification = node('select');
+  helpClassification.id = 'journey-help-classification';
+  for (const [value, label] of Object.entries(helpLabels)) {
+    const option = node('option', label); option.value = value; helpClassification.append(option);
+  }
+  helpClassification.value = 'unsure';
+  const helpFields = node('div', undefined, 'journey-help-fields');
+  helpFields.id = 'journey-help-fields'; helpFields.hidden = true;
+  helpFields.append(helpClassificationLabel, helpClassification);
+  const helpStop = button('Stop journey', () => respondToHelp('stop'), 'journey-help-stop');
+  helpStop.id = 'journey-help-stop'; helpStop.hidden = true;
+  const composerActions = node('div', undefined, 'journey-composer-actions');
+  composerActions.append(helpStop, askButton);
+  const helpRetry = button('Retry continuation', () => continueFromHelp(), 'journey-help-retry');
+  helpRetry.id = 'journey-help-retry'; helpRetry.hidden = true;
+  questionForm.append(helpFields, questionLabel, questionInput, questionError, composerActions, helpRetry, questionStatus);
   const chatHeader = node('div', undefined, 'journey-chat-header');
   chatHeader.append(chatBack, discussionHeading, discussionHelp, questionContext);
   discussion.append(chatHeader, conversation, questionForm);
@@ -80,10 +100,20 @@
   const chatEntry = button('Ask AI', () => selectQuestionStep(null), 'journey-chat-entry');
   chatEntry.id = 'journey-chat-open';
   $('journey-summary-section').after(chatEntry);
+  const helpEntry = button('Reply to Diffuse', () => selectQuestionStep(run?.assistance?.stepIndex || null), 'journey-help-entry');
+  helpEntry.id = 'journey-help-open'; helpEntry.hidden = true;
+  const helpAssessment = node('p', '', 'journey-help-assessment');
+  helpAssessment.id = 'journey-help-assessment'; helpAssessment.hidden = true;
+  chatEntry.before(helpEntry, helpAssessment);
   questionInput.addEventListener('keydown', event => {
     if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
       event.preventDefault();
-      if (!askButton.disabled) questionForm.requestSubmit();
+      if (!needsHelp(run) && !askButton.disabled) questionForm.requestSubmit();
+      else if (needsHelp(run)) {
+        // Guidance may be multiline. Continuing requires its explicit button.
+        const start = questionInput.selectionStart, end = questionInput.selectionEnd;
+        questionInput.setRangeText('\n', start, end, 'end');
+      }
     }
   });
   questionForm.addEventListener('submit', askQuestion);
@@ -152,6 +182,7 @@
   }
   async function askQuestion(event) {
     event.preventDefault();
+    if (needsHelp(run)) { await respondToHelp('continue'); return; }
     if (asking || pending || !run || isActive(run) || !questionForm.reportValidity()) return;
     const question = questionInput.value.trim();
     if (!question) return;
@@ -170,6 +201,67 @@
       }
     } finally {
       if (generation === questionGeneration) { asking = false; pendingQuestion = null; paint(); if (chatOpen) questionInput.focus({preventScroll: true}); }
+    }
+  }
+  function continuationAccess() {
+    // Ask inside the button gesture; save the reply even if access is declined.
+    try {
+      const url = new URL(run?.startUrl || session?.target?.url || '');
+      if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Open this journey’s website before continuing.');
+      return chrome.permissions.request({origins: [`${url.protocol}//${url.hostname}/*`]}).then(allowed => ({allowed}), error => ({error}));
+    } catch (error) { return Promise.resolve({error}); }
+  }
+  async function launchHelpContinuation(parent, access, requestSession, generation) {
+    const permission = await access;
+    if (session?.id !== requestSession || generation !== mutationGeneration) return;
+    if (permission.error) throw permission.error;
+    if (!permission.allowed) throw new Error('Your reply is saved. Allow access to this website, then retry continuation.');
+    pending = 'JOURNEY_START'; paint();
+    const response = parent.assistance.response;
+    const reply = await request('JOURNEY_START', {input: {continuation: {parentRunId: parent.id, instructions: response.text, assistanceResponseId: response.id}}});
+    if (session?.id !== requestSession || generation !== mutationGeneration) return;
+    run = reply.run || null; selectedRunId = null; showForm = false; chatOpen = false; forkContext = null; renderKey = '';
+  }
+  async function respondToHelp(decision) {
+    if (!needsHelp(run) || pending || asking || !session) return;
+    const guidance = questionInput.value.trim();
+    if (decision === 'continue' && !guidance) { questionInput.reportValidity(); questionInput.focus(); return; }
+    if (!Object.hasOwn(helpLabels, helpClassification.value)) return;
+    const requestSession = session.id, parentId = run.id, generation = ++mutationGeneration;
+    const access = decision === 'continue' ? continuationAccess() : null;
+    pending = 'JOURNEY_RESPOND'; questionError.hidden = true; paint();
+    try {
+      const reply = await request('JOURNEY_RESPOND', {runId: parentId, response: {text: guidance, classification: helpClassification.value, decision}});
+      if (session?.id !== requestSession || generation !== mutationGeneration) return;
+      run = reply.run; selectedRunId = parentId; questionInput.value = ''; renderKey = ''; paint();
+      if (decision === 'continue') await launchHelpContinuation(run, access, requestSession, generation);
+      else await loadHistory();
+    } catch (error) {
+      if (session?.id === requestSession && generation === mutationGeneration) {
+        questionError.textContent = error.message; questionError.hidden = false;
+      }
+    } finally {
+      if (session?.id === requestSession && generation === mutationGeneration) { pending = null; paint(); scheduleRefresh(true); }
+    }
+  }
+  async function continueFromHelp() {
+    if (pending || asking || run?.assistance?.response?.decision !== 'continue' || !session) return;
+    const parent = run, requestSession = session.id, generation = ++mutationGeneration;
+    const childId = parent.assistance.response.continuationRunId;
+    const access = childId ? null : continuationAccess();
+    pending = childId ? 'JOURNEY_LOAD' : 'JOURNEY_START'; questionError.hidden = true; paint();
+    try {
+      if (childId) {
+        const reply = await request('JOURNEY_LOAD', {runId: childId});
+        if (session?.id !== requestSession || generation !== mutationGeneration) return;
+        if (!reply.run) throw new Error('This continued journey is no longer saved.');
+        run = reply.run; selectedRunId = run.id; showForm = false; chatOpen = false; forkContext = null; renderKey = '';
+      } else await launchHelpContinuation(parent, access, requestSession, generation);
+    }
+    catch (error) {
+      if (session?.id === requestSession && generation === mutationGeneration) { questionError.textContent = error.message; questionError.hidden = false; }
+    } finally {
+      if (session?.id === requestSession && generation === mutationGeneration) { pending = null; paint(); scheduleRefresh(true); }
     }
   }
   function prepareFork(suggestion = null, stepIndex = questionStep) {
@@ -191,19 +283,37 @@
   }
   function renderConversation() {
     discussion.hidden = !chatOpen || showForm || !run || isActive(run);
-    continueChat.hidden = !continuable(run);
+    continueChat.hidden = !continuable(run) || needsHelp(run);
     continueChat.disabled = asking || Boolean(pending);
     if (!run) return;
     if (conversationRun !== run.id) {
       conversationRun = run.id; conversationKey = ''; questionGeneration++; asking = false; pendingQuestion = null;
-      questionInput.value = ''; questionError.hidden = true; selectQuestionStep(null, false);
+      questionInput.value = ''; helpClassification.value = 'unsure'; questionError.hidden = true; selectQuestionStep(null, false);
     }
     const entries = Array.isArray(run.followUps) ? run.followUps : [];
-    const key = JSON.stringify([entries, pendingQuestion, asking]);
+    const key = JSON.stringify([entries, pendingQuestion, asking, run.assistance]);
     if (key !== conversationKey) {
       conversationKey = key;
       const fragment = document.createDocumentFragment();
-      if (!entries.length && !pendingQuestion) {
+      if (run.assistance) {
+        const prompt = node('article', undefined, 'journey-answer-copy journey-help-prompt');
+        prompt.id = 'journey-help-question';
+        prompt.append(node('small', 'Diffuse · Needs your help'), node('p', run.assistance.question));
+        if (run.summary) {
+          const context = node('details', undefined, 'journey-help-context');
+          context.append(node('summary', 'What happened'), node('p', run.summary)); prompt.append(context);
+        }
+        if (run.assistance.stepIndex) prompt.append(button(`View step ${run.assistance.stepIndex}`, () => focusStep(run.assistance.stepIndex), 'journey-text-button'));
+        fragment.append(prompt);
+        const response = run.assistance.response;
+        if (response) {
+          const reply = node('article', undefined, 'journey-question-copy journey-help-response');
+          reply.id = 'journey-help-response';
+          reply.append(node('small', `You · ${helpLabels[response.classification] || 'Not sure yet'}`), node('p', response.text || 'Stop here for now.'), node('small', response.decision === 'stop' ? 'Stopped the journey' : 'Continue from the current page'));
+          fragment.append(reply);
+        }
+      }
+      if (!entries.length && !pendingQuestion && !run.assistance) {
         const empty = node('div', undefined, 'journey-chat-empty');
         empty.append(node('strong', 'Explore this journey together'), node('p', 'Ask why an action was chosen, question an observation, or discuss a different route. Your follow-up messages stay in this conversation.'));
         fragment.append(empty);
@@ -236,13 +346,24 @@
       conversation.replaceChildren(fragment);
       if (chatOpen) conversation.scrollTop = conversation.scrollHeight;
     }
-    const full = entries.length >= 20;
+    const helping = needsHelp(run), full = entries.length >= 20 && !helping;
+    helpFields.hidden = !helping; helpStop.hidden = !helping;
+    helpClassification.disabled = Boolean(pending); helpStop.disabled = Boolean(pending);
     questionInput.disabled = asking || Boolean(pending) || full;
-    askButton.disabled = asking || Boolean(pending) || full || aiConfig?.hasKey !== true;
-    clearContext.disabled = asking;
-    askButton.textContent = asking ? 'Replying…' : 'Send';
-    questionStatus.textContent = full ? 'This journey has reached its 20-question limit.' : 'Enter to send · Shift + Enter for a new line. Uses your AI key; messages and evidence go to Anthropic.';
-    questionForm.setAttribute('aria-busy', String(asking));
+    askButton.disabled = asking || Boolean(pending) || full || (!helping && aiConfig?.hasKey !== true);
+    clearContext.disabled = asking || helping;
+    questionContext.hidden = helping;
+    discussionTitle.textContent = helping ? 'I need your help' : 'Journey chat';
+    questionLabel.textContent = helping ? 'Your guidance' : 'Message Diffuse';
+    if (helping) questionInput.placeholder = 'For example, scroll inside the list, then use the search field.';
+    askButton.textContent = pending === 'JOURNEY_RESPOND' ? 'Saving…' : pending === 'JOURNEY_START' ? 'Continuing…' : helping ? 'Continue' : asking ? 'Replying…' : 'Send';
+    questionStatus.textContent = helping
+      ? 'Your assessment stays with this blocker. Stop saves it; Continue sends your guidance to AI and resumes from the current page.'
+      : full ? 'This journey has reached its 20-question limit.' : 'Enter to send · Shift + Enter for a new line. Uses your AI key; messages and evidence go to Anthropic.';
+    helpRetry.hidden = run.assistance?.response?.decision !== 'continue';
+    helpRetry.disabled = Boolean(pending || asking);
+    helpRetry.textContent = run.assistance?.response?.continuationRunId ? 'Open continued journey' : 'Continue with saved answer';
+    questionForm.setAttribute('aria-busy', String(asking || pending));
     for (const action of conversation.querySelectorAll('.journey-fork-proposal')) action.disabled = asking || Boolean(pending);
   }
 
@@ -692,11 +813,20 @@
   }
   function paint() {
     updateAvailability();
+    let focusHelp = false;
+    if (opened && !showForm && needsHelp(run) && !shownHelp.has(run.id) && !pending && !asking) {
+      shownHelp.add(run.id); chatOpen = true; chatReturnStep = run.assistance.stepIndex || null; focusHelp = true;
+      $('journey-video').pause();
+    }
     if (!run || isActive(run) || showForm) chatOpen = false;
     document.body.dataset.journeyChat = opened && chatOpen ? 'open' : 'closed';
     discussion.hidden = !chatOpen;
     chatEntry.hidden = !run || isActive(run) || !run.steps?.length;
     chatEntry.disabled = Boolean(pending);
+    helpEntry.hidden = !needsHelp(run); helpEntry.disabled = Boolean(pending);
+    helpAssessment.hidden = !run?.assistance?.response;
+    if (run?.assistance?.response) helpAssessment.textContent = `Your assessment of this blocker: ${helpLabels[run.assistance.response.classification] || 'Not sure yet'}. Saved separately from the AI’s original observations.`;
+    chatEntry.hidden = chatEntry.hidden || needsHelp(run);
     $('journey-form').hidden = !showForm;
     $('journey-run').hidden = showForm || !run;
     $('journey-history').hidden = isActive(run) || !historyKey || historyKey === '[]';
@@ -705,7 +835,7 @@
     const active = isActive(run);
     const paused = run.status === 'paused';
     $('journey-run').dataset.status = run.status;
-    text('journey-status', statusLabels[run.status] || run.status);
+    text('journey-status', run.assistance?.response?.decision === 'stop' ? 'Stopped by you' : needsHelp(run) ? 'Needs your help' : statusLabels[run.status] || run.status);
     text('journey-progress', `${numeric(run.metrics?.actions ?? run.steps?.length)} / ${run.maxSteps || run.input?.maxSteps || 20} actions`);
     $('journey-run-controls').hidden = !active;
     $('journey-pause').hidden = paused;
@@ -726,7 +856,7 @@
     $('journey-new').disabled = Boolean(pending || asking);
     $('journey-use-goal').disabled = Boolean(pending || asking);
     forkButton.disabled = Boolean(pending || asking);
-    continueButton.hidden = !continuable(run);
+    continueButton.hidden = !continuable(run) || needsHelp(run);
     continueButton.disabled = Boolean(pending || asking);
     profileHeading.textContent = run.persona ? 'Simulated persona' : 'Persona not recorded';
     profileCopy.textContent = run.persona?.description || 'This older journey was run without a saved persona.';
@@ -736,6 +866,7 @@
     if (run.fork) lineage.textContent = `Alternative route${run.fork.stepIndex ? ` · From step ${run.fork.stepIndex}` : ''}. ${run.fork.instructions}`;
     if (run.continuation) lineage.textContent = `Continuation from the current page. ${run.continuation.instructions} Recording, steps and action counts cover this part only. The previous journey remains in history.`;
     renderConversation();
+    if (focusHelp) { conversation.scrollTop = 0; questionInput.focus({preventScroll: true}); }
     const summary = asText(run.summary) || asText(run.summary?.text);
     $('journey-summary-section').hidden = !summary;
     text('journey-summary', summary);
@@ -754,8 +885,9 @@
     if (sessionChanged) {
       run = null; selectedRunId = null; renderKey = ''; historyKey = '';
       showForm = true; acceptedBusy = new Set(); historyGeneration++; mutationGeneration++; pending = null;
+      shownHelp = new Set();
       questionGeneration++; asking = false; forkContext = null; conversationRun = null; conversationKey = ''; chatOpen = false; pendingQuestion = null;
-      conversation.replaceChildren(); questionInput.value = ''; questionError.hidden = true; selectQuestionStep(null, false);
+      conversation.replaceChildren(); questionInput.value = ''; helpClassification.value = 'unsure'; questionError.hidden = true; selectQuestionStep(null, false);
       $('journey-video').pause(); $('journey-video').removeAttribute('src'); $('journey-video').load(); videoSource = '';
       $('journey-evidence-dialog').close(); $('journey-evidence-image').removeAttribute('src');
       $('journey-history-list').replaceChildren();

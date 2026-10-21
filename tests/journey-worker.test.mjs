@@ -98,3 +98,14 @@ test('only the same-session offscreen document can report recording termination'
   assert.equal((await h.send('JOURNEY_CAPTURE_ENDED', {url: 'chrome-extension://test/offscreen.html'}, {recordingId: 'recording-1'})).ok, true);
   assert.deepEqual(h.state.ended, ['recording-1']);
 });
+
+
+test('the attached sidebar can submit a help reply through the same protected journey boundary', async () => {
+  const h = await harness();
+  const reply = {runId: 'blocked-run', response: {text: 'Look at the table.', classification: 'ai_missed', decision: 'continue'}};
+  assert.equal((await h.send('JOURNEY_RESPOND', {}, reply)).ok, true);
+  assert.equal(h.state.calls.length, 1);
+  assert.deepEqual(h.state.calls[0].response, reply.response);
+  assert.equal((await h.send('JOURNEY_RESPOND', {}, {...reply, sessionId: 'old-session'})).ok, false);
+  assert.equal(h.state.calls.length, 1);
+});

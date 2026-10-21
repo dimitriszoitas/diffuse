@@ -3,8 +3,9 @@ import {JourneyError, requestJourneyDecision, requestJourneyFollowUp, validateJo
 import * as localStore from './journey-store.mjs';
 import {normalizeJourneyPersona, journeyPersonaSummary} from './journey-persona.mjs';
 import {normalizeJourneySettings, JOURNEY_FOCUS_CHECKS} from './journey-settings.mjs';
+import {normalizeJourneyHelpResponse, withJourneyAssistance, journeyAssistance} from './journey-assistance.mjs';
 
-export const JOURNEY_MESSAGES = new Set(['JOURNEY_START', 'JOURNEY_STATE', 'JOURNEY_HISTORY', 'JOURNEY_LOAD', 'JOURNEY_PAUSE', 'JOURNEY_RESUME', 'JOURNEY_STOP', 'JOURNEY_ACCEPT', 'JOURNEY_ASK']);
+export const JOURNEY_MESSAGES = new Set(['JOURNEY_START', 'JOURNEY_STATE', 'JOURNEY_HISTORY', 'JOURNEY_LOAD', 'JOURNEY_PAUSE', 'JOURNEY_RESUME', 'JOURNEY_STOP', 'JOURNEY_ACCEPT', 'JOURNEY_ASK', 'JOURNEY_RESPOND']);
 const activeStatus = status => ['running', 'paused'].includes(status);
 const terminalStatus = status => ['completed', 'failed', 'blocked', 'inconclusive', 'stopped'].includes(status);
 export function journeyInput(input = {}) {
@@ -22,8 +23,10 @@ export function journeyInput(input = {}) {
     const continuation = input.continuation;
     if (!continuation || typeof continuation !== 'object' || Array.isArray(continuation) ||
         typeof continuation.parentRunId !== 'string' || !continuation.parentRunId.trim() || continuation.parentRunId.length > 120 ||
-        typeof continuation.instructions !== 'string' || !continuation.instructions.trim() || continuation.instructions.length > 2000) throw new Error('Choose a saved journey and describe how to continue in under 2,000 characters.');
-    clean.continuation = {parentRunId: continuation.parentRunId.trim(), instructions: continuation.instructions.trim()};
+        typeof continuation.instructions !== 'string' || !continuation.instructions.trim() || continuation.instructions.length > 2000 ||
+        (continuation.assistanceResponseId !== undefined && (typeof continuation.assistanceResponseId !== 'string' || !continuation.assistanceResponseId.trim() || continuation.assistanceResponseId.length > 120))) throw new Error('Choose a saved journey and describe how to continue in under 2,000 characters.');
+    clean.continuation = {parentRunId: continuation.parentRunId.trim(), instructions: continuation.instructions.trim(),
+      ...(continuation.assistanceResponseId !== undefined ? {assistanceResponseId: continuation.assistanceResponseId.trim()} : {})};
   }
   for (const [name, limit] of [['goal', 2000], ['successCriteria', 2000], ['testData', 4000]]) {
     if (input[name] !== undefined && (typeof input[name] !== 'string' || input[name].length > limit)) throw new Error(`Keep ${name === 'goal' ? 'the goal' : name === 'testData' ? 'test data' : 'success criteria'} under ${limit} characters.`);
@@ -63,6 +66,7 @@ export function createJourneyService({getSession, checkReady, createExecutor, re
   let starting = false;
   let startupController = null;
   let asking = null;
+  let responding = null;
   let generation = 0;
   let lastRun = null;
   let mutation = Promise.resolve();
@@ -90,11 +94,11 @@ export function createJourneyService({getSession, checkReady, createExecutor, re
       (!run || Date.parse(lastRun.updatedAt) > Date.parse(run.updatedAt) ||
         (!activeStatus(lastRun.status) && activeStatus(run.status)))) run = lastRun;
     if (!run || run.reviewId !== current.reviewId) throw new Error('This journey is no longer available in this review.');
-    return run;
+    return withJourneyAssistance(run);
   }
   async function accept(current, message) {
     assertCurrent(current);
-    if (job || starting || asking) throw new Error('Stop the journey before adding findings to the review.');
+    if (job || starting || asking || responding) throw new Error('Stop the journey before adding findings to the review.');
     const run = await read(current, message.runId);
     const finding = run?.findings?.[message.findingIndex];
     if (!Number.isInteger(message.findingIndex) || !finding) throw new Error('Choose a finding from this journey.');
@@ -126,7 +130,7 @@ export function createJourneyService({getSession, checkReady, createExecutor, re
   }
   async function ask(current, message) {
     assertCurrent(current);
-    if (job || starting || asking) throw new Error('Wait for the current journey action before asking about the saved run.');
+    if (job || starting || asking || responding) throw new Error('Wait for the current journey action before asking about the saved run.');
     if (typeof message.runId !== 'string' || !message.runId || message.runId.length > 120 || typeof message.question !== 'string' || !message.question.trim() || message.question.length > 2000) throw new Error('Ask a question under 2,000 characters about a saved journey.');
     const pending = {controller: new AbortController(), version: generation};
     asking = pending;
@@ -162,8 +166,43 @@ export function createJourneyService({getSession, checkReady, createExecutor, re
       return {ok: true, run: updated};
     } finally { clearInterval(keepAlive); if (asking === pending) asking = null; }
   }
+  async function respond(current, message) {
+    assertCurrent(current);
+    if (typeof message.runId !== 'string' || !message.runId.trim() || message.runId.length > 120) throw new Error('Choose a blocked journey to answer.');
+    const response = normalizeJourneyHelpResponse(message.response);
+    if (starting || asking || responding) throw new Error('Wait for the current journey action before replying.');
+    const pending = {version: generation}; responding = pending;
+    const assertResponding = () => { assertCurrent(current); if (generation !== pending.version) throw new Error('The journey reply was cancelled.'); };
+    try {
+      if (job) {
+        if (job.current !== current || job.id !== message.runId || activeStatus(job.runner.getState()?.status)) throw new Error('Wait until this journey is blocked before replying.');
+        // Final recording persistence must finish before a reply can be saved.
+        await job.done;
+      }
+      assertResponding();
+      const run = await read(current, message.runId);
+      assertResponding();
+      if (run.status !== 'blocked') throw new Error('Only a blocked journey can receive a help reply.');
+      const assistance = journeyAssistance(run);
+      if (assistance.response) {
+        if (['text', 'classification', 'decision'].every(key => assistance.response[key] === response[key])) return {ok: true, run};
+        throw new Error('This blocker already has a saved reply. Continue with that reply or start a separate journey.');
+      }
+      const now = new Date().toISOString();
+      const updated = {...run, updatedAt: now, assistance: {...assistance, response: {id: crypto.randomUUID(), ...response, createdAt: now}}};
+      assertResponding();
+      await store.putJourney(updated);
+      assertResponding();
+      lastRun = updated;
+      if (current.journey?.id === updated.id) current.journey.updatedAt = updated.updatedAt;
+      await publish();
+      return {ok: true, run: updated};
+    } finally { if (responding === pending) responding = null; }
+  }
   async function start(current, input) {
-    if (job || starting || asking) throw new Error('Stop the current journey before starting another.');
+    const linkedResponse = input?.continuation?.assistanceResponseId;
+    if (job?.current === current && linkedResponse && job.responseId === linkedResponse && job.parentRunId === input.continuation.parentRunId && job.instructions === input.continuation.instructions?.trim()) return {ok: true, run: job.decorate(job.runner.getState())};
+    if (job || starting || asking || responding) throw new Error('Stop the current journey before starting another.');
     starting = true;
     const version = ++generation;
     const startup = new AbortController(); startupController = startup;
@@ -180,6 +219,19 @@ export function createJourneyService({getSession, checkReady, createExecutor, re
         if (fields.fork && !terminalStatus(parent.status)) throw new Error('Finish or stop the original journey before trying another route.');
         if (fields.fork?.stepIndex !== undefined && !parent.steps.some(step => step.index === fields.fork.stepIndex)) throw new Error('Choose an existing step from the original journey.');
         fields = journeyInput({...fields, ...Object.fromEntries(['goal', 'successCriteria', 'testData', 'maxSteps', 'persona', 'exploration', 'allowRecordMoves', 'extraInstructions', 'focusChecks'].filter(key => input[key] === undefined).map(key => [key, parent[key]]))});
+      }
+      if (fields.continuation?.assistanceResponseId) {
+        const response = journeyAssistance(parent)?.response;
+        if (!response || response.id !== fields.continuation.assistanceResponseId || response.decision !== 'continue' || response.text !== fields.continuation.instructions) throw new Error('Continue using the guidance saved for this blocker.');
+        if (response.continuationRunId) {
+          const existing = await read(current, response.continuationRunId).catch(() => null);
+          assertStarting();
+          if (!existing) throw new Error('This reply already started a continuation that is no longer retained. Start a separate journey to try again.');
+          return {ok: true, run: existing};
+        }
+        const previous = (await store.listJourneys(current.reviewId)).find(run => run.continuation?.parentRunId === parent.id && run.continuation.assistanceResponseId === response.id);
+        assertStarting();
+        if (previous) { const existing = await read(current, previous.id); assertStarting(); return {ok: true, run: existing}; }
       }
       const start = new URL(fields.fork ? parent.startUrl : tab.url);
       if (!['http:', 'https:'].includes(start.protocol) || start.username || start.password || start.href.length > 2048) throw new Error('Open a website or local preview server with a supported address to test a journey.');
@@ -198,7 +250,8 @@ export function createJourneyService({getSession, checkReady, createExecutor, re
       const now = new Date().toISOString();
       await reviews.ensureReview({id: current.reviewId, mode: current.mode || 'audit', title: `${current.target?.title || 'App'} — journey review`, createdAt: current.startedAt || now, updatedAt: now, productionUrl: start.href});
       assertStarting();
-      const entry = {current, id: crypto.randomUUID(), runner: null, executor: null, done: null, pauses: [], recordingEnded: false};
+      const entry = {current, id: crypto.randomUUID(), runner: null, executor: null, done: null, pauses: [], recordingEnded: false,
+        responseId: fields.continuation?.assistanceResponseId, parentRunId: fields.continuation?.parentRunId, instructions: fields.continuation?.instructions};
       if (startRecording) recorder = await startRecording(current, entry.id);
       assertStarting();
       entry.recorder = recorder;
@@ -217,7 +270,7 @@ export function createJourneyService({getSession, checkReady, createExecutor, re
         }
         if (entry.recordingEnded) { run.status = 'inconclusive'; run.summary = 'The recording ended before the journey finished. Review the captured steps and video; the task outcome was not verified.'; }
         if (entry.blocked) { run.status = 'blocked'; run.summary = entry.blocked; }
-        return run;
+        return withJourneyAssistance(run);
       };
       entry.decorate = decorate;
       const runner = runnerFactory({
@@ -230,6 +283,12 @@ export function createJourneyService({getSession, checkReady, createExecutor, re
           const run = decorate(state);
           lastRun = run;
           await store.putJourney(run);
+          if (entry.responseId && !entry.responseLinked) {
+            const assistance = journeyAssistance(parent);
+            parent = {...parent, assistance: {...assistance, response: {...assistance.response, continuationRunId: run.id}}};
+            await store.putJourney(parent);
+            entry.responseLinked = true;
+          }
           if (same(current)) {
             current.journey = {id: run.id, status: run.status, updatedAt: run.updatedAt};
             current.aiRunning = activeStatus(run.status) || Boolean(recorder);
@@ -281,7 +340,7 @@ export function createJourneyService({getSession, checkReady, createExecutor, re
     } finally { starting = false; if (startupController === startup) startupController = null; }
   }
   return {
-    get busy() { return starting || Boolean(job) || Boolean(asking); },
+    get busy() { return starting || Boolean(job) || Boolean(asking) || Boolean(responding); },
     async interrupt() {
       generation++;
       startupController?.abort();
@@ -326,6 +385,7 @@ export function createJourneyService({getSession, checkReady, createExecutor, re
       if (message.type === 'JOURNEY_START') return start(current, message.input);
       if (message.type === 'JOURNEY_HISTORY') return {ok: true, runs: await store.listJourneys(current.reviewId)};
       if (message.type === 'JOURNEY_ASK') return serialize(() => ask(current, message));
+      if (message.type === 'JOURNEY_RESPOND') return serialize(() => respond(current, message));
       if (message.type === 'JOURNEY_ACCEPT') return serialize(() => accept(current, message));
       if (message.type === 'JOURNEY_LOAD' || message.type === 'JOURNEY_STATE') {
         const run = await read(current, message.runId);

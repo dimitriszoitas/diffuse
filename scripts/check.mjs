@@ -17,6 +17,6 @@ for (const file of ['diff.html','diff.js','diff.css','jira-settings.html','jira-
 if (!manifest.permissions.includes('identity')) throw new Error('Jira authorization requires Chrome identity permission.');
 if (!manifest.permissions.includes('debugger')) throw new Error('Responsive viewport presets require Chrome debugger permission.');
 readFileSync(resolve(base,'extension/viewport-controller.mjs'));
-for (const file of ['journey-ai.mjs', 'journey-runner.mjs', 'journey-executor.mjs', 'journey-page.js', 'journey-service.mjs', 'journey-store.mjs', 'journey-panel.js', 'journey-conversation.css', 'journey-persona.mjs', 'journey-settings.mjs', 'journey-persona-ui.js', 'journey-persona.css', 'recording-pointer.js']) readFileSync(resolve(base, 'extension', file));
+for (const file of ['journey-ai.mjs', 'journey-runner.mjs', 'journey-executor.mjs', 'journey-page.js', 'journey-service.mjs', 'journey-store.mjs', 'journey-panel.js', 'journey-conversation.css', 'journey-persona.mjs', 'journey-settings.mjs', 'journey-assistance.mjs', 'journey-persona-ui.js', 'journey-persona.css', 'recording-pointer.js']) readFileSync(resolve(base, 'extension', file));
 for (const file of ['viewport-profile.mjs','viewport-panel.js','viewport-panel.css','select-controls.js','ui-chrome.css','report-sidebar.css','ui-theme.css','ai-handoff.mjs','review-transfer.mjs','settings.html','settings.css','theme.js','theme-content.js','ui-dark.css']) readFileSync(resolve(base, 'extension', file));
 console.log('Extension manifest, referenced files, and JavaScript syntax are valid.');

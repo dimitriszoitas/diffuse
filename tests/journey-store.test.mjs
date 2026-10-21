@@ -57,3 +57,17 @@ test('continuation finalization retains its original evidence and independent co
   assert.equal(parent.persona.persistence, 2);
   assert.equal(child.persona.persistence, 4);
 });
+
+test('saving a help response pointer protects the new child rather than evicting it for a grandparent', () => {
+  const grandparent = saved(0, {video: {dataUrl: 'g'.repeat(1000)}});
+  const parent = saved(1, {status: 'blocked', continuation: {parentRunId: grandparent.id}, video: {dataUrl: 'p'.repeat(1000)}, assistance: {
+    response: {id: 'reply-1', decision: 'continue', continuationRunId: 'run-2'},
+  }});
+  const child = saved(2, {continuation: {parentRunId: parent.id, assistanceResponseId: 'reply-1', instructions: 'Inspect the table.'}});
+  const records = [grandparent, parent, child];
+  assert.deepEqual([...retainedJourneyIds(records, parent.id, {maxBytes: 1})].sort(), [parent.id, child.id].sort());
+  assert.deepEqual([...retainedJourneyIds(records, child.id, {maxBytes: 1})].sort(), [parent.id, child.id].sort());
+  for (const invalid of [{...child, reviewId: 'foreign'}, {...child, continuation: {...child.continuation, assistanceResponseId: 'wrong'}}, {...child, continuation: {...child.continuation, parentRunId: grandparent.id}}]) {
+    assert.deepEqual([...retainedJourneyIds([grandparent, parent, invalid], parent.id, {maxBytes: 1})].sort(), [grandparent.id, parent.id].sort());
+  }
+});

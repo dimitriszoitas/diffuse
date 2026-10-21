@@ -230,3 +230,18 @@ test('nested scroll offsets are retained and count as progress when the visible 
   assert.equal(result.metrics.scrolls, 4);
   assert.equal(result.steps[4].observation.controls[0].scroll.y, 400);
 });
+
+
+test('blocked model and executor outcomes retain a help question without inventing findings', async () => {
+  const decision = done(1, 'blocked'); decision.action.helpQuestion = 'I cannot find the picker. Where should I look?';
+  const runner = createJourneyRunner({observe: async () => screen(), decide: async () => decision, execute: async () => { throw new Error('Must not execute a finish.'); }});
+  const result = await runner.start(input());
+  assert.equal(result.assistance.question, decision.action.helpQuestion);
+  assert.equal(result.assistance.stepIndex, 1);
+  assert.deepEqual(result.findings, []);
+  assert.deepEqual(result.scores, decision.action.scores);
+  const guarded = createJourneyRunner({observe: async () => screen(), decide: async () => click(), execute: async () => { throw new JourneyError('JOURNEY_BLOCKED', 'This action needs the reviewer.'); }});
+  const stopped = await guarded.start(input());
+  assert.match(stopped.assistance.question, /This action needs the reviewer.*What should I do next/);
+  assert.deepEqual(stopped.findings, []);
+});

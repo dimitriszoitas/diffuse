@@ -63,3 +63,26 @@ body[data-journey-chat="open"] .drawer-hint { display: none !important; }
 .popup .journey-runtime-note { margin: -8px 0 16px; color: var(--ui-muted); font-size: 10px; line-height: 1.6; }
 .popup .journey-chat-header > .journey-help { max-height: 54px; overflow-y: auto; overflow-wrap: anywhere; }
 .popup #journey-chat-continue { margin-bottom: 6px; min-height: 30px; padding: 4px 7px; font-size: 11px; color: var(--ui-accent); }
+
+/* A blocker is a question to the reviewer, with an explicit stop/continue choice. */
+.popup .journey-help-entry { width: 100%; margin: 10px 0; padding: 10px 12px; background: var(--ui-accent-soft); border-color: var(--ui-line-strong); color: var(--ui-accent); }
+.popup .journey-help-prompt { margin-bottom: 12px; padding: 12px; border: 1px solid var(--ui-line); border-radius: 7px; background: var(--ui-surface); font-size: 13px; line-height: 1.6; }
+.popup .journey-help-prompt > p { margin: 8px 0; white-space: pre-wrap; }
+.popup .journey-help-prompt > small { font-size: 10px; }
+.popup .journey-help-context { margin: 9px 0; color: var(--ui-muted); font-size: 11px; }
+.popup .journey-help-context > summary { cursor: pointer; }
+.popup .journey-help-context > p { white-space: pre-wrap; }
+.popup .journey-help-prompt .journey-text-button { padding: 5px 7px; min-height: 30px; font-size: 11px; }
+.popup .journey-help-response { margin-bottom: 14px; font-size: 12px; line-height: 1.6; }
+.popup .journey-help-response p { white-space: pre-wrap; margin: 6px 0; }
+.popup .journey-help-response small { color: var(--ui-muted); font-size: 10px; }
+.popup .journey-help-fields { margin-bottom: 10px; }
+.popup .journey-help-fields select { width: 100%; min-height: 35px; margin: 0; padding: 7px 10px; font-size: 12px; color: var(--ui-ink); background: var(--ui-surface); border-color: var(--ui-line-strong); }
+.popup .journey-composer-actions { display: flex; gap: 8px; margin-top: 6px; }
+.popup .journey-composer-actions > button { flex: 1; min-width: 0; margin: 0; }
+.popup .journey-help-stop { min-height: 38px; padding: 8px 9px; color: var(--ui-ink); background: var(--ui-surface); border-color: var(--ui-line-strong); font-size: 12px; }
+.popup .journey-help-retry { width: 100%; margin-top: 8px; padding: 7px 10px; font-size: 12px; color: var(--ui-accent); }
+.popup .journey-help-fields[hidden], .popup .journey-help-stop[hidden], .popup .journey-help-retry[hidden], .popup .journey-help-entry[hidden], .popup .journey-question-context[hidden] { display: none; }
+
+.popup .journey-help-assessment { padding: 10px 12px; border-left: 2px solid var(--ui-accent); color: var(--ui-muted); font-size: 12px; line-height: 1.6; }
+.popup .journey-help-assessment[hidden] { display: none; }

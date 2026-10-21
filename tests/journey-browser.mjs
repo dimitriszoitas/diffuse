@@ -79,6 +79,7 @@ async function nativeView(path) {
   await send('Runtime.enable');
   return {
     evaluate,
+    reload: () => send('Page.reload'),
     visible: selector => evaluate(`Boolean(document.querySelector(${JSON.stringify(selector)})?.checkVisibility())`),
     text: selector => evaluate(`document.querySelector(${JSON.stringify(selector)})?.textContent||''`),
     fill: (selector, value) => evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));})()`),
@@ -98,7 +99,7 @@ async function nativeView(path) {
     },
   };
 }
-async function checkNarrowChat() {
+async function checkNarrowChat({assistance = false} = {}) {
   // Freeze the actual rendered native panel, then inspect its shipped styles
   // in a separate browser. Resizing Chrome's native sidebar through CDP is not
   // supported, so this is a responsive layout check rather than a second flow.
@@ -115,13 +116,13 @@ async function checkNarrowChat() {
     for (const theme of ['light', 'dark']) {
       await preview.evaluate(value => {document.documentElement.dataset.theme=value;document.querySelector('#journey-conversation').scrollTop=99999;}, theme);
       assert(await preview.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Chat must fit a 320px sidebar');
-      for (const selector of ['#journey-chat-back', '#journey-question', '#journey-ask']) {
+      for (const selector of ['#journey-chat-back', '#journey-question', '#journey-ask', ...(assistance ? ['#journey-help-stop'] : [])]) {
         const bounds = await preview.locator(selector).boundingBox();
         assert(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 321 && bounds.y >= 0 && bounds.y + bounds.height <= 741, `Narrow chat control clipped: ${selector} ${JSON.stringify(bounds)}`);
       }
-      await preview.screenshot({path: join(artifacts, `journey-chat-320-${theme}.png`)});
+      await preview.screenshot({path: join(artifacts, `${assistance ? 'journey-help' : 'journey-chat'}-320-${theme}.png`)});
     }
-    console.log('PASS actual conversation layout keeps Back, composer and Send visible at 320px in light and dark');
+    console.log(`PASS actual ${assistance ? 'blocked help' : 'conversation'} layout keeps navigation and response controls visible at 320px in light and dark`);
   } finally { await browser.close(); }
 }
 try {
@@ -144,10 +145,10 @@ try {
     globalThis.__journeyDecisionCalls = 0;
     globalThis.__journeyProfiles = [];
     globalThis.__journeyFollowUpRequests = [];
-    globalThis.__journeyDecide = async ({goal, observation, history, routePreferences, persona, exploration, allowRecordMoves, extraInstructions, focusChecks, continuation}) => {
+    globalThis.__journeyDecide = async ({goal, observation, history, routePreferences, persona, exploration, allowRecordMoves, extraInstructions, focusChecks, continuation, priorJourney}) => {
       globalThis.__journeyDecisionCalls++;
-      globalThis.__journeyProfiles.push({persona, exploration, allowRecordMoves, extraInstructions, focusChecks, continuation});
-      const ingredient = goal.includes('Rice milk') ? 'Rice milk' : goal.includes('Soy milk') ? 'Soy milk' : 'Oat milk';
+      globalThis.__journeyProfiles.push({persona, exploration, allowRecordMoves, extraInstructions, focusChecks, continuation, assistance: priorJourney?.assistance});
+      const ingredient = ['Rice milk', 'Soy milk', 'Almond milk', 'Hazelnut milk'].find(name => goal.includes(name)) || 'Oat milk';
       const controls = observation.controls;
       const byLabel = label => controls.find(item => item.label === label);
       const click = label => ({action: {type: 'click', targetId: byLabel(label).id}, reason: `Follow the visible ${label} control.`});
@@ -162,12 +163,18 @@ try {
         return click('Save ingredient');
       }
       const dimensions = ['discoverability', 'clarity', 'effort', 'feedback', 'recovery'];
+      const untestedScores = dimensions.map(dimension => ({dimension, score: null, reason: 'This fixture has not assessed this dimension.', evidenceSteps: [], confidence: 0}));
+      if (['Almond milk', 'Hazelnut milk'].includes(ingredient) && !continuation) return {
+        reason: `${ingredient} was saved. I cannot tell whether this table is enough to verify the requested outcome.`,
+        action: {type: 'finish', outcome: 'blocked', summary: 'The ingredient was saved, but the verification needs reviewer guidance.',
+          helpQuestion: `${ingredient} is now in the table. Should I verify the row here, or open a detail page?`, findings: [], scores: untestedScores}
+      };
       return {reason: `The resulting table contains ${ingredient} and its ml unit.`, action: {
         type: 'finish', outcome: 'completed', summary: `${ingredient} was created and appears in the ingredients table with unit ml.`,
-        findings: [{title: 'Name the creation action', comment: 'The Ingredients page labels its creation action only “New”. The destination is clearer after opening the form.', expected: 'Label the action “Add ingredient” so the object being created is explicit.', category: 'copy-change', severity: 'minor', stepIndex: 2, confidence: .9}],
-        scores: dimensions.map(dimension => ({dimension, score: dimension === 'recovery' ? null : dimension === 'clarity' ? 3 : 4,
+        findings: history.length ? [{title: 'Name the creation action', comment: 'The Ingredients page labels its creation action only “New”. The destination is clearer after opening the form.', expected: 'Label the action “Add ingredient” so the object being created is explicit.', category: 'copy-change', severity: 'minor', stepIndex: 2, confidence: .9}] : [],
+        scores: history.length ? dimensions.map(dimension => ({dimension, score: dimension === 'recovery' ? null : dimension === 'clarity' ? 3 : 4,
           reason: dimension === 'recovery' ? 'No error recovery was needed.' : 'Evidence from the observed task path.',
-          evidenceSteps: dimension === 'recovery' ? [] : [2], confidence: dimension === 'recovery' ? 0 : .8})),
+          evidenceSteps: dimension === 'recovery' ? [] : [2], confidence: dimension === 'recovery' ? 0 : .8})) : untestedScores,
       }};
     };
     globalThis.__journeyFollowUp = async ({stepIndex, question, run}) => {
@@ -405,6 +412,90 @@ try {
   assert.equal((await worker.evaluate(id => __journeyStore.getJourney(id), stopped.id)).video.dataUrl, stopped.video.dataUrl, 'Continue preserves the previous recording');
   await panel.screenshot('journey-continued');
   console.log('PASS stopped journey continues as a linked recording from the current page, inherits its profile and checks, and preserves the original evidence');
+
+  // An AI blocker is an unanswered question, not proof that the product failed.
+  // This fixture creates a record before asking for guidance, so continuing
+  // must retain the existing app state and must not repeat the creation.
+  await until(() => panel.evaluate('document.querySelector("#journey-new").checkVisibility() && !document.querySelector("#journey-new").disabled'), 'finished journey actions ready');
+  await panel.click('#journey-new');
+  await panel.fill('#journey-goal', 'Add Almond milk to Ingredients using ml and verify the saved record.');
+  await panel.click('#journey-start');
+  await until(async () => {const current = await currentRun(); return current?.goal.includes('Almond milk') && current.status === 'blocked' && current.recording?.status === 'saved';}, 'blocked journey asks for help', 60000);
+  const blocked = await currentRun();
+  assert.match(blocked.assistance.question, /Almond milk.*verify the row/);
+  assert.equal(blocked.findings.length, 0, 'Uncertainty must not automatically become a UX defect');
+  await until(() => panel.visible('#journey-help-question'), 'blocker automatically opens conversational help');
+  assert.match(await panel.text('#journey-help-question'), /Almond milk/);
+  assert.equal(await panel.visible('#journey-question'), true);
+  assert.equal(await panel.visible('#journey-help-stop'), true);
+  assert.match(await panel.text('#journey-ask'), /Continue/);
+  assert.equal(await panel.evaluate('document.querySelector("#journey-help-classification").value'), 'unsure');
+  await panel.screenshot('journey-blocked-help');
+  await checkNarrowChat({assistance: true});
+  const blockedUrl = page.url();
+  await panel.click('#journey-chat-back');
+  await pause(7600);
+  assert.equal(await panel.visible('#journey-help-question'), false, 'Polling must respect a manually closed help conversation');
+  assert.equal(page.url(), blockedUrl, 'Waiting for reviewer guidance must not operate the app');
+  await panel.evaluate('document.documentElement.dataset.nativeTestReload="pending"');
+  await panel.reload();
+  await until(async () => {
+    try { return await panel.evaluate('!document.documentElement.dataset.nativeTestReload && document.querySelector("#popup")?.getAttribute("aria-busy")==="false"'); }
+    catch { return false; } // The old execution context briefly disappears.
+  }, 'sidebar reloaded');
+  await until(() => panel.visible('#panel-journey'), 'journey entry after reload');
+  await panel.click('#panel-journey');
+  await until(async () => await panel.visible('#journey-help-question') || await panel.visible('#journey-help-open'), 'saved blocker offers help after reload');
+  if (!await panel.visible('#journey-help-question')) await panel.click('#journey-help-open');
+  await until(() => panel.visible('#journey-help-question'), 'saved blocker help restored');
+  assert.equal(await panel.text('#journey-help-question p'), blocked.assistance.question);
+  const guidance = 'The existing table row confirms success. Verify Almond milk with ml here and finish. Do not create it again.';
+  await panel.fill('#journey-help-classification', 'ai_missed');
+  await panel.fill('#journey-question', guidance);
+  await panel.click('#journey-ask');
+  await until(async () => {const current = await currentRun(); return current?.continuation?.parentRunId === blocked.id && current.status === 'completed' && current.recording?.status === 'saved';}, 'classified help continues the blocked journey', 60000);
+  const assisted = await currentRun();
+  const answeredBlocker = await worker.evaluate(id => __journeyStore.getJourney(id), blocked.id);
+  assert.equal(answeredBlocker.assistance.response.text, guidance);
+  assert.equal(answeredBlocker.assistance.response.classification, 'ai_missed');
+  assert.equal(answeredBlocker.assistance.response.decision, 'continue');
+  assert.equal(assisted.startUrl, blockedUrl);
+  assert.equal(assisted.steps[0].observation.url, blockedUrl);
+  assert.equal(assisted.metrics.actions, 0, 'Guided verification should not recreate an already saved record');
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('ingredients')).filter(item => item.name === 'Almond milk').length), 1);
+  const assistedProfiles = await worker.evaluate(parent => __journeyProfiles.filter(item => item.continuation?.parentRunId === parent), blocked.id);
+  assert.ok(assistedProfiles.length > 0);
+  for (const profile of assistedProfiles) assert.equal(profile.assistance.response.classification, 'ai_missed');
+  assert.equal(answeredBlocker.video.dataUrl, blocked.video.dataUrl, 'Assistance preserves the blocked recording');
+  await panel.screenshot('journey-assisted-completed');
+  console.log('PASS blocked journey automatically asks for help, respects manual close, restores the saved question after reload and continues from the existing record using classified reviewer guidance');
+
+  await until(() => panel.evaluate('document.querySelector("#journey-new").checkVisibility() && !document.querySelector("#journey-new").disabled'), 'assisted journey actions ready');
+  await panel.click('#journey-new');
+  await panel.fill('#journey-goal', 'Add Hazelnut milk to Ingredients using ml and verify the saved record.');
+  await panel.click('#journey-start');
+  await until(async () => {const current = await currentRun(); return current?.goal.includes('Hazelnut milk') && current.status === 'blocked' && current.recording?.status === 'saved';}, 'second blocker ready', 60000);
+  const stopBlocker = await currentRun();
+  await until(() => panel.visible('#journey-help-question'), 'second blocker help opens');
+  await panel.fill('#journey-help-classification', 'experience_issue');
+  await panel.fill('#journey-question', 'Stop here. The confirmation does not make it clear that the ingredient was saved.');
+  const callsBeforeHelpStop = await worker.evaluate(() => __journeyDecisionCalls);
+  await panel.click('#journey-help-stop');
+  await until(async () => (await currentRun())?.assistance?.response?.decision === 'stop', 'stop decision saved with reviewer context');
+  await until(() => panel.visible('#journey-help-response'), 'saved stop response shown in the conversation');
+  assert.match(await panel.text('#journey-help-response'), /confirmation does not make it clear/);
+  assert.match(await panel.text('#journey-status'), /Stopped by you/);
+  assert.equal(await panel.visible('#journey-help-stop'), false, 'An answered blocker no longer asks the reviewer to choose again');
+  const stoppedBlocker = await currentRun();
+  assert.equal(stoppedBlocker.id, stopBlocker.id, 'Stop does not create a continuation');
+  assert.equal(stoppedBlocker.assistance.response.classification, 'experience_issue');
+  assert.deepEqual(stoppedBlocker.scores, stopBlocker.scores, 'Reviewer classification does not rewrite AI scores');
+  assert.deepEqual(stoppedBlocker.findings, stopBlocker.findings, 'Reviewer classification does not create findings automatically');
+  assert.equal(await worker.evaluate(() => __journeyDecisionCalls), callsBeforeHelpStop);
+  assert.equal(stoppedBlocker.video.dataUrl, stopBlocker.video.dataUrl);
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('ingredients')).filter(item => item.name === 'Hazelnut milk').length), 1);
+  await panel.screenshot('journey-help-stopped');
+  console.log('PASS Stop journey saves the classified reviewer explanation without launching a new run or changing the existing app record');
   await writeFile(join(artifacts, 'journey-browser-verification.json'), JSON.stringify({
     status: run.status, pages: [...new Set(run.steps.map(step => step.observation.url))],
     steps: run.steps.length, findings: run.findings.length, metrics: run.metrics,
@@ -413,6 +504,11 @@ try {
   }, null, 2));
 } catch (error) {
   if (panel) await panel.screenshot('journey-failure').catch(() => {});
+  if (worker) console.error('Journey state at failure:', await worker.evaluate(async () => {
+    const session = (await chrome.storage.session.get('comparison')).comparison;
+    const run = session?.journey?.id ? await __journeyStore.getJourney(session.journey.id) : null;
+    return run ? {status: run.status, goal: run.goal, summary: run.summary, recording: run.recording, recordingError: run.recordingError, assistance: run.assistance, steps: run.steps.map(step => ({index: step.index, url: step.observation.url, action: step.action, reason: step.reason}))} : null;
+  }).catch(() => null));
   throw error;
 } finally {
   await context?.close();

@@ -20,14 +20,18 @@ async function db() {
 export async function getJourney(id) {
   return request((await db()).transaction('runs').objectStore('runs').get(id));
 }
-// Reserve the written run and its direct fork parent before evicting older
-// history. The pair may exceed the approximate byte budget, but not the count
-// cap; a fork must never delete its own original while saving its recording.
+// Reserve the written run and its direct parent, or its directly linked help
+// continuation while saving the parent's response pointer. The pair may exceed
+// the approximate byte budget, but never recursively protects an ancestry.
 export function retainedJourneyIds(runs, writtenId, {maxRuns = 10, maxBytes = 80 * 1024 * 1024} = {}) {
   const written = runs.find(run => run.id === writtenId);
   const parentId = written?.fork?.parentRunId || written?.continuation?.parentRunId;
   const parent = parentId ? runs.find(run => run.id === parentId && run.reviewId === written.reviewId) : null;
-  const protectedRuns = [written, parent].filter(Boolean);
+  const response = written?.assistance?.response;
+  const linkedChild = response?.continuationRunId && response.id && response.decision === 'continue'
+    ? runs.find(run => run.id === response.continuationRunId && run.reviewId === written.reviewId &&
+      run.continuation?.parentRunId === written.id && run.continuation.assistanceResponseId === response.id) : null;
+  const protectedRuns = [written, linkedChild || parent].filter(Boolean);
   const kept = new Set(protectedRuns.map(run => run.id));
   let bytes = protectedRuns.reduce((total, run) => total + JSON.stringify(run).length, 0);
   for (const run of [...runs].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))) {
@@ -55,7 +59,8 @@ export async function listJourneys(reviewId) {
   return all.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(({id, goal, status, createdAt, updatedAt, fork, continuation, persona}) => ({id, goal, status, createdAt, updatedAt,
     ...(persona ? {persona} : {}),
     ...(fork ? {fork: {parentRunId: fork.parentRunId, stepIndex: fork.stepIndex, instructions: fork.instructions?.slice(0, 100)}} : {}),
-    ...(continuation ? {continuation: {parentRunId: continuation.parentRunId, instructions: continuation.instructions?.slice(0, 100)}} : {})}));
+    ...(continuation ? {continuation: {parentRunId: continuation.parentRunId, instructions: continuation.instructions?.slice(0, 100),
+      ...(continuation.assistanceResponseId ? {assistanceResponseId: continuation.assistanceResponseId} : {})}} : {})}));
 }
 export async function deleteJourneys(reviewId) {
   const transaction = (await db()).transaction('runs', 'readwrite');

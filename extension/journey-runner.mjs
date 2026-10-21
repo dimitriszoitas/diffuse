@@ -1,4 +1,5 @@
 import {JourneyError, validateJourneyDecision, journeyControlBounds, journeyControlScroll} from './journey-ai.mjs';
+import {journeyAssistance} from './journey-assistance.mjs';
 
 const ACTIVE = new Set(['running', 'paused']);
 const MAX_EVIDENCE_BYTES = 24 * 1024 * 1024;
@@ -77,6 +78,8 @@ export function createJourneyRunner({observe, execute, decide, onUpdate = () => 
   const finish = (status, summary) => {
     if (!state || !ACTIVE.has(state.status)) return;
     state.status = status; state.summary = summary;
+    state.updatedAt = stamp();
+    if (status === 'blocked') state.assistance = journeyAssistance(state);
     generation++; controller?.abort(); wake?.(); wake = null; notify();
   };
   const pause = () => {

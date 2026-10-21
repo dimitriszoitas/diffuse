@@ -1,4 +1,4 @@
-# Try Diffuse 0.15.0
+# Try Diffuse 0.16.0
 
 Compare a live prototype over production or audit one page. Leave pinned comments on elements or areas, record a short silent interaction, and share feedback through GitHub or Jira. Work through a shared PR review and capture updated evidence for recheck. Claude can suggest findings when you connect your own Anthropic API key.
 
@@ -6,14 +6,14 @@ Compare a live prototype over production or audit one page. Leave pinned comment
 
 For a first installation:
 
-1. Download and unzip [Diffuse-0.15.0.zip](https://github.com/dimitriszoitas/diffuse/releases/download/v0.15.0/Diffuse-0.15.0.zip). Keep the resulting **Diffuse** folder somewhere permanent.
+1. Download and unzip [Diffuse-0.16.0.zip](https://github.com/dimitriszoitas/diffuse/releases/download/v0.16.0/Diffuse-0.16.0.zip). Keep the resulting **Diffuse** folder somewhere permanent.
 2. In your normal Chrome browser, open `chrome://extensions`.
 3. Turn on **Developer mode**, then click **Load unpacked** and choose that **Diffuse** folder.
 4. Pin **Diffuse — Live design comparison** using Chrome’s extensions menu.
 
-**Updating an official 0.10.2, 0.11.0, or 0.12.0 installation?** Replace the files in the existing Diffuse folder, click **Reload** in `chrome://extensions`, then refresh reviewed pages. Keep the same installation to retain reviews and settings.
+**Updating an official 0.10.2 or later installation?** Replace the files in the existing Diffuse folder, click **Reload** in `chrome://extensions`, then refresh reviewed pages. Keep the same installation to retain reviews and settings.
 
-**Upgrading from 0.10.1 or earlier?** First export the reviews you want to keep with **⋯ → Export review**. Keep the old extension and folder intact. Install 0.15.0 from a separate folder, import your files using **Load review**, and reconnect Jira and optional AI/Figma settings. Disable the old copy after checking the imported reviews. The shared identity introduced in 0.10.2 has separate storage, so replacing older files does not transfer their reviews.
+**Upgrading from 0.10.1 or earlier?** First export the reviews you want to keep with **⋯ → Export review**. Keep the old extension and folder intact. Install 0.16.0 from a separate folder, import your files using **Load review**, and reconnect Jira and optional AI/Figma settings. Disable the old copy after checking the imported reviews. The shared identity introduced in 0.10.2 has separate storage, so replacing older files does not transfer their reviews.
 
 You do not need to sign in to a special test browser or share a password with Diffuse.
 
@@ -185,3 +185,5 @@ Enable Desktop MCP in the matching file's Figma Dev Mode, then connect it in **D
 When you open the Jira export preview, Diffuse uses your configured Anthropic key and model to suggest a concise title from each full comment, expected result, and reproduction steps. Review or edit the title before creating tickets. Existing titles are preserved. Without AI access, an excerpt from the comment is used, and Jira export still works. Saving comments never calls AI.
 
 For a stopped, blocked, or inconclusive run, choose **Continue journey**, explain what to try next, and continue from the page currently open on the same website. This keeps the previous attempt and starts a linked continuation with its own recording and counts. It does not restart the task or reset the app.
+
+When the journey is blocked, Diffuse asks for help in chat. Give guidance, classify the blocker, then choose **Stop journey** or **Continue**. Stop saves your feedback without another AI call. Continue uses your guidance from the current page, retaining the earlier notes and movie. If startup fails, use **Continue with saved answer** to retry safely.

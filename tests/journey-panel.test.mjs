@@ -11,7 +11,7 @@ const deferred = () => { let resolve; const promise = new Promise(done => { reso
 // Execute the complete shipped controller. The small DOM below models only
 // nodes/events; the actual controller owns state, request ordering and rendering.
 async function harness({stateReply = async () => ({ok: true, run: null}), messageReply = null, historyReply = async () => ({ok: true, runs: []})} = {}) {
-  const elements = new Map(), requests = [], timers = new Map();
+  const elements = new Map(), requests = [], permissionRequests = [], timers = new Map();
   let timerId = 0;
   class Events {
     listeners = new Map();
@@ -79,6 +79,7 @@ async function harness({stateReply = async () => ({ok: true, run: null}), messag
   const window = new Events();
   const session = {id: 'session', reviewId: 'review', target: {url: 'https://example.test/'}};
   const chrome = {
+    permissions: {request: async details => { permissionRequests.push(details); return true; }},
     windows: {getCurrent: async () => ({id: 1})},
     runtime: {sendMessage: async message => {
       requests.push(structuredClone(message));
@@ -106,7 +107,7 @@ async function harness({stateReply = async () => ({ok: true, run: null}), messag
     throw new Error('Controller kept scheduling refreshes unexpectedly');
   };
   return {
-    elements, requests, session, document,
+    elements, requests, permissionRequests, session, document,
     async open() { await elements.get('panel-journey').emit('click'); await flushRefresh(); },
     async refresh() { await window.emit('diffuse-panel-state', {detail: {session, state: {}}}); await flushRefresh(); },
     async changeSession(next) { await window.emit('diffuse-panel-state', {detail: {session: next, state: {}}}); await flushRefresh(); },
@@ -233,4 +234,83 @@ test('a history request from a previous review cannot show its error in a replac
   gate.resolve({ok: false, error: 'Old review error'}); await loading;
   assert.equal(h.elements.get('journey-error').textContent, '');
   assert.equal(h.elements.get('journey-error').hidden, true);
+});
+
+
+const helpRun = () => ({...savedRun(), assistance: {question: "I can’t find the remaining recipes. What should I try?", stepIndex: 1, createdAt: '2026-10-22T08:00:00Z'}});
+
+test('a blocked journey asks for help once, and Stop saves its classification without starting another run', async () => {
+  let record = helpRun();
+  const h = await harness({stateReply: async () => ({ok: true, run: record}), messageReply: async message => {
+    assert.equal(message.type, 'JOURNEY_RESPOND');
+    record = {...record, assistance: {...record.assistance, response: {...message.response, id: 'response-stop', createdAt: '2026-10-22T08:01:00Z'}}};
+    return {ok: true, run: record};
+  }});
+  await h.open(); await h.open();
+  assert.equal(h.document.body.dataset.journeyChat, 'open');
+  assert.equal(h.elements.get('journey-discussion-title').textContent, 'I need your help');
+  assert.match(h.elements.get('journey-help-question').textContent, /remaining recipes/);
+  assert.equal(h.elements.get('journey-ask').textContent, 'Continue');
+  await h.elements.get('journey-chat-back').emit('click'); await h.refresh();
+  assert.equal(h.document.body.dataset.journeyChat, 'closed', 'Polling must not force a dismissed conversation open again');
+  await h.elements.get('journey-help-open').emit('click');
+  h.elements.get('journey-help-classification').value = 'ai_missed';
+  await h.elements.get('journey-help-stop').emit('click');
+  const sent = h.requests.find(item => item.type === 'JOURNEY_RESPOND');
+  assert.deepEqual(sent.response, {text: '', classification: 'ai_missed', decision: 'stop'});
+  assert.equal(h.requests.some(item => item.type === 'JOURNEY_START'), false);
+  assert.equal(h.elements.get('journey-status').textContent, 'Stopped by you');
+  assert.match(h.elements.get('journey-help-response').textContent, /AI missed something/);
+  assert.equal(h.elements.get('journey-help-fields').hidden, true);
+});
+
+test('classified guidance survives a continuation failure and retries with the same saved response ID', async () => {
+  let record = helpRun(), starts = 0;
+  const h = await harness({stateReply: async () => ({ok: true, run: record}), messageReply: async message => {
+    if (message.type === 'JOURNEY_RESPOND') {
+      record = {...record, assistance: {...record.assistance, response: {...message.response, id: 'response-continue', createdAt: '2026-10-22T08:01:00Z'}}};
+      return {ok: true, run: record};
+    }
+    assert.equal(message.type, 'JOURNEY_START'); starts++;
+    assert.deepEqual(structuredClone(message.input.continuation), {parentRunId: 'saved-run', instructions: 'Scroll the list, then select four recipes.', assistanceResponseId: 'response-continue'});
+    if (starts === 1) return {ok: false, error: 'Keep the reviewed tab visible'};
+    record = {...savedRun(), id: 'child', status: 'completed', continuation: message.input.continuation};
+    return {ok: true, run: record};
+  }});
+  await h.open(); await h.open();
+  h.elements.get('journey-help-classification').value = 'experience_issue';
+  h.elements.get('journey-question').value = 'Scroll the list, then select four recipes.';
+  await h.elements.get('journey-question-form').emit('submit');
+  assert.equal(record.assistance.response.decision, 'continue');
+  assert.equal(h.elements.get('journey-help-retry').hidden, false);
+  assert.match(h.elements.get('journey-question-error').textContent, /tab visible/);
+  await h.elements.get('journey-help-retry').emit('click');
+  assert.equal(h.requests.filter(item => item.type === 'JOURNEY_RESPOND').length, 1);
+  assert.equal(starts, 2);
+  assert.equal(h.document.body.dataset.journeyChat, 'closed');
+  assert.equal(h.elements.get('journey-status').textContent, 'Task completed');
+});
+
+test('opening a saved continuation stays on that run when a newer journey exists', async () => {
+  const parent = helpRun();
+  parent.assistance.response = {id: 'response-continue', text: 'Scroll the list.', classification: 'ai_missed', decision: 'continue', createdAt: '2026-10-22T08:01:00Z', continuationRunId: 'child'};
+  const child = {...savedRun(), id: 'child', status: 'completed', goal: 'Complete the existing recipe import'};
+  const newer = {...savedRun(), id: 'newer', status: 'stopped', goal: 'An unrelated newer task'};
+  let initial = true;
+  const h = await harness({stateReply: async message => ({ok: true, run: message.runId === 'child' ? child : initial ? parent : newer}), messageReply: async message => {
+    assert.equal(message.type, 'JOURNEY_LOAD');
+    assert.equal(message.runId, 'child');
+    initial = false;
+    return {ok: true, run: child};
+  }});
+  await h.open(); await h.open();
+  await h.elements.get('journey-chat-open').emit('click');
+  assert.equal(h.elements.get('journey-help-retry').textContent, 'Open continued journey');
+  await h.elements.get('journey-help-retry').emit('click');
+  await h.refresh();
+  assert.equal(h.permissionRequests.length, 0, 'Reading a saved run does not need website permission');
+  assert.equal(h.requests.some(message => message.type === 'JOURNEY_START'), false);
+  assert.equal(h.requests.filter(message => message.type === 'JOURNEY_STATE').at(-1).runId, 'child');
+  assert.equal(h.elements.get('journey-status').textContent, 'Task completed');
+  assert.equal(h.elements.get('journey-run-goal').textContent, child.goal);
 });

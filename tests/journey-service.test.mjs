@@ -680,3 +680,187 @@ test('continuation rejects unauthorized parents, origins and instructions before
   assert.equal(captures, 0);
   assert.equal(h.service.busy, false);
 });
+
+
+const helpReply = (extra = {}) => ({text: 'The new row in the table confirms the save. Check it without creating another entry.', classification: 'ai_missed', decision: 'continue', ...extra});
+const blockedRun = (extra = {}) => savedRun({status: 'blocked', summary: 'I cannot confirm whether the entry was saved.', ...extra});
+const responseMessage = (extra = {}) => ({runId: 'run-saved', response: helpReply(), ...extra});
+
+test('help replies are saved once without AI access or changing original evidence and scores', async () => {
+  let writes = 0;
+  const h = harness({service: {readConfig: async () => { throw new Error('Reply must not need AI setup.'); }}});
+  const run = blockedRun(), original = copy(run); h.records.set(run.id, run);
+  const put = h.store.putJourney; h.store.putJourney = async value => { writes++; return put(value); };
+  const [first, repeat] = await Promise.all([h.message('JOURNEY_RESPOND', responseMessage()), h.message('JOURNEY_RESPOND', responseMessage())]);
+  assert.equal(writes, 1);
+  assert.equal(first.run.assistance.response.id, repeat.run.assistance.response.id);
+  assert.equal(first.run.assistance.response.classification, 'ai_missed');
+  assert.match(first.run.assistance.question, /cannot confirm/);
+  assert.deepEqual(first.run.steps, original.steps);
+  assert.deepEqual(first.run.findings, original.findings);
+  assert.deepEqual(first.run.scores, original.scores);
+  assert.equal(first.run.status, 'blocked');
+  assert.equal(h.calls.execute, 0);
+  assert.equal(h.comments.length, 0);
+  assert.equal(h.service.busy, false);
+  await assert.rejects(h.message('JOURNEY_RESPOND', responseMessage({response: helpReply({classification: 'experience_issue'})})), /already has a saved reply/);
+});
+
+test('help reply validates review ownership, status and explicit stop/continue choices', async () => {
+  const h = harness(); h.records.set('run-saved', blockedRun());
+  h.records.set('foreign', blockedRun({id: 'foreign', reviewId: 'other-review'}));
+  await assert.rejects(h.message('JOURNEY_RESPOND', responseMessage({runId: 'foreign'})), /no longer available in this review/);
+  await assert.rejects(h.message('JOURNEY_RESPOND', responseMessage({response: helpReply({text: ''})})), /Tell Diffuse/);
+  await assert.rejects(h.message('JOURNEY_RESPOND', responseMessage({response: helpReply({classification: 'not_a_choice'})})), /Choose what caused/);
+  h.records.set('completed', savedRun({id: 'completed'}));
+  await assert.rejects(h.message('JOURNEY_RESPOND', responseMessage({runId: 'completed'})), /Only a blocked journey/);
+  const stopped = await h.message('JOURNEY_RESPOND', responseMessage({response: helpReply({decision: 'stop', text: '', classification: 'unsure'})}));
+  assert.equal(stopped.run.status, 'blocked');
+  assert.equal(stopped.run.assistance.response.decision, 'stop');
+  assert.equal(stopped.run.assistance.response.text, '');
+  assert.equal(h.calls.execute, 0);
+});
+
+test('a help reply waits for recording finalization and cannot be overwritten by the final movie', async () => {
+  const rec = recorderFixture(), videoReady = deferred();
+  rec.recorder.stop = async () => videoReady.promise;
+  const h = harness({service: {startRecording: rec.startRecording}});
+  const started = await h.start();
+  await h.updateState({steps: savedRun().steps, findings: [finding], scores: []});
+  const blocked = h.service.blocked('I cannot find confirmation.');
+  await tick();
+  let replied = false;
+  const answering = h.message('JOURNEY_RESPOND', responseMessage({runId: started.run.id})).then(value => { replied = true; return value; });
+  await tick(); assert.equal(replied, false);
+  videoReady.resolve(rec.video);
+  await blocked;
+  const reply = await answering;
+  assert.equal(reply.run.recording.status, 'saved');
+  assert.deepEqual(reply.run.video, rec.video);
+  assert.equal(reply.run.assistance.response.classification, 'ai_missed');
+  assert.equal(h.records.get(started.run.id).assistance.response.id, reply.run.assistance.response.id);
+  assert.deepEqual(h.records.get(started.run.id).findings, [finding]);
+  assert.equal(h.service.busy, false);
+});
+
+test('cancelled or replaced-session help replies cannot write after a delayed read', async () => {
+  for (const cancel of ['interrupt', 'session']) {
+    const ready = deferred(), release = deferred(), h = harness();
+    h.records.set('run-saved', blockedRun());
+    const get = h.store.getJourney;
+    h.store.getJourney = async id => { ready.resolve(); await release.promise; return get(id); };
+    const pending = h.message('JOURNEY_RESPOND', responseMessage());
+    await ready.promise;
+    if (cancel === 'interrupt') await h.service.interrupt();
+    else h.current = {...h.current, id: 'replacement'};
+    release.resolve();
+    await assert.rejects(pending, /cancelled|review has ended/);
+    assert.equal(h.records.get('run-saved').assistance, undefined);
+    assert.equal(h.service.busy, false);
+  }
+});
+
+test('queued help replies are cancelled together and persistence failure permits a clean retry', async () => {
+  const ready = deferred(), release = deferred(), h = harness(); h.records.set('run-saved', blockedRun());
+  const get = h.store.getJourney; let reads = 0;
+  h.store.getJourney = async id => { reads++; ready.resolve(); await release.promise; return get(id); };
+  const first = h.message('JOURNEY_RESPOND', responseMessage()), queued = h.message('JOURNEY_RESPOND', responseMessage());
+  const settled = Promise.allSettled([first, queued]);
+  await ready.promise; await h.service.interrupt(); release.resolve();
+  assert.deepEqual((await settled).map(item => item.status), ['rejected', 'rejected']);
+  assert.equal(reads, 1);
+  h.store.getJourney = get;
+  const put = h.store.putJourney;
+  h.store.putJourney = async () => { throw new Error('Storage full'); };
+  await assert.rejects(h.message('JOURNEY_RESPOND', responseMessage()), /Storage full/);
+  assert.equal(h.service.busy, false);
+  assert.equal(h.records.get('run-saved').assistance, undefined);
+  h.store.putJourney = put;
+  assert.equal((await h.message('JOURNEY_RESPOND', responseMessage())).run.assistance.response.decision, 'continue');
+});
+
+test('continued help uses the current page and duplicate requests reuse one child before and after completion', async () => {
+  let recordings = 0, executors = 0;
+  const h = harness({service: {
+    checkReady: async () => ({url: 'https://example.test/ingredients'}),
+    startRecording: async () => { recordings++; return null; },
+    createExecutor: async () => { executors++; return {observe: async () => ({}), execute: async () => {}, cleanup: async () => {}}; },
+  }});
+  const original = blockedRun(); h.records.set(original.id, copy(original));
+  const answered = (await h.message('JOURNEY_RESPOND', responseMessage())).run;
+  const response = answered.assistance.response;
+  const input = {continuation: {parentRunId: original.id, instructions: response.text, assistanceResponseId: response.id}};
+  const first = await h.message('JOURNEY_START', {input});
+  await tick();
+  const duplicate = await h.message('JOURNEY_START', {input});
+  assert.equal(duplicate.run.id, first.run.id);
+  assert.equal(first.run.startUrl, 'https://example.test/ingredients');
+  assert.equal(first.run.goal, original.goal);
+  assert.equal(first.run.continuation.assistanceResponseId, response.id);
+  assert.equal(h.records.get(original.id).assistance.response.continuationRunId, first.run.id);
+  await h.runnerOptions.decide({goal: original.goal, observation: {}});
+  assert.equal(h.calls.decisions[0].priorJourney.assistance.response.classification, 'ai_missed');
+  assert.deepEqual(h.calls.decisions[0].priorJourney.steps, original.steps);
+  await h.finish();
+  const replay = await h.message('JOURNEY_START', {input});
+  assert.equal(replay.run.id, first.run.id);
+  assert.equal(replay.run.status, 'completed');
+  assert.equal(recordings, 1);
+  assert.equal(executors, 1);
+  assert.deepEqual(h.records.get(original.id).steps, original.steps);
+  assert.deepEqual(h.records.get(original.id).findings, original.findings);
+  assert.equal(h.records.size, 2);
+
+  // A fresh service instance must recover the idempotence link too.
+  const restarted = harness({store: h.store, service: {readConfig: async () => { throw new Error('Existing child must not need a new AI request'); }}});
+  const recovered = await restarted.message('JOURNEY_START', {input});
+  assert.equal(recovered.run.id, first.run.id);
+  h.records.delete(first.run.id);
+  await assert.rejects(restarted.message('JOURNEY_START', {input}), /already started a continuation/);
+  assert.equal(h.records.size, 1);
+});
+
+test('help continuation rejects a different reply, changed guidance or a stop choice before capture', async () => {
+  let captures = 0;
+  const h = harness({service: {startRecording: async () => { captures++; return null; }}});
+  h.records.set('run-saved', blockedRun());
+  const reply = (await h.message('JOURNEY_RESPOND', responseMessage())).run.assistance.response;
+  for (const continuation of [
+    {parentRunId: 'run-saved', instructions: reply.text, assistanceResponseId: 'wrong-id'},
+    {parentRunId: 'run-saved', instructions: 'Ignore the saved help', assistanceResponseId: reply.id},
+  ]) await assert.rejects(h.message('JOURNEY_START', {input: {continuation}}), /guidance saved/);
+  h.records.set('stopped', blockedRun({id: 'stopped'}));
+  const stop = (await h.message('JOURNEY_RESPOND', responseMessage({runId: 'stopped', response: helpReply({decision: 'stop'})}))).run.assistance.response;
+  await assert.rejects(h.message('JOURNEY_START', {input: {continuation: {parentRunId: 'stopped', instructions: stop.text, assistanceResponseId: stop.id}}}), /guidance saved/);
+  assert.equal(captures, 0);
+});
+
+
+test('a pending response-linked startup cannot create a second run, and retries after startup reuse it', async () => {
+  const captureReady = deferred(), releaseCapture = deferred(); let captures = 0;
+  const h = harness({service: {startRecording: async () => { captures++; captureReady.resolve(); await releaseCapture.promise; return null; }}});
+  h.records.set('run-saved', blockedRun());
+  const response = (await h.message('JOURNEY_RESPOND', responseMessage())).run.assistance.response;
+  const input = {continuation: {parentRunId: 'run-saved', instructions: response.text, assistanceResponseId: response.id}};
+  const first = h.message('JOURNEY_START', {input});
+  await captureReady.promise;
+  await assert.rejects(h.message('JOURNEY_START', {input}), /Stop the current journey/);
+  releaseCapture.resolve();
+  const started = await first;
+  try {
+    assert.equal((await h.message('JOURNEY_START', {input})).run.id, started.run.id);
+    assert.equal(captures, 1);
+  } finally { await h.service.interrupt(); }
+});
+
+test('child history recovers a response link even if the parent pointer write was interrupted', async () => {
+  const h = harness({service: {readConfig: async () => { throw new Error('No new AI run should begin.'); }}});
+  const parent = blockedRun({assistance: {question: 'Where should I look?', createdAt: '2026-10-22T10:00:00Z', response: {
+    id: 'response-1', ...helpReply(), createdAt: '2026-10-22T10:01:00Z'}}});
+  const child = savedRun({id: 'run-child', continuation: {parentRunId: parent.id, instructions: helpReply().text, assistanceResponseId: 'response-1'}});
+  h.records.set(parent.id, parent); h.records.set(child.id, child);
+  const result = await h.message('JOURNEY_START', {input: {continuation: child.continuation}});
+  assert.equal(result.run.id, child.id);
+  assert.equal(h.records.size, 2);
+  assert.equal(h.calls.execute, 0);
+});

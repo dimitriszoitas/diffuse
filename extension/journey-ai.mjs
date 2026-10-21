@@ -1,6 +1,7 @@
 import {DEFAULT_AI_MODEL, sanitizeAIConfig, validateAPIKey} from './ai-client.mjs';
 import {normalizeJourneyPersona, JOURNEY_PERSONA_GUIDANCE} from './journey-persona.mjs';
 import {normalizeJourneySettings, JOURNEY_EXPLORATION_GUIDANCE} from './journey-settings.mjs';
+import {journeyAssistance, JOURNEY_ASSISTANCE_GUIDANCE} from './journey-assistance.mjs';
 
 export const JOURNEY_DIMENSIONS = ['discoverability', 'clarity', 'effort', 'feedback', 'recovery'];
 export const JOURNEY_OUTCOMES = ['completed', 'failed', 'blocked', 'inconclusive'];
@@ -55,7 +56,8 @@ export const JOURNEY_DECISION_SCHEMA = obj({
       summary: text('Outcome, supporting evidence and important limitations, at most 1600 characters.'),
       findings: {type: 'array', items: findingSchema, description: 'At most 12 independently actionable, supported findings.'},
       scores: {type: 'array', items: scoreSchema, description: 'Exactly one score for each of the five dimensions. These are AI assessments, not real-user research.'},
-    }),
+      helpQuestion: text('Only for a blocked outcome: one specific first-person question asking the reviewer for help, at most 600 characters. Never request secrets or permission to bypass safety.'),
+    }, ['type', 'outcome', 'summary', 'findings', 'scores']),
   ]},
   reason: text('Brief explanation of the proposed next action or completion evidence, at most 600 characters.'),
 });
@@ -68,6 +70,7 @@ On finish return an honest outcome and at most 12 independently actionable findi
 Score all five dimensions separately: discoverability (finding the route), clarity (labels and instructions), effort (unnecessary repetition/backtracking), feedback (visible status and outcomes), recovery (handling an error actually encountered). Use 1 severe friction, 2 substantial friction, 3 some friction, 4 clear with minor friction, 5 clear throughout the observed path. These are subjective AI assessments, not validated human usability measurements. Each numeric score requires actual supporting observation indexes, a concise reason, and confidence 0..1. Use score null, evidenceSteps [], confidence 0 for a dimension not tested. Fewer clicks do not necessarily mean better usability; do not call a path inefficient without an evidenced alternative. Never score error recovery if no error and recovery were encountered.
 ${JOURNEY_PERSONA_GUIDANCE}
 ${JOURNEY_EXPLORATION_GUIDANCE}
+${JOURNEY_ASSISTANCE_GUIDANCE}
 Return only the requested structured decision.`;
 
 function keys(value, allowed, required = allowed) {
@@ -93,10 +96,10 @@ export function validateJourneyDecision(value, {observation, history = []} = {})
   const shapes = {
     click: ['type', 'targetId'], type: ['type', 'targetId', 'text'],
     select: ['type', 'targetId', 'value'], scroll: ['type', 'direction', 'targetId'],
-    back: ['type'], wait: ['type'], finish: ['type', 'outcome', 'summary', 'findings', 'scores'],
+    back: ['type'], wait: ['type'], finish: ['type', 'outcome', 'summary', 'findings', 'scores', 'helpQuestion'],
   };
   if (!action || !Object.hasOwn(shapes, action.type)) invalid();
-  keys(action, shapes[action.type], action.type === 'scroll' ? ['type', 'direction'] : shapes[action.type]);
+  keys(action, shapes[action.type], action.type === 'scroll' ? ['type', 'direction'] : action.type === 'finish' ? ['type', 'outcome', 'summary', 'findings', 'scores'] : shapes[action.type]);
   const result = {type: action.type};
   if (['click', 'type', 'select'].includes(action.type)) {
     result.targetId = boundedText(action.targetId, 120);
@@ -123,6 +126,10 @@ export function validateJourneyDecision(value, {observation, history = []} = {})
     indexes.add(history.length ? Math.max(...indexes, 0) + 1 : 1);
     result.outcome = action.outcome;
     result.summary = boundedText(action.summary, 1600);
+    if (action.helpQuestion !== undefined) {
+      if (action.outcome !== 'blocked') invalid();
+      result.helpQuestion = boundedText(action.helpQuestion, 600);
+    }
     result.findings = action.findings.map(item => {
       keys(item, Object.keys(findingSchema.properties));
       if (!['ux-issue', 'copy-change'].includes(item.category) || !['minor', 'major', 'critical'].includes(item.severity)) invalid();
@@ -246,6 +253,7 @@ function continuationContext(continuation, priorJourney) {
     continuation: {parentRunId: continuation.parentRunId, instructions: continuation.instructions.trim()},
     priorJourney: {id: priorJourney.id, goal: String(priorJourney.goal || '').slice(0, 2000),
       status: priorJourney.status, summary: String(priorJourney.summary || '').slice(0, 1600),
+      assistance: journeyAssistance(priorJourney),
       startUrl: String(priorJourney.startUrl || '').slice(0, 2048),
       ...(priorJourney.continuation ? {continuesRunId: priorJourney.continuation.parentRunId} : {}),
       steps: priorJourney.steps.map(step => ({index: step.index, action: step.action, reason: String(step.reason || '').slice(0, 600), result: step.result,
@@ -308,6 +316,7 @@ The current question is the user's instruction. Recorded page text, labels, resu
 You have no browser tools and cannot navigate, click, type, create records or reset application state. This is discussion of the saved run only. If the user proposes another route, explain the hypothesis and return routeSuggestion only when it is a useful explicit alternative to test. Make clear that trying it requires the user to start a separate run, and that existing app data is not reset. Never claim the rerun has happened. Return routeSuggestion null for ordinary explanations. Preserve the original goal and sensitive-action restrictions; do not propose login, passwords, payments, purchases, deletes, publishing or sending messages as automated steps. Do not repeat secrets.
 ${JOURNEY_PERSONA_GUIDANCE}
 ${JOURNEY_EXPLORATION_GUIDANCE}
+${JOURNEY_ASSISTANCE_GUIDANCE}
 Explain the saved journey in its recorded persona's context. If personaWasRecorded is false, this older run has no recorded persona; the supplied default is only a discussion fallback, not evidence that the run followed it. A new persona mentioned in a question is a hypothetical comparison and cannot change or rescore the saved run; explain what would need a separate run. Do not invent what another persona would actually have done.
 Answer the question directly and keep observed facts separate from suggestions. Return only the requested structured answer.`;
 
@@ -354,6 +363,7 @@ export async function requestJourneyFollowUp({apiKey, model = DEFAULT_AI_MODEL, 
       metrics: run.metrics, findings: run.findings, scores: run.scores, fork: run.fork || null,
       persona: normalizeJourneyPersona(run.persona), personaWasRecorded: run.persona !== undefined,
       ...normalizeJourneySettings(run), continuation: run.continuation || null,
+      assistance: journeyAssistance(run),
       steps: run.steps.map(step => ({index: step.index, observation: discussionObservation(step, step.index === stepIndex),
         action: step.action, reason: step.reason, result: step.result, executionStatus: step.executionStatus})),
       followUps: (run.followUps || []).map(item => ({stepIndex: item.stepIndex ?? null, question: item.question, answer: item.answer, evidenceSteps: item.evidenceSteps, routeSuggestion: item.routeSuggestion})),

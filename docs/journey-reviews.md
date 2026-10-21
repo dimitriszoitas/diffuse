@@ -42,6 +42,16 @@ A fork starts at the original starting URL on the same website. It is a separate
 
 Up to 20 questions are retained with each local run. A question sends the saved journey evidence, prior conversation, and the selected step’s screenshot when available to Anthropic using your key. It does not send the full movie. API charges apply.
 
+## Respond when Diffuse gets stuck
+
+A blocked attempt opens a help conversation with a question in plain language. Expand **What happened** to see the recorded reason, or open its cited step. Closing the conversation leaves **Reply to Diffuse** on the result; polling does not repeatedly reopen it.
+
+Give guidance and choose your assessment: **Issue with the experience**, **AI missed something**, or **Not sure yet**. The assessment concerns this blocker, not every finding at the same step or the whole product. It stays separate from the original AI observations and scores, and is included as reviewer context in subsequent discussion and continuation. No issue is created automatically.
+
+Choose **Stop journey** to save your feedback and leave the attempt stopped. A written answer is optional for Stop, and saving it makes no model call. Choose **Continue** to save your answer and use it as instructions for the next part of the journey from the current page. Sensitive actions still require the same manual intervention; classifying a blocker as an AI miss does not grant additional permissions.
+
+Your answer stays saved even if continuation cannot start. **Continue with saved answer** retries the same response; **Open continued journey** returns to the attempt already created from it. The parent recording finishes saving before a response is stored, so the movie and feedback remain together.
+
 ## Continue an unfinished journey
 
 For a stopped, blocked, or inconclusive run, choose **Continue journey** in the result or chat. Add instructions, review the inherited persona and exploration settings, and choose **Continue from current page**. The page must be on the same website as the previous run. Diffuse reads its current state; it does not return to the original URL, recreate the project, restore a snapshot, or reset application data.
@@ -52,7 +62,7 @@ A continuation is a linked new part with its own action budget, numbered steps, 
 
 - **Completed**: the AI judged that the observed result met the supplied goal. Inspect the final screenshot and explanation; this is not a backend assertion or a human usability study.
 - **Failed**: the AI identified an observed task failure and explains its evidence.
-- **Blocked**: the run needs human intervention, such as login, a different website, a sensitive action, or an unsupported control.
+- **Blocked**: Diffuse needs guidance or human intervention, such as finding a route, login, a different website, a sensitive action, or an unsupported control. It asks for help before any continuation.
 - **Inconclusive**: the action/time limit, browser interruption, provider error, or uncertain outcome prevented a reliable conclusion.
 - **Stopped**: you ended the run.
 
