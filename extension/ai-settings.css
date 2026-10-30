@@ -7,7 +7,6 @@ body.settings-page { margin: 0; font: 14px/1.5 -apple-system, BlinkMacSystemFont
 .settings-page button:not(:disabled):hover { background: var(--ui-surface-muted, #f3f6fa); }
 .settings-page button:disabled { cursor: default; background: var(--ui-surface-muted, #f3f6fa); color: var(--ui-muted, #62738a); border-color: var(--ui-line, #e0e7ef); }
 .settings-page a { color: var(--ui-accent, #235ed7); text-underline-offset: 3px; text-decoration-thickness: 1px; overflow-wrap: anywhere; }
-.settings-page :is(button, a, input, summary, [tabindex="-1"]):focus-visible { outline: 2px solid var(--ui-accent, #235ed7); outline-offset: 3px; }
 .settings-page .topbar { min-height: 64px; border-bottom: 1px solid var(--ui-line, #e0e7ef); padding: 8px max(24px, calc((100% - 1040px)/2)); display: flex; align-items: center; justify-content: space-between; gap: 16px; background: var(--ui-surface, #fff); }
 .settings-page .topbar>a { display: flex; align-items: center; gap: 6px; min-height: 44px; font-size: 13px; text-decoration: none; color: var(--ui-muted, #62738a); }
 .settings-page .topbar .brand { gap: 9px; font-size: 21px; letter-spacing: -.7px; font-weight: 650; color: var(--ui-ink, #172b45); }
@@ -63,3 +62,39 @@ body.settings-page { margin: 0; font: 14px/1.5 -apple-system, BlinkMacSystemFont
 @media (max-width: 480px) { .settings-page .topbar { padding: 8px 16px; gap: 8px; } .settings-page main { padding: 24px 16px 0; } .settings-page form { padding: 16px; } .settings-page .intro h1 { font-size: 25px; } }
 @media (prefers-reduced-motion: reduce) { .settings-page *, .settings-page *::before, .settings-page *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 @media (forced-colors: active) { .settings-page .brand-mark i { forced-color-adjust: none; } .settings-page .check-row input { appearance: auto; } .settings-page input[type="range"] { appearance: auto; } }
+/* Journey agents are an explicit opt-in; opening settings never starts a session. */
+.settings-page .journey-agent-settings { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--ui-line, #e0e7ef); }
+.settings-page .journey-agent-settings .section-heading { margin-bottom: 8px; }
+.settings-page .journey-engine-options { border: 0; padding: 0; margin: 0 0 16px; display: grid; gap: 8px; min-width: 0; }
+.settings-page .journey-engine-options legend { font-size: 13px; font-weight: 550; margin-bottom: 8px; padding: 0; }
+.settings-page .journey-engine-options label { display: flex; align-items: flex-start; gap: 10px; padding: 12px; margin: 0; border: 1px solid var(--ui-line, #e0e7ef); border-radius: 6px; cursor: pointer; }
+.settings-page .journey-engine-options label:has(input:checked) { background: var(--ui-accent-soft, #edf3ff); border-color: var(--ui-accent, #235ed7); }
+.settings-page .journey-engine-options input { width: 17px; height: 17px; flex: 0 0 17px; margin: 2px 0 0; accent-color: var(--ui-accent, #235ed7); }
+.settings-page .journey-engine-options label>span { min-width: 0; }
+.settings-page .journey-engine-options strong { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-weight: 550; }
+.settings-page .journey-engine-options small { display: block; font-size: 12px; line-height: 1.55; font-weight: 400; color: var(--ui-muted, #62738a); margin-top: 3px; }
+.settings-page .journey-pilot { padding: 1px 5px; border: 1px solid var(--ui-line-strong, #bac9da); border-radius: 4px; color: var(--ui-muted, #62738a); font-size: 10px; font-weight: 500; }
+.settings-page .journey-agent-model { display: flex; flex-direction: column; gap: 4px; margin: 0 0 18px; font-size: 12px; color: var(--ui-muted, #62738a); }
+.settings-page .journey-agent-model strong { font-size: 13px; font-weight: 550; color: var(--ui-ink, #172b45); }
+.settings-page .journey-budget-field { display: flex; align-items: center; gap: 8px; max-width: 156px; }
+.settings-page .journey-budget-field input { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; font: inherit; border: 1px solid var(--ui-line-strong, #bac9da); border-radius: 6px; background: var(--ui-surface, #fff); color: var(--ui-ink, #172b45); }
+.settings-page .journey-budget-field input[aria-invalid="true"] { border-color: var(--ui-danger, #b33b32); }
+.settings-page .journey-agent-notice { font-size: 12px; line-height: 1.6; padding: 12px; margin: 0 0 12px; border: 1px solid var(--ui-line, #e0e7ef); border-radius: 6px; color: var(--ui-muted, #62738a); background: var(--ui-surface-muted, #f3f6fa); }
+.settings-page #journey-agent-status[data-ready="true"] { color: var(--dark-success, #237454); background: var(--dark-success-bg, #e5f5ef); }
+.settings-page #journey-agent-help { margin-bottom: 0; }
+.settings-page .ai-provider-settings { padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--ui-line); }
+.settings-page .ai-provider-settings .section-heading { margin-bottom: 12px; }
+.settings-page .ai-provider-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.settings-page .ai-provider-options legend { margin-bottom: 10px; padding: 0; font-size: 13px; color: var(--ui-muted); }
+.settings-page .ai-provider-options label { display: flex; gap: 10px; align-items: flex-start; padding: 14px; margin: 0; min-width: 0; border: 1px solid var(--ui-line); border-radius: 8px; cursor: pointer; }
+.settings-page .ai-provider-options label:has(input:checked) { border-color: var(--ui-accent); background: var(--ui-accent-soft); }
+.settings-page .ai-provider-options input { width: 17px; height: 17px; flex: 0 0 17px; margin: 2px 0 0; accent-color: var(--ui-accent); }
+.settings-page .ai-provider-options label>span { min-width: 0; }
+.settings-page .ai-provider-options strong { font-size: 13px; font-weight: 600; }
+.settings-page .ai-provider-options small { display: block; margin-top: 4px; font-size: 12px; line-height: 1.5; font-weight: 400; color: var(--ui-muted); }
+.settings-page .ai-provider-settings .help { margin: 12px 0 0; }
+.settings-page .settings-section form>.ai-provider-settings { padding: 20px; margin: 0; }
+.settings-page .settings-section form>.ai-provider-settings+.section-heading { border-radius: 0; }
+@media (max-width: 720px) { .settings-page .settings-section form>.ai-provider-settings { padding: 20px 16px; } }
+@media (max-width: 480px) { .settings-page .ai-provider-options { grid-template-columns: 1fr; } }
+@media (max-width: 480px) { .settings-page #setup-journey-agents { width: 100%; } }

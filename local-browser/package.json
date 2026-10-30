@@ -1,0 +1,19 @@
+{
+  "name": "diffuse-local-browser",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local, paired Playwright MCP companion for Diffuse interactive audits",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test *.test.mjs",
+    "test:integration": "node integration.mjs",
+    "install:browser": "playwright install chromium"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "@playwright/mcp": "0.0.83",
+    "axe-core": "4.14.0"
+  }
+}

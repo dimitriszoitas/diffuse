@@ -32,12 +32,18 @@
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
-:where(button, a, input, textarea, select, summary):focus-visible {
-  outline: 2px solid var(--ui-accent);
-  outline-offset: 3px;
+/* Keep keyboard focus on the component's edge, without an outside halo. */
+:is(button, a, input, textarea, select, summary, video, [tabindex]):focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+  border-color: var(--ui-focus, var(--ui-accent)) !important;
+  box-shadow: inset 0 0 0 1px var(--ui-focus, var(--ui-accent)) !important;
 }
+:is(a, summary, .launcher-item, .review-tool, .text-button, .viewport-info, #customize-shortcuts):focus-visible { box-shadow: inset 0 0 0 2px var(--ui-focus, var(--ui-accent)) !important; }
+:is(.primary, .primary-button, #panel-save, #panel-ai-run) { --ui-focus: #fff; }
 :where(input[type=checkbox], input[type=radio], input[type=range]) { accent-color: var(--ui-accent); }
 .sidebar { --scroll-thumb: #bdcbdb; --scroll-hover: #879eb9; }
 @media (forced-colors: active) {
   :root { --ui-line: CanvasText; --ui-line-strong: CanvasText; --ui-accent: Highlight; }
+  :is(button, a, input, textarea, select, summary, video, [tabindex]):focus-visible { outline: 2px solid Highlight !important; outline-offset: -2px !important; border-color: Highlight !important; box-shadow: none !important; }
 }

@@ -101,8 +101,8 @@ html[data-theme="dark"] .viewport-segments { background: #122030; border-color: 
 html[data-theme="dark"] .viewport-segments button { background: transparent; color: #9aacbf; border-color: transparent; }
 html[data-theme="dark"] .viewport-segments button:hover { background: var(--dark-hover); color: var(--ui-accent); }
 html[data-theme="dark"] .viewport-segments button[aria-pressed="true"] { background: #263d59; color: #b0cdff; border-color: #557aaa; box-shadow: inset 0 -2px 0 #3c6189; }
-html[data-theme="dark"] .viewport-heading :is(.viewport-info, #viewport-native) { color: #a4bcda; background: transparent; border-color: transparent; }
-html[data-theme="dark"] .viewport-heading :is(.viewport-info, #viewport-native):hover { background: var(--dark-hover); color: var(--ui-accent); }
+html[data-theme="dark"] .viewport-panel :is(.viewport-info, #viewport-native) { color: #a4bcda; background: transparent; border-color: transparent; }
+html[data-theme="dark"] .viewport-panel :is(.viewport-info, #viewport-native):hover { background: var(--dark-hover); color: var(--ui-accent); }
 html[data-theme="dark"] .viewport-help [role="tooltip"] { background: #223247; color: #d6e2f1; border-color: #4a627f; box-shadow: 0 10px 30px #00000055; }
 html[data-theme="dark"] .viewport-help [role="tooltip"] strong { color: #e4edfa; }
 html[data-theme="dark"] .viewport-help [role="tooltip"] small { color: #aebed2; border-color: #3a4e68; }
@@ -181,7 +181,7 @@ html[data-theme="dark"] .jira-export-error { background: var(--dark-danger-bg); 
 
 /* Settings: connection states, grouped forms and authentication feedback. */
 html[data-theme="dark"] .settings-page .settings-nav a:hover { background: var(--ui-surface-muted); }
-html[data-theme="dark"] .settings-page .settings-nav a[aria-current] { background: var(--ui-surface); box-shadow: inset 2px 0 var(--ui-accent); }
+html[data-theme="dark"] .settings-page .settings-nav a[aria-current] { background: var(--ui-surface); box-shadow: none; }
 html[data-theme="dark"] .settings-page .settings-section form>:is(.section-heading, .actions) { background: #1b2a3b; }
 html[data-theme="dark"] .settings-page :is(.key-status[data-ready="true"], #file-access-status[data-ready="true"]) { background: var(--dark-success-bg); color: var(--dark-success); }
 html[data-theme="dark"] .settings-page :is(.text-button, .disconnect):not(:disabled):hover,

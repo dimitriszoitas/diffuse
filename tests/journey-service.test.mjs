@@ -88,9 +88,33 @@ function harness(overrides = {}) {
   };
 }
 
+test('OpenAI starts pin the provider and pass it into every journey decision', async () => {
+  const h = harness({service: {readConfig: async () => ({hasKey: true, apiKey: 'sk-proj-service-provider-fixture', provider: 'openai', model: 'gpt-6.1-sol'})}});
+  const started = await h.start();
+  assert.equal(started.run.provider, 'openai');
+  await h.runnerOptions.decide({observation: {}, history: []});
+  assert.equal(h.calls.decisions[0].provider, 'openai');
+  assert.equal(h.calls.decisions[0].model, 'gpt-6.1-sol');
+  await h.finish();
+});
+
+test('saved Anthropic journey evidence is not discussed, forked or continued with an OpenAI key', async () => {
+  let sent = 0;
+  const h = harness({service: {
+    readConfig: async () => ({hasKey: true, apiKey: 'sk-proj-service-provider-fixture', provider: 'openai', model: 'gpt-6.1-sol'}),
+    followUp: async () => { sent++; return {answer: 'Invalid transfer.', evidenceSteps: [], routeSuggestion: null}; },
+    managedFollowUp: async () => { sent++; return {answer: 'Invalid transfer.', evidenceSteps: [], routeSuggestion: null}; },
+  }});
+  h.records.set('run-saved', savedRun({status: 'stopped'}));
+  await assert.rejects(h.message('JOURNEY_ASK', {runId: 'run-saved', question: 'Why did it stop?'}), /Switch to Anthropic/);
+  await assert.rejects(h.start({continuation: {parentRunId: 'run-saved', instructions: 'Continue.'}}), /Switch to Anthropic/);
+  await assert.rejects(h.start({fork: {parentRunId: 'run-saved', instructions: 'Try another route.'}}), /Switch to Anthropic/);
+  assert.equal(sent, 0);assert.equal(h.runnerOptions, undefined);
+});
+
 test('journey fields are allowlisted and validated before starting', () => {
-  assert.deepEqual(journeyInput({goal: ' Add Oat milk. ', maxSteps: 10, apiKey: KEY, tabId: 99, url: 'https://evil.test', id: 'injected'}), {goal: 'Add Oat milk.', successCriteria: '', testData: '', maxSteps: 10, persona: {...DEFAULT_JOURNEY_PERSONA}, ...DEFAULT_JOURNEY_SETTINGS});
-  for (const input of [{}, {goal: ''}, {goal: 'a'.repeat(2001)}, {goal: 'x', successCriteria: 'x'.repeat(2001)}, {goal: 'x', testData: 'x'.repeat(4001)}, {goal: 'x', maxSteps: 4}, {goal: 'x', maxSteps: 31}, {goal: 'x', maxSteps: '20'}, {goal: {text: 'x'}}]) assert.throws(() => journeyInput(input));
+  assert.deepEqual(journeyInput({goal: ' Add Oat milk. ', maxSteps: 10, apiKey: KEY, tabId: 99, url: 'https://evil.test', id: 'injected'}), {goal: 'Add Oat milk.', successCriteria: '', testData: '', actionTarget: 10, persona: {...DEFAULT_JOURNEY_PERSONA}, ...DEFAULT_JOURNEY_SETTINGS});
+  for (const input of [{}, {goal: ''}, {goal: 'a'.repeat(2001)}, {goal: 'x', successCriteria: 'x'.repeat(2001)}, {goal: 'x', testData: 'x'.repeat(4001)}, {goal: 'x', actionTarget: 0}, {goal: 'x', actionTarget: 501}, {goal: 'x', actionTarget: 2.5}, {goal: 'x', maxSteps: '20'}, {goal: {text: 'x'}}]) assert.throws(() => journeyInput(input));
 });
 
 test('only active-session callers can start and stored state never contains AI credentials', async () => {
@@ -186,6 +210,7 @@ test('worker restart recovery marks interrupted work inconclusive without invent
   assert.equal(h.current.aiRunning, false);
   assert.deepEqual(h.records.get('run-saved').findings, []);
   assert.match(h.records.get('run-saved').summary, /Chrome interrupted/);
+  assert.equal(h.records.get('run-saved').stopReason.code, 'JOURNEY_BROWSER_INTERRUPTED');
 });
 
 test('runner rejection records safe interrupted status and releases the executor for retry', async () => {
@@ -195,6 +220,7 @@ test('runner rejection records safe interrupted status and releases the executor
   assert.equal(h.service.busy, false);
   assert.equal(h.calls.cleanup, 1);
   assert.equal(h.records.get(started.run.id).status, 'inconclusive');
+  assert.equal(h.records.get(started.run.id).stopReason.code, 'JOURNEY_INTERRUPTED');
   assert.equal(JSON.stringify([...h.records.values()]).includes(KEY), false);
   await h.start(); await h.service.interrupt();
   assert.equal(h.calls.cleanup, 2);
@@ -269,17 +295,19 @@ test('video evidence timestamps use capture time and exclude pause duration', as
   } finally { await h.service.interrupt(); }
 });
 
-test('automatic recording end stops the runner and preserves movie with an inconclusive outcome', async () => {
+test('unexpected browser capture end asks for help with an explicit cause and preserves the movie', async () => {
   const rec = recorderFixture();
   const h = harness({service: {startRecording: rec.startRecording}});
   const started = await h.start();
   await h.service.recordingEnded('other-recording');
   assert.equal(h.service.busy, true);
-  await h.service.recordingEnded(rec.recorder.id);
+  await h.service.recordingEnded(rec.recorder.id, 'capture-ended');
   await tick();
   const saved = h.records.get(started.run.id);
-  assert.equal(saved.status, 'inconclusive');
-  assert.match(saved.summary, /recording ended before the journey finished/);
+  assert.equal(saved.status, 'blocked');
+  assert.match(saved.summary, /Browser video capture ended unexpectedly/);
+  assert.equal(saved.stopReason.code, 'JOURNEY_CAPTURE_ENDED');
+  assert.match(saved.assistance.question, /Browser video capture ended unexpectedly/);
   assert.equal(saved.recording.status, 'saved');
   assert.deepEqual(saved.video, rec.video);
   assert.equal(h.service.busy, false);
@@ -297,7 +325,7 @@ test('recording pause failure terminates the run; encoding failure still release
     const saved = h.records.get(started.run.id);
     assert.equal(h.service.busy, false);
     assert.equal(h.calls.cleanup, 1);
-    if (fail === 'pause') assert.equal(saved.status, 'inconclusive');
+    if (fail === 'pause') { assert.equal(saved.status, 'blocked'); assert.equal(saved.stopReason.code, 'JOURNEY_CAPTURE_ERROR'); }
     else {
       assert.equal(saved.recording.status, 'unavailable');
       assert.match(saved.recordingError, /could not be saved/);
@@ -470,7 +498,7 @@ test('a fork preserves the original and starts a separate run from its starting 
     assert.equal(result.run.startUrl, original.startUrl);
     assert.equal(result.run.goal, original.goal);
     assert.equal(result.run.testData, original.testData);
-    assert.equal(result.run.maxSteps, 10);
+    assert.equal(result.run.actionTarget, 10);
     assert.deepEqual(result.run.fork, {parentRunId: original.id, stepIndex: 1, instructions: 'Use the table shortcut.'});
     assert.deepEqual(h.records.get(original.id), original);
     await h.runnerOptions.decide({goal: result.run.goal, observation: {}});
@@ -486,7 +514,7 @@ test('fork goal and test data overrides are explicit and cannot smuggle unapprov
   try {
     assert.equal(result.run.goal, 'Find the existing ingredient.');
     assert.equal(result.run.testData, '');
-    assert.equal(result.run.maxSteps, 5);
+    assert.equal(result.run.actionTarget, 5);
     assert.equal(result.run.startUrl, 'https://example.test/');
     assert.equal(result.run.fork.startUrl, undefined);
     assert.equal(result.run.fork.apiKey, undefined);
@@ -651,7 +679,7 @@ test('a continuation uses current page and prior evidence without restarting or 
     assert.deepEqual(result.run.persona, original.persona);
     assert.deepEqual(result.run.focusChecks, original.focusChecks);
     assert.equal(result.run.allowRecordMoves, true);
-    assert.equal(result.run.maxSteps, 10);
+    assert.equal(result.run.actionTarget, 10);
     assert.equal(result.run.continuation.parentRunId, original.id);
     assert.equal(navigation, 0);
     await h.runnerOptions.decide({observation: {}, history: []});
@@ -863,4 +891,132 @@ test('child history recovers a response link even if the parent pointer write wa
   assert.equal(result.run.id, child.id);
   assert.equal(h.records.size, 2);
   assert.equal(h.calls.execute, 0);
+});
+
+test('recording size and time limits save the partial movie without stopping journey actions', async () => {
+  for (const reason of ['size-limit', 'time-limit']) {
+    const rec = recorderFixture();
+    rec.video.stopReason = reason;
+    rec.video.stoppedAt = '2026-10-20T10:03:22.000Z';
+    const h = harness({service: {startRecording: rec.startRecording}});
+    const started = await h.start();
+    await h.service.recordingEnded(rec.recorder.id, reason);
+    assert.equal(h.service.busy, true);
+    let saved = (await h.message('JOURNEY_STATE', {runId: started.run.id})).run;
+    assert.equal(saved.status, 'running');
+    assert.equal(saved.stopReason, undefined);
+    assert.equal(saved.recording.status, 'saved');
+    assert.equal(saved.recording.partial, true);
+    assert.equal(saved.recording.stopReason, reason);
+    assert.deepEqual(saved.video, rec.video);
+    assert.match(saved.recordingNotice, /journey continues with screenshots and notes/);
+    await h.message('JOURNEY_PAUSE');
+    await h.message('JOURNEY_RESUME');
+    assert.equal(rec.calls.pause, 0);
+    assert.equal(rec.calls.resume, 0);
+    await h.updateState({steps: [{index: 30, createdAt: '2026-10-20T10:04:00.000Z', observation: {url: 'https://example.test/', screenshot}, action: {type: 'scroll', direction: 'down'}}]});
+    saved = (await h.message('JOURNEY_STATE', {runId: started.run.id})).run;
+    assert.equal(saved.steps[0].videoOffsetMs, null, 'Post-recording steps cannot seek to unrelated video frames.');
+    await h.finish();
+    saved = h.records.get(started.run.id);
+    assert.equal(saved.status, 'completed');
+    assert.equal(saved.recording.partial, true);
+    assert.deepEqual(saved.video, rec.video);
+    assert.equal(rec.calls.stop, 1);
+    assert.equal(h.service.busy, false);
+  }
+});
+
+test('action targets support one to five hundred and canonical input wins over legacy limits', () => {
+  assert.equal(journeyInput({goal: 'Complete the task', actionTarget: 1}).actionTarget, 1);
+  assert.equal(journeyInput({goal: 'Complete the task', actionTarget: 500}).actionTarget, 500);
+  assert.equal(journeyInput({goal: 'Complete the task', actionTarget: 45, maxSteps: 5}).actionTarget, 45);
+  assert.equal(journeyInput({goal: 'Complete the task', maxSteps: 30}).actionTarget, 30);
+  assert.equal(journeyInput({goal: 'Complete the task'}).actionTarget, 20);
+});
+
+test('a real journey continues beyond both its action target and an early recording cap', async () => {
+  const rec = recorderFixture();
+  rec.video.stopReason = 'size-limit';
+  rec.video.stoppedAt = '2026-10-20T10:03:22.000Z';
+  const ready = deferred(), continueRun = deferred();
+  let actions = 0;
+  const h = harness({service: {
+    startRecording: rec.startRecording,
+    runnerFactory: createJourneyRunner,
+    createExecutor: async () => ({
+      observe: async () => ({url: 'https://example.test/', title: 'Task', text: `Action ${actions}`, controls: [{id: 'next', role: 'button', label: 'Next'}], screenshot}),
+      execute: async () => { actions++; }, cleanup: async () => {},
+    }),
+    decide: async ({actionTarget}) => {
+      assert.equal(actionTarget, 20);
+      if (actions === 20) { ready.resolve(); await continueRun.promise; }
+      if (actions === 45) return {action: {type: 'finish', outcome: 'completed', summary: 'The task is complete.', findings: [], scores: JOURNEY_DIMENSIONS.map(dimension => ({dimension, score: null, reason: 'Not assessed.', evidenceSteps: [], confidence: 0}))}, reason: 'Completion is visible.'};
+      return {action: {type: 'click', targetId: 'next'}, reason: 'Continue the task.'};
+    },
+  }});
+  const started = await h.start({actionTarget: 20});
+  await ready.promise;
+  await h.service.recordingEnded(rec.recorder.id, 'size-limit');
+  assert.equal((await h.message('JOURNEY_STATE', {runId: started.run.id})).run.status, 'running');
+  continueRun.resolve();
+  for (let tries = 0; h.service.busy && tries < 20; tries++) await tick();
+  assert.equal(h.service.busy, false);
+  const run = (await h.message('JOURNEY_STATE', {runId: started.run.id})).run;
+  assert.equal(run.status, 'completed');
+  assert.equal(run.metrics.actions, 45);
+  assert.deepEqual(run.targetAssessment, {actionTarget: 20, actionCount: 45, overBy: 25, withinTarget: false, efficiencyScore: 44, verifiedComplete: true, scope: 'journey'});
+  assert.equal(run.steps.length, 46);
+  assert.equal(run.stopReason.code, 'JOURNEY_COMPLETED');
+  assert.equal(run.recording.partial, true);
+  assert.deepEqual(run.video, rec.video);
+});
+
+test('cross-origin interruption keeps the browser cause separate from reviewer stop', async () => {
+  const h = harness();
+  const started = await h.start();
+  await h.service.routeChanged('https://unapproved.test/');
+  await tick();
+  const saved = h.records.get(started.run.id);
+  assert.equal(saved.status, 'blocked');
+  assert.equal(saved.stopReason.source, 'browser');
+  assert.equal(saved.stopReason.code, 'JOURNEY_ORIGIN_CHANGED');
+  assert.equal(saved.stopReason.message, saved.summary);
+});
+
+test('a recording cap delivered during finalization still marks partial coverage and correct seek availability', async () => {
+  const rec = recorderFixture(), videoReady = deferred();
+  rec.video.stopReason = 'size-limit';
+  rec.video.stoppedAt = '2026-10-20T10:03:22.000Z';
+  rec.recorder.stop = async () => videoReady.promise;
+  const h = harness({service: {startRecording: rec.startRecording}});
+  const started = await h.start();
+  await h.updateState({steps: [
+    {index: 1, createdAt: '2026-10-20T10:00:10.000Z', observation: {url: 'https://example.test/', screenshot}},
+    {index: 2, createdAt: '2026-10-20T10:04:00.000Z', observation: {url: 'https://example.test/', screenshot}},
+  ]});
+  await h.finish();
+  await h.service.recordingEnded(rec.recorder.id, 'size-limit');
+  videoReady.resolve(rec.video);
+  await tick();
+  const saved = h.records.get(started.run.id);
+  assert.equal(saved.status, 'completed');
+  assert.equal(saved.recording.partial, true);
+  assert.equal(saved.recording.stopReason, 'size-limit');
+  assert.equal(saved.steps[0].videoOffsetMs, 9700);
+  assert.equal(saved.steps[1].videoOffsetMs, null);
+  assert.match(saved.recordingNotice, /covers only the earlier steps/);
+});
+
+test('old recording interruptions gain a precise explanation only from their saved recording cause', async () => {
+  for (const reason of ['size-limit', 'time-limit', undefined]) {
+    const h = harness();
+    h.records.set('run-saved', savedRun({status: 'inconclusive', summary: 'The recording ended before the journey finished. Review the captured steps and video; the task outcome was not verified.', maxSteps: 30,
+      video: {stopReason: reason, durationMs: 202000}}));
+    const run = (await h.message('JOURNEY_LOAD', {runId: 'run-saved'})).run;
+    assert.equal(run.targetAssessment.actionTarget, 30);
+    assert.equal(run.targetAssessment.efficiencyScore, null);
+    if (reason) assert.equal(run.stopReason.code, reason === 'size-limit' ? 'JOURNEY_RECORDING_SIZE_LIMIT' : 'JOURNEY_RECORDING_TIME_LIMIT');
+    else assert.equal(run.stopReason, undefined, 'Do not infer a stop cause from duration alone.');
+  }
 });

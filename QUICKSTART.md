@@ -1,27 +1,27 @@
-# Try Diffuse 0.16.0
+# Try Diffuse 0.20.0
 
-Compare a live prototype over production or audit one page. Leave pinned comments on elements or areas, record a short silent interaction, and share feedback through GitHub or Jira. Work through a shared PR review and capture updated evidence for recheck. Claude can suggest findings when you connect your own Anthropic API key.
+Compare a live prototype over production or audit one page. Leave pinned comments on elements or areas, record a short silent interaction, and share feedback through GitHub or Jira. Work through a shared PR review and capture updated evidence for recheck. AI can suggest findings when you connect your own Anthropic or OpenAI API key.
 
 ## Install or upgrade
 
 For a first installation:
 
-1. Download and unzip [Diffuse-0.16.0.zip](https://github.com/dimitriszoitas/diffuse/releases/download/v0.16.0/Diffuse-0.16.0.zip). Keep the resulting **Diffuse** folder somewhere permanent.
+1. Unzip **Diffuse-0.20.0.zip**. Keep the resulting **Diffuse** folder somewhere permanent. The **Local Browser** folder is an optional helper for interactive audits. The public GitHub download may still be an earlier release.
 2. In your normal Chrome browser, open `chrome://extensions`.
 3. Turn on **Developer mode**, then click **Load unpacked** and choose that **Diffuse** folder.
 4. Pin **Diffuse — Live design comparison** using Chrome’s extensions menu.
 
 **Updating an official 0.10.2 or later installation?** Replace the files in the existing Diffuse folder, click **Reload** in `chrome://extensions`, then refresh reviewed pages. Keep the same installation to retain reviews and settings.
 
-**Upgrading from 0.10.1 or earlier?** First export the reviews you want to keep with **⋯ → Export review**. Keep the old extension and folder intact. Install 0.16.0 from a separate folder, import your files using **Load review**, and reconnect Jira and optional AI/Figma settings. Disable the old copy after checking the imported reviews. The shared identity introduced in 0.10.2 has separate storage, so replacing older files does not transfer their reviews.
+**Upgrading from 0.10.1 or earlier?** First export the reviews you want to keep with **⋯ → Export review**. Keep the old extension and folder intact. Install 0.20.0 from a separate folder, import your files using **Load review**, and reconnect Jira and optional AI/Figma settings. Disable the old copy after checking the imported reviews. The shared identity introduced in 0.10.2 has separate storage, so replacing older files does not transfer their reviews.
 
-You do not need to sign in to a special test browser or share a password with Diffuse.
+Ordinary comments, screen reviews and journeys use your current Chrome tab. The optional Playwright interactive audit opens a separate local browser, where you sign in yourself if needed. See **Local Browser/README.md** in the ZIP for setup; macOS includes a double-click **Start Local Browser.command** launcher.
 
 ## Start on the page you want to review
 
 1. Open the page you want to review in Chrome.
 2. Click the Diffuse extension icon, then **Start Diffuse**. Allow access to this page if requested.
-3. Tap **C**, release it, then click anywhere on the page to leave a comment, or hold **C** and drag to select an area. Use the side drawer for recording, AI review and reports.
+3. Tap **C**, release it, then click anywhere on the page to leave a comment, or hold **C** and drag to select an area. Use the side drawer for AI review and reports; attach recordings while leaving a comment.
 
 There is no floating toolbar. If the sidebar is closed, click the Diffuse extension icon and **Start Diffuse** to return to the controls.
 
@@ -88,6 +88,24 @@ A yellow pointer halo and click pulse make the interaction visible in the saved 
 
 Open **Settings → Appearance** and choose **Light**, **Dark**, or **System**. Changes apply immediately to all Diffuse controls. Light is the default; System follows your device. The website and captured evidence keep their original appearance.
 
+## Choose your AI provider
+
+Open **Settings → AI review**, choose **Anthropic** or **OpenAI**, enter that provider’s key and choose **Save settings**. Each provider keeps its own key, remember preference, model and engine settings. Switching providers does not delete the other connection. All new AI work follows the saved provider; historical journey discussions stay with their original provider.
+
+For OpenAI’s named agents, choose **Set up reviewer** and **Set up journey agents**. These use **GPT-6.1 Sol · Max effort** and create resources in your OpenAI API project. Setup requires account access to the Agents API. OpenAI amounts are estimated spending guards checked between requests, not provider-enforced billing caps. See [OpenAI setup](Diffuse/docs/openai-connection.md).
+
+## Customize shortcuts and inspect journeys
+
+Use **Settings → Browser & shortcuts** or the gear beside the sidepanel shortcut legend to change the element, area and cancel shortcuts. Choose **Save shortcuts**. Shortcuts stay inactive while typing in fields.
+
+**Review with AI** now contains **Screen review** and **Journey test**. In **Review Reports**, the separate **Journeys** section contains each saved attempt, including stopped and interrupted runs, its outcome, stop reason when recorded, and expandable step details. Full HTML reports include this section too. Older media may be cleared to manage device storage, but steps and notes remain until you delete their review.
+
+## UX & accessibility reviewer
+
+For source-linked guidance, open **Settings → AI → UX & accessibility review**, choose **UX & Accessibility Reviewer**, and click **Set up reviewer**. This creates one combined reviewer in your Anthropic account using **Claude Opus 5.5 · Max effort**. It uses a curated NN/g and W3C reference snapshot checked on 24 October 2026. The $2 spending limit is separate from journey testing. Review its suggestions and source links before accepting them.
+
+The reviewer sees screenshots; it cannot verify keyboard use, screen-reader behavior, measured contrast or full WCAG conformance. Findings that need additional evidence are labeled **Needs verification**. See [the knowledge and setup guide](Diffuse/docs/ux-accessibility-reviewer.md).
+
 ## Optional Claude review
 
 1. Open **Settings → AI review** from the bottom of the sidebar. Add your **Anthropic API key**, choose a supported Claude model, and save. The default keeps your key for the Chrome session only; you may need to enter it again after reloading the extension. **Remember my key on this device** persists it in this Chrome profile, not an encrypted password vault. **Remove key** clears it.
@@ -103,9 +121,11 @@ New reviews ask for one actionable issue per finding. **Current** describes the 
 
 ## Test a journey across pages
 
-Before sharing, you can also ask Diffuse to try a task across the app. Open **Journey Testing with AI** in the sidebar, describe the persona, adjust the four sliders, select what AI should check, and enter your goal and any test data. Choose **Start journey** when ready. Under **How should it explore?**, choose thorough exploration, add instructions, or allow moving the test records required by the task. It uses your saved Anthropic key and may create records, so use a suitable test environment. Keep the reviewed tab visible.
+To use the new agent engine, open **Settings → AI → Journey testing**, choose **Claude agents**, then **Set up journey agents**. This creates **Diffuse Journey User** and **Diffuse Journey Evaluator** in your Anthropic account using your saved key. Both use **Claude Opus 5.5 · Max effort**. Review the $2 default budget before starting a task. Setup does not run paid inference. See [the full agent setup guide](Diffuse/docs/managed-agents.md) for account access, retained evidence and budgets. Direct remains available.
 
-Each attempt keeps a silent video alongside its step notes and screenshots. **Watch this step** jumps to its moment in the video; **Download** saves the full movie. Pause/Resume affects actions and recording together. Inspect the outcome and AI assessments, then accept relevant findings into the review. Accepted findings keep their screenshot and reproduction path. Download the full journey movie separately when sharing the entire attempt. See the [journey guide](Diffuse/docs/journey-reviews.md).
+Before sharing, you can also ask Diffuse to try a task across the app. Open **Review with AI → Journey test** in the sidebar, describe the persona, adjust the four sliders, select what AI should check, and enter your goal and any test data. Choose **Start journey** when ready. Under **How should it explore?**, choose thorough exploration, add instructions, or allow moving the test records required by the task. It uses your selected AI provider and may create records, so use a suitable test environment. Keep the reviewed tab visible.
+
+Set an **Action target** as a scoring benchmark; going over it does not stop the journey. Completed attempts receive a separate action-efficiency score. Each attempt keeps a silent video alongside its step notes and screenshots. If recording reaches its size or duration cap, the saved partial video remains available and the journey continues with screenshots and notes. **Watch this step** jumps to its moment in the video; **Download** saves the full movie. Pause/Resume affects actions and recording together. Inspect the outcome and AI assessments, then accept relevant findings into the review. Accepted findings keep their screenshot and reproduction path. Download the full journey movie separately when sharing the entire attempt. See the [journey guide](Diffuse/docs/journey-reviews.md).
 
 After a run, choose **Ask AI about this step** to open a chat about a recorded choice. You can keep asking follow-up questions there. The answer can offer **Fork journey…** with an editable alternative route. Starting it creates a separate run from the original starting page, keeping the original evidence. Existing app data is not reset. Yellow click pulses make the actions visible in both journey and comment recordings.
 

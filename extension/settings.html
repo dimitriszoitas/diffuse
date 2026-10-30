@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="ui-theme.css"><link rel="stylesheet" href="ui.css">
   <link rel="stylesheet" href="ui-dark.css">
   <script src="theme.js"></script>
+  <link rel="stylesheet" href="shortcut-settings.css">
+  <script src="shortcut-settings.js" type="module"></script>
 </head>
 <body class="settings-page">
   <header class="topbar"><a class="brand" href="report.html"><span class="brand-mark" aria-hidden="true"><i></i><i></i></span>Diffuse</a><a href="report.html">Back to reviews <span aria-hidden="true">↗</span></a></header>
@@ -27,15 +29,24 @@
             <p class="help" id="appearance-status" role="status">Changes apply immediately across Diffuse.</p>
           </div>
         </section>
-        <section id="ai" class="settings-section" aria-labelledby="ai-heading"><div class="settings-section-heading"><h2 id="ai-heading">AI review</h2><p>Choose how Claude reviews your pages. You approve findings before they become comments.</p></div>
+        <section id="ai" class="settings-section" aria-labelledby="ai-heading"><div class="settings-section-heading"><h2 id="ai-heading">AI review</h2><p>Choose who reviews your pages. You approve findings before they become comments.</p></div>
       <form id="ai-settings-form" aria-busy="true">
-        <div class="section-heading"><h3>Anthropic connection</h3><span class="key-status" id="key-status" role="status">Loading…</span></div>
+        <section class="ai-provider-settings" aria-labelledby="ai-provider-heading">
+          <div class="section-heading"><h3 id="ai-provider-heading">AI provider</h3><span id="ai-active-provider" class="status" role="status">Using Anthropic</span></div>
+          <fieldset class="ai-provider-options" aria-describedby="ai-provider-help"><legend>Use for AI review and agents</legend>
+            <label><input id="provider-anthropic" type="radio" name="ai-provider" value="anthropic" checked><span><strong>Anthropic · Claude</strong><small id="anthropic-connection-state">Checking connection…</small></span></label>
+            <label><input id="provider-openai" type="radio" name="ai-provider" value="openai"><span><strong>OpenAI</strong><small id="openai-connection-state">Checking connection…</small></span></label>
+          </fieldset>
+          <p class="help" id="ai-provider-help">Save the selected provider to use it for new AI reviews, journey tests, and agents. Each connection keeps its own key and settings.</p>
+        </section>
+
+        <div class="section-heading"><h3 id="ai-connection-heading">Anthropic connection</h3><span class="key-status" id="key-status" role="status">Loading…</span></div>
         <div class="setting-group"><label for="api-key">Anthropic API key</label>
         <div class="password-field"><input id="api-key" name="api-key" type="password" autocomplete="off" spellcheck="false" maxlength="512" placeholder="Paste your API key" aria-describedby="key-help"><button id="toggle-key" type="button" aria-label="Show entered API key" aria-controls="api-key" aria-pressed="false">Show</button></div>
         <p class="help" id="key-help">Your saved key is never displayed. Leave this blank to keep it.</p>
         <label class="check-row"><input id="remember-key" type="checkbox" aria-labelledby="remember-label" aria-describedby="remember-help"><span><span id="remember-label">Remember my key on this device</span><small id="remember-help">Otherwise it is kept only until Chrome closes. Remembered keys are stored in this Chrome profile, not in a password vault.</small></span></label>
         </div>
-        <div class="setting-group"><label for="model">Claude model</label>
+        <div class="setting-group"><label id="model-label" for="model">Claude model</label>
         <input id="model" type="text" spellcheck="false" autocomplete="off" maxlength="120" value="claude-sonnet-5" required aria-describedby="model-help">
         <p class="help" id="model-help">Use an Anthropic model ID with vision and structured output support. <a href="https://platform.claude.com/docs/en/models/overview" target="_blank" rel="noopener noreferrer">See available models ↗</a></p>
         </div>
@@ -43,11 +54,46 @@
         <input id="threshold" type="range" min="0" max="100" step="1" value="35" aria-valuetext="35 out of 100" aria-describedby="threshold-help">
         <p class="help" id="threshold-help">0 shows all findings. Higher numbers hide smaller differences; 90 shows only the largest issues. This is a display filter, not review accuracy or confidence.</p>
         </div>
+                <section class="journey-agent-settings" aria-labelledby="review-agent-heading">
+          <div class="section-heading"><h3 id="review-agent-heading">UX &amp; accessibility review</h3><span id="review-agent-status" class="status">Direct</span></div>
+          <p class="help">Choose how Review with AI examines a captured page or compares two screens.</p>
+          <fieldset class="journey-engine-options"><legend>Review engine</legend>
+            <label><input id="review-engine-direct" type="radio" name="review-engine" value="direct" checked><span><strong>Direct</strong><small id="review-direct-description">Review screenshots using your chosen Claude model.</small></span></label>
+            <label><input id="review-engine-managed" type="radio" name="review-engine" value="managed"><span><strong>UX &amp; Accessibility Reviewer <span class="journey-pilot">Pilot</span></strong><small>One agent combines NN/g usability guidance with W3C accessibility guidance. Recommendations include source links.</small></span></label>
+          </fieldset>
+          <div id="review-agent-options" hidden>
+            <div class="journey-agent-model"><span>Reviewer model</span><strong id="review-managed-model">Claude Opus 5.5 · Max effort</strong></div>
+            <label for="review-budget">Spending limit per review (USD)</label>
+            <div class="journey-budget-field"><span aria-hidden="true">$</span><input id="review-budget" type="number" min="0.1" max="20" step="0.01" value="2" inputmode="decimal" aria-describedby="review-budget-help"></div>
+            <p class="help" id="review-budget-help">Applies to each screenshot review. Usage may exceed the limit by the final request already in progress.</p>
+            <p class="help">Sources checked 24 October 2026. This is a curated reference snapshot. A screenshot cannot verify keyboard use, screen-reader behavior, or full WCAG conformance; those checks stay unverified.</p>
+            <p id="review-agent-notice" class="journey-agent-notice">Claude stores the review’s screenshots, instructions, and linked design context in your Anthropic account. API charges apply only when you run a review.</p>
+            <div class="actions"><button id="setup-review-agent" type="button" disabled>Set up reviewer</button></div>
+            <p class="help" id="review-agent-help">Diffuse creates one reviewer in your Claude account. Setup does not start a review.</p>
+          </div>
+        </section>
+        <section class="journey-agent-settings" aria-labelledby="journey-agent-heading">
+          <div class="section-heading"><h3 id="journey-agent-heading">Journey testing</h3><span id="journey-agent-status" class="status" role="status">Direct</span></div>
+          <p class="help">Choose how Diffuse tries a task across your app. This is separate from the screenshot reviewer above.</p>
+          <fieldset class="journey-engine-options"><legend>Journey engine</legend>
+            <label><input id="journey-engine-direct" type="radio" name="journey-engine" value="direct" checked><span><strong>Direct</strong><small id="journey-direct-description">Diffuse manages the journey using your chosen Claude model.</small></span></label>
+            <label><input id="journey-engine-managed" type="radio" name="journey-engine" value="managed"><span><strong><span id="journey-managed-label">Claude agents</span> <span class="journey-pilot">Pilot</span></strong><small>A journey agent follows your persona. A separate evaluator reviews the recorded evidence.</small></span></label>
+          </fieldset>
+          <div id="journey-agent-options" hidden>
+            <div class="journey-agent-model"><span>Journey and evaluator model</span><strong id="journey-managed-model">Claude Opus 5.5 · Max effort</strong></div>
+            <label for="journey-budget">Journey spending limit (USD)</label>
+            <div class="journey-budget-field"><span aria-hidden="true">$</span><input id="journey-budget" type="number" min="0.1" max="20" step="0.01" value="2" inputmode="decimal" aria-describedby="journey-budget-help"></div>
+            <p class="help" id="journey-budget-help">Shared between the journey agent (75%) and evaluator (25%). Usage may exceed the limit by the final request already in progress.</p>
+            <p id="journey-agent-notice" class="journey-agent-notice">Claude stores the journey’s conversation and evidence in your Anthropic account. API charges apply. Keep Chrome and the reviewed tab open while the journey runs.</p>
+            <div class="actions"><button id="setup-journey-agents" type="button" disabled>Set up journey agents</button></div>
+            <p class="help" id="journey-agent-help">Use your existing API key. Diffuse sets up both agents for you; no console setup is needed. Setup does not start a journey.</p>
+          </div>
+        </section>
         <div id="ai-feedback" role="status" aria-live="polite" tabindex="-1" hidden></div>
         <div class="actions"><button id="save" class="primary" type="submit" disabled>Save settings</button><button id="clear-key" class="text-button" type="button" disabled>Remove key</button></div>
       </form>
 
-          <p class="section-note">Running AI review sends screenshots and your instructions to Anthropic. Opening the Jira export preview also uses this key to suggest ticket titles from your comments. Usage is billed to your Anthropic account. Your key is never included in reviews or exports.</p>
+          <p class="section-note">Running AI review sends screenshots and your instructions to your selected AI provider. Jira ticket titles use that same provider. API usage is billed to its account. Your key is never included in reviews or exports.</p>
         </section>
         <section id="figma" class="settings-section" aria-labelledby="figma-heading">
           <div class="settings-section-heading"><h2 id="figma-heading">Figma reference</h2><p>Connect a design reference for AI reviews through an MCP server.</p></div>
@@ -70,7 +116,7 @@
           </form>
           <div class="settings-card mcp-setup"><h3>Set up Figma desktop</h3><ol><li>Open the design file you want to review in Figma desktop.</li><li>Switch to Dev Mode and enable the desktop MCP server in the inspect panel.</li><li>Connect here, then copy a frame link from that same file into your AI review.</li></ol><p class="help">The desktop connection uses the file open in Figma. <a href="https://developers.figma.com/docs/figma-mcp-server/local-server-installation/" target="_blank" rel="noopener noreferrer">Desktop setup guide ↗</a></p></div>
           <p class="section-note">Figma’s hosted MCP server requires an approved client from its MCP Catalog. Hosted Figma sign-in is not available in Diffuse. <a href="https://developers.figma.com/docs/figma-mcp-server/" target="_blank" rel="noopener noreferrer">Connection requirements ↗</a></p>
-          <p class="section-note">When you run a review with a Figma link, the retrieved design context is sent to Anthropic with your page screenshots. Tokens stay separate from shared review files.</p>
+          <p class="section-note">When you run a review with a Figma link, the retrieved design context is sent to your selected AI provider with your page screenshots. Tokens stay separate from shared review files.</p>
         </section>
         <section id="jira" class="settings-section" aria-labelledby="jira-heading"><div class="settings-section-heading"><h2 id="jira-heading">Jira connections</h2><p>Connect your accounts. Choose a site and project when creating tickets.</p></div>
       <section class="connections" aria-labelledby="connections-heading" aria-busy="true" id="connections-section">
@@ -101,7 +147,18 @@
         </section>
         <section id="browser" class="settings-section" aria-labelledby="browser-heading"><div class="settings-section-heading"><h2 id="browser-heading">Browser &amp; shortcuts</h2><p>Manage local file access and review keyboard shortcuts.</p></div>
           <div class="settings-card"><div class="section-heading"><h3>Local HTML files</h3><span class="status" id="file-access-status" role="status">Checking…</span></div><p class="help">To review HTML files on your computer, enable “Allow access to file URLs” in Chrome’s extension settings.</p><div class="actions"><button id="browser-settings" type="button">Manage browser access <span aria-hidden="true">↗</span></button><button id="check-access" type="button">Check again</button></div><p id="browser-feedback" role="status" hidden></p></div>
-          <div class="settings-card"><h3>Comment shortcuts</h3><dl class="shortcut-list"><div><dt><kbd>C</kbd></dt><dd>Tap C, release, then click to leave a comment.</dd></div><div><dt><kbd>C</kbd> + mouse drag</dt><dd>Select an area and leave a comment.</dd></div><div><dt><kbd>Esc</kbd></dt><dd>Cancel the current selection.</dd></div></dl><p class="help">Use these on the reviewed page. Shortcuts stay inactive while you type in a field.</p></div>
+          <div class="settings-card shortcut-settings" aria-labelledby="shortcut-settings-heading">
+            <div class="section-heading"><h3 id="shortcut-settings-heading">Comment shortcuts</h3><label class="shortcut-enable"><input id="shortcuts-enabled" type="checkbox" checked disabled> Enable shortcuts</label></div>
+            <p class="help" id="shortcut-capture-help">Select a shortcut, then press the keys you want to use. You can include Shift, Control, Alt, or Command.</p>
+            <div class="shortcut-edit-list">
+              <div class="shortcut-edit-row"><div><label id="shortcut-comment-label" for="shortcut-comment">On an element</label><p class="help" id="shortcut-comment-help">Press and release, then click an element.</p></div><button id="shortcut-comment" type="button" class="shortcut-recorder" data-shortcut="comment" aria-labelledby="shortcut-comment-label shortcut-comment" aria-describedby="shortcut-capture-help" aria-pressed="false" disabled>C</button></div>
+              <div class="shortcut-edit-row"><div><label id="shortcut-area-label" for="shortcut-area">On an area</label><p class="help" id="shortcut-area-help">Hold the shortcut while you click and drag.</p></div><button id="shortcut-area" type="button" class="shortcut-recorder" data-shortcut="area" aria-labelledby="shortcut-area-label shortcut-area" aria-describedby="shortcut-capture-help" aria-pressed="false" disabled>C</button></div>
+              <div class="shortcut-edit-row"><div><label id="shortcut-cancel-label" for="shortcut-cancel">Cancel selection</label><p class="help">Escape always works too.</p></div><button id="shortcut-cancel" type="button" class="shortcut-recorder" data-shortcut="cancel" aria-labelledby="shortcut-cancel-label shortcut-cancel" aria-describedby="shortcut-capture-help" aria-pressed="false" disabled>Esc</button></div>
+            </div>
+            <p class="help">Shortcuts work on the reviewed page and stay inactive while you type in a field. Changes apply to open reviews when saved.</p>
+            <p id="shortcut-feedback" class="help" role="status" aria-live="polite"></p>
+            <div class="shortcut-actions"><button id="save-shortcuts" type="button" class="primary" disabled>Save shortcuts</button><button id="reset-shortcuts" type="button" disabled>Restore defaults</button></div>
+          </div>
         </section>
       </div>
     </div>

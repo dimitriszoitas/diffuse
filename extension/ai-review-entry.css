@@ -1,0 +1,13 @@
+/* One entry point for screenshot reviews and journeys. */
+body[data-ai-review-view="open"] #dock-workspace > :is(.workspace-heading, #panel-page) { display: none; }
+body[data-surface="sidepanel"] .popup #open-ai-entry.review-tool {
+  display: flex; align-items: center; gap: 11px; width: 100%; min-height: 73px;
+  margin: 0; padding: 13px; border: 0; border-radius: 0; background: transparent;
+  color: var(--ui-ink); text-align: left; box-shadow: none;
+}
+body[data-surface="sidepanel"] .popup #open-ai-entry.review-tool:hover { background: var(--ui-surface-muted); }
+body[data-surface="sidepanel"] .popup #open-ai-entry.review-tool::before { display: none; }
+body[data-surface="sidepanel"] .popup #panel-ai-entry .review-tools { margin-top: 20px; }
+body[data-surface="sidepanel"] .popup #panel-ai-entry-title:focus { outline: none; }
+html[data-theme="dark"] .popup :is(#panel-ai-entry-back, #panel-close-ai).journey-back { background: transparent; }
+html[data-theme="dark"] .popup :is(#panel-ai-entry-back, #panel-close-ai).journey-back:hover { background: var(--ui-accent-soft); }

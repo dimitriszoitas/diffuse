@@ -1,6 +1,6 @@
 {
   "name": "diffuse-live-comparison",
-  "version": "0.16.0",
+  "version": "0.20.0",
   "private": true,
   "type": "module",
   "description": "A local-first Chrome extension for live prototype-to-production review.",
@@ -13,6 +13,11 @@
     "test:popup": "node tests/popup-browser.mjs",
     "test:sidepanel": "node tests/sidepanel-browser.mjs",
     "test:journey": "node tests/journey-browser.mjs",
+    "test:managed-agents": "node tests/managed-agents-browser.mjs",
+    "test:review-agent": "node tests/review-agent-browser.mjs",
+    "browser:local": "npm --prefix local-browser start",
+    "test:local-browser": "npm --prefix local-browser test",
+    "test:interactive-audit": "node tests/interactive-audit-browser.mjs",
     "test:journey-executor": "node tests/journey-executor-browser.mjs",
     "check": "node scripts/check.mjs",
     "package": "node scripts/package.mjs"

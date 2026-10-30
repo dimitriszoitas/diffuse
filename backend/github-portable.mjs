@@ -39,6 +39,11 @@ export function portablePageUrl(value) {
   return url.href;
 }
 const webUrl = value => { const url = portablePageUrl(value); if (url.startsWith('file:')) fail('a Jira link must use HTTP or HTTPS.'); return url; };
+const knowledgeUrl = value => {
+  const url = new URL(webUrl(value));
+  if (url.protocol !== 'https:' || !['nngroup.com', 'www.nngroup.com', 'w3.org', 'www.w3.org'].includes(url.hostname) || url.port) fail('a review source must link to NN/g or W3C.');
+  return url.href;
+};
 const rect = shape(numbers('x y width height top right bottom left'));
 const scroll = shape(numbers('x y'));
 const pinOffset = value => {
@@ -109,7 +114,7 @@ const issue = shape({url:webUrl,key:text(128),status:text(100),createdAt:date});
 const comment = shape({findingKey:cleanPortableKey,prSourcePreviewUrl:cleanPreviewUrl,verifications:cleanVerificationHistory,prAttachments:array(sanitizePRAttachment,PR_MAX_ATTACHMENTS),createdAt:date,updatedAt:date,mode:enumOf(['audit','comparison']),fields,selection:nullable(selection),pinOffset,pinPoint,pinSelection:sanitizePinSelection,
   context:shape({production:pageContext,prototype:pageContext,alignment:shape({...numbers('opacity reveal offsetX offsetY'),...booleans('linked hidden')}),browser}),
   evidence:shape({production:image,prototype:image,designReference:image,designReferenceAdditional:array(image,1),video,...numbers('captureSkewMs')}),
-  ai:shape({provider:enumOf(['anthropic']),model:text(200),...numbers('mismatchScore confidence'),reason:text(8000),acceptedAt:date,mode:enumOf(['audit','comparison']),designReference:shape({url:webUrl,fileKey:text(200),nodeId:text(200),serverName:text(200),tools:array(text(100),4),text:text(40000),capturedAt:date})}),jiraIssues:array(issue,100)});
+  ai:shape({provider:enumOf(['anthropic']),model:text(200),sources:array(shape({title:text(500),url:knowledgeUrl}),16),ruleIds:array(text(120),4),assessment:enumOf(['observed','heuristic','needs-verification']),knowledgeRevision:text(200),checkedAt:date,...numbers('mismatchScore confidence'),reason:text(8000),acceptedAt:date,mode:enumOf(['audit','comparison']),designReference:shape({url:webUrl,fileKey:text(200),nodeId:text(200),serverName:text(200),tools:array(text(100),4),text:text(40000),capturedAt:date})}),jiraIssues:array(issue,100)});
 const review = shape({reviewKey:cleanPortableKey,prContext:cleanPRContext,title:text(2000),createdAt:date,updatedAt:date,mode:enumOf(['audit','comparison']),productionUrl:portablePageUrl,prototypeUrl:portablePageUrl,comments:array(comment,MAX_COMMENTS)});
 
 function validateReview(value) {

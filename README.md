@@ -1,8 +1,12 @@
 # Diffuse — live design comparison and page audits
 
-**[Download Diffuse 0.16.0 for Chrome](https://github.com/dimitriszoitas/diffuse/releases/download/v0.16.0/Diffuse-0.16.0.zip).** Give AI a task across your app. When it gets stuck, answer its question, classify the blocker, and choose Stop journey or Continue. Choose a persona and review checklist, then inspect its journey recording. Diffuse also includes on-page comments, AI audits, live Diff, Jira export, and shared GitHub reviews with original and updated evidence.
+**0.20.0:** optional **Interactive audit** under Review with AI uses a paired local Playwright MCP companion. Measure rendered styles, run axe-core checks, sample hover/focus states, and keep screenshots and stopped audit reports locally. Explicit AI analysis sends only a bounded text evidence summary to your selected provider. See [setup](docs/playwright-review.md) and [release notes](docs/releases/0.20.0.md). The release ZIP includes a separate **Local Browser** folder; this is optional and is not loaded as a Chrome extension.
 
-Light, Dark, and System appearance and optional read-only Figma MCP references remain included. See the [release notes](docs/releases/0.16.0.md), [privacy policy](docs/PRIVACY.md), and [terms](docs/TERMS.md).
+**Also included:** choose Anthropic or OpenAI for all AI features, with independent saved keys. OpenAI agents use GPT-6.1 Sol with Max effort; Anthropic agents retain Claude Opus 5.5 with Max effort. This update also adds customizable comment shortcuts, cleaner settings and sidebar navigation, and a separate Journeys section in reports, including stopped attempts and every saved step. See [release notes](docs/releases/0.19.0.md) and [OpenAI setup](docs/openai-connection.md).
+
+**[Download Diffuse 0.20.0 for Chrome](https://github.com/dimitriszoitas/diffuse/releases/download/v0.20.0/Diffuse-0.20.0.zip).** Give AI a task across your app. When it gets stuck, answer its question, classify the blocker, and choose Stop journey or Continue. Choose a persona and review checklist, then inspect its journey recording. Diffuse also includes on-page comments, AI audits, live Diff, Jira export, and shared GitHub reviews with original and updated evidence.
+
+Light, Dark, and System appearance and optional read-only Figma MCP references remain included. See the [release notes](docs/releases/0.17.0.md), [privacy policy](docs/PRIVACY.md), and [terms](docs/TERMS.md).
 
 Diffuse uses a native Chrome side drawer for review controls. **Start Diffuse** opens it; for an active review, click the extension icon and **Start Diffuse**. There is no floating toolbar. The webpage resizes beside Diffuse, and closing the drawer preserves the review and unfinished comment. Chrome chooses the drawer side and owns its resize handle.
 
@@ -14,7 +18,7 @@ Diffuse layers a **continuously running prototype** over a production page in Ch
 
 ## Install in Chrome
 
-1. Use Chrome 116 or later and unzip the [current release](https://github.com/dimitriszoitas/diffuse/releases/download/v0.16.0/Diffuse-0.16.0.zip). Keep the resulting **Diffuse** folder somewhere permanent.
+1. Use Chrome 116 or later and unzip the [current release](https://github.com/dimitriszoitas/diffuse/releases/download/v0.20.0/Diffuse-0.20.0.zip). Keep the resulting **Diffuse** folder somewhere permanent.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Choose **Load unpacked** and select the unzipped **Diffuse** folder. If developing from a source checkout instead, select its **`extension` folder**.
 4. Pin **Diffuse — Live design comparison** in Chrome’s extensions menu.
@@ -23,7 +27,7 @@ The extension loads directly from its files; no build step is needed. If Diffuse
 
 **Updating an official 0.10.2 or later installation:** replace the files in its existing Diffuse folder, choose **Reload** in `chrome://extensions`, and refresh the reviewed pages. Keep the same installation; its identity, saved reviews, and settings remain.
 
-**Moving from 0.10.1 or earlier:** export the reviews you want to keep using **⋯ → Export review** before upgrading. Leave the old extension and its folder intact, install 0.16.0 from a separate folder, then use **Load review** to import those files. Disable the old copy after checking your reviews in the new one. The stable identity introduced in 0.10.2 has its own storage, so reconnect Jira and any optional AI/Figma settings. Replacing the old files does not transfer old storage.
+**Moving from 0.10.1 or earlier:** export the reviews you want to keep using **⋯ → Export review** before upgrading. Leave the old extension and its folder intact, install 0.20.0 from a separate folder, then use **Load review** to import those files. Disable the old copy after checking your reviews in the new one. The stable identity introduced in 0.10.2 has its own storage, so reconnect Jira and any optional AI/Figma settings. Replacing the old files does not transfer old storage.
 
 ## Choose an appearance
 
@@ -40,7 +44,7 @@ Appearance is a local preference. It does not restyle the website, change captur
 
 ## Test a journey across pages
 
-Open **Journey Testing with AI** in the review sidebar and give AI a goal, such as “Add Oat milk to the ingredients table with ml as its unit.” Describe the simulated user, adjust their confidence and familiarity, and choose the review checklist. Add optional success criteria, test data, exploration preferences, and permission to move the test records needed for your goal. Diffuse uses your configured Anthropic key and model.
+Open **Review with AI → Journey test** in the review sidebar and give AI a goal, such as “Add Oat milk to the ingredients table with ml as its unit.” Describe the simulated user, adjust their confidence and familiarity, and choose the review checklist. Add optional success criteria, test data, exploration preferences, and permission to move the test records needed for your goal. Direct journeys use your selected provider’s key and model. The optional agents engine uses Claude Opus 5.5 or GPT-6.1 Sol with Max effort for the journey agent and evaluator; enable it under **Settings → AI review → Journey testing**.
 
 The result includes a silent movie of the attempt, a timeline with screenshots and notes, and observed page visits, click attempts, and backtracking. **Watch this step** seeks to that moment in the recording. Pause and Resume affect both the actions and the recording; download the full WebM movie to keep or share it.
 
@@ -52,7 +56,7 @@ After a run, choose **Ask AI** or **Ask AI about this step** to open a continuin
 
 AI assesses discoverability, clarity, effort, feedback, and recovery with supporting evidence and confidence. It leaves untested dimensions unscored. Accept useful findings as ordinary review comments with their captured page, screenshot, and reproduction steps for Jira, GitHub, or exports. The full journey movie stays in local history and is downloaded separately.
 
-Journeys operate one visible tab within the starting website origin, for up to 30 actions or ten minutes. Use a test environment: the journey can fill forms and create records. Login, sensitive actions, unsupported controls, or uncertain outcomes may require human intervention. AI assessments describe the observed attempt; they do not replace human usability research. See the [journey guide](docs/journey-reviews.md).
+Journeys operate one visible tab within the starting website origin. Set an action target for the separate efficiency score; passing it does not stop the journey. Recording caps save a partial clip while screenshots and notes continue. Spending limits, individual request timeouts, no-progress checks and browser safeguards still apply. Use a test environment: the journey can fill forms and create records. Login, sensitive actions, unsupported controls, or uncertain outcomes may require human intervention. AI assessments describe the observed attempt; they do not replace human usability research. See the [journey guide](docs/journey-reviews.md).
 
 ## Review a local HTML file
 
@@ -60,7 +64,7 @@ For a page opened directly from your computer (`file:///…/page.html`), open `c
 
 ## Start a review, then add Diff when needed
 
-Start on the page being reviewed: click the Chrome extension icon, choose **Start Diffuse**, and allow access to that page. The side drawer separates Review with AI, Journey Testing with AI, and Diff View, with a shortcut legend for comments. Recording is available inside each comment. There is no upfront audit/comparison choice.
+Start on the page being reviewed: click the Chrome extension icon, choose **Start Diffuse**, and allow access to that page. The side drawer offers Review with AI and Diff View, with a shortcut legend for comments. Review with AI includes Screen review, Interactive audit and Journey test. Recording is available inside each comment. There is no upfront audit/comparison choice.
 
 Choose **Diff** in the drawer when you want a live reference. Select an open reference tab, grant that selected site access, then confirm **the same tab** in Chrome’s sharing dialog. A capture handle identifies the selected reference; a mismatched tab or non-tab surface is rejected before replacing the working stream. The live reference stays in the offscreen capture document, so closing the small selector window does not stop it.
 

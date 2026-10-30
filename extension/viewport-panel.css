@@ -1,24 +1,22 @@
 /* Responsive presets stay readable and distinct within the workspace. */
-.viewport-panel { padding: 13px; margin-bottom: 10px; border: 1px solid #e3eaf2; border-radius: 9px; background: #fff; box-shadow: 0 2px 9px #1d416506; }
-.viewport-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-.viewport-title { display: flex; align-items: center; gap: 3px; }
-.viewport-title strong { font-size: 13px; font-weight: 600; letter-spacing: -.1px; }
+.viewport-panel { padding: 10px; margin-bottom: 10px; border: 1px solid #e3eaf2; border-radius: 9px; background: #fff; box-shadow: 0 2px 9px #1d416506; }
+.viewport-meta { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+.viewport-meta #viewport-size { flex: 1; min-width: 0; }
 .viewport-help { position: relative; display: flex; align-items: center; }
-.viewport-heading .viewport-info { display: flex; align-items: center; justify-content: center; width: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: #8397b0; }
-.viewport-heading .viewport-info:hover, .viewport-heading .viewport-info:focus-visible { background: #edf3fd; color: var(--ui-accent); }
+.viewport-panel .viewport-info { display: flex; align-items: center; justify-content: center; width: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: #8397b0; }
+.viewport-panel .viewport-info:hover, .viewport-panel .viewport-info:focus-visible { background: #edf3fd; color: var(--ui-accent); }
 .viewport-info svg { width: 15px; height: 15px; }
 .viewport-help [role=tooltip] { display: none; position: fixed; z-index: 100; width: 276px; max-width: calc(100vw - 24px); padding: 13px 14px; border: 1px solid #d7e3f1; border-radius: 8px; background: #fff; color: #304f73; box-shadow: 0 10px 30px #25476c24, 0 2px 5px #25476c08; font-size: 12px; font-weight: 400; line-height: 1.55; overflow: auto; }
 .viewport-help[data-open] [role=tooltip] { display: block; }
 .viewport-help [role=tooltip] strong { display: block; margin-bottom: 5px; font-size: 12px; font-weight: 600; color: #244b79; }
 .viewport-help [role=tooltip] small { display: block; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e9eef6; color: #74869b; font-size: 11px; line-height: 1.5; }
-.viewport-heading #viewport-native { min-height: 32px; padding: 4px 7px; border: 0; border-radius: 5px; background: transparent; color: #5272a0; font-size: 11px; font-weight: 500; }
-.viewport-heading #viewport-native:hover { color: var(--ui-accent); background: #edf3fd; }
+.viewport-panel #viewport-native { min-height: 32px; padding: 4px 7px; margin-top: 3px; border: 0; border-radius: 5px; background: transparent; color: #5272a0; font-size: 11px; font-weight: 500; }
+.viewport-panel #viewport-native:hover { color: var(--ui-accent); background: #edf3fd; }
 .viewport-segments { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; padding: 3px; border: 1px solid #e2eaf4; border-radius: 7px; background: #f2f6fc; }
 .viewport-segments button { display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 40px; padding: 5px 6px; border: 1px solid transparent; border-radius: 5px !important; background: transparent; color: #7c91ac; }
 .viewport-segments button:hover { color: #3065b8; background: #e6effd; }
 .viewport-segments button[aria-pressed=true] { border-color: #bcd1f2; background: #fff; color: #235ed7; box-shadow: 0 1px 4px #3564a01a, inset 0 -2px 0 #e2edff; }
 .viewport-segments button svg { width: 21px; height: 21px; pointer-events: none; }
-.viewport-panel #viewport-size { margin: 9px 1px 0; color: #71869f; font-size: 11px; line-height: 1.5; font-variant-numeric: tabular-nums; }
+.viewport-panel #viewport-size { margin: 0 1px; color: #71869f; font-size: 11px; line-height: 1.5; font-variant-numeric: tabular-nums; }
 .viewport-panel #viewport-error { margin: 7px 0 0; color: var(--ui-danger); font-size: 12px; line-height: 1.5; }
-@media(max-width:380px) { .viewport-panel { padding: 12px; } }
 @media (forced-colors: active) { .viewport-segments button[aria-pressed=true] { outline: 2px solid Highlight; outline-offset: -3px; } .viewport-help [role=tooltip] { border-color: CanvasText; } }

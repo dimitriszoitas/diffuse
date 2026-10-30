@@ -8,6 +8,7 @@
   let pendingAction = null, commandError = '', stopped = false, connectionLost = false;
   let referenceToggle = null;
   let lastSessionId = null;
+  let aiEntryOpen = false, aiReturnFocus = false;
   const category = value => ({'design-mismatch':'Design mismatch','ux-issue':'UX issue','copy-change':'Copy change'}[value] || 'Design mismatch');
   const severity = value => ({minor:'Minor',major:'Major',critical:'Critical'}[value] || 'Minor');
   const text = (id,value) => { $(id).textContent = value || ''; };
@@ -62,7 +63,7 @@
     try {
       const result=await panelRequest('PANEL_STATE',{windowId:panelWindowId,knownDraftId:draftId,knownEvidenceKey:evidenceKey});
       const nextSession=result.session || null;
-      if(nextSession?.id!==lastSessionId){clearDraft();commentsKey='';aiKey='';state=null;connectionLost=false;commandError='';lastSessionId=nextSession?.id||null;}
+      if(nextSession?.id!==lastSessionId){clearDraft();commentsKey='';aiKey='';state=null;connectionLost=false;commandError='';aiEntryOpen=false;aiReturnFocus=false;lastSessionId=nextSession?.id||null;}
       session=nextSession;
       if(result.state?.code==='PANEL_PAGE_STARTING') {
         // Initial connection is expected to take a moment; retain any existing
@@ -149,6 +150,35 @@
     });
   }
 
+  // Classic content scripts cannot import the shared report helper; keep the
+  // source allowlist and labels aligned with review-sources.mjs.
+  function appendAiReviewGuidance(card,item,noteClass,detailsClass) {
+    const labels={observed:'Visible observation',heuristic:'UX recommendation','needs-verification':'Needs verification'};
+    if(typeof item.assessment==='string'&&Object.hasOwn(labels,item.assessment)){
+      const label=document.createElement('p');label.className=noteClass;label.textContent=labels[item.assessment];card.append(label);
+    }
+    const sources=[],seen=new Set();
+    for(const source of (Array.isArray(item.sources)?item.sources.slice(0,32):[])){
+      const value=source?.url;
+      if(typeof value!=='string'||value.length>2048||/[\u0000-\u0020\u007f<>"'`\\]/.test(value))continue;
+      try{
+        const url=new URL(value);
+        if(url.protocol!=='https:'||!['nngroup.com','www.nngroup.com','w3.org','www.w3.org'].includes(url.hostname)||url.username||url.password||url.port||seen.has(url.href))continue;
+        const title=typeof source.title==='string'?source.title.replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,240):'';
+        sources.push({url:url.href,title:title||(url.hostname.includes('nngroup.com')?'NN/g reference':'W3C reference')});seen.add(url.href);
+        if(sources.length===8)break;
+      }catch{}
+    }
+    if(!sources.length)return;
+    const details=document.createElement('details');details.className=detailsClass;
+    const summary=document.createElement('summary');summary.textContent=`Sources (${sources.length})`;
+    const list=document.createElement('ul');
+    for(const source of sources){
+      const entry=document.createElement('li'),link=document.createElement('a');link.href=source.url;link.textContent=source.title;link.target='_blank';link.rel='noopener noreferrer';link.style.overflowWrap='anywhere';link.style.color='var(--ui-accent, var(--accent, #235ed7))';entry.append(link);list.append(entry);
+    }
+    details.append(summary,list);card.append(details);
+  }
+
   function paintAi(ai) {
     if(!ai)return;
     const inactiveField=id=>document.activeElement!==$(id);
@@ -157,7 +187,9 @@
     if(inactiveField('panel-ai-threshold'))$('panel-ai-threshold').value=String(ai.threshold??35);
     text('panel-ai-threshold-value',`${$('panel-ai-threshold').value}/100`);
     text('panel-ai-mode',Number.isInteger(session.sourceTabId)?'Compare the current page and reference screenshots.':'Review this page for UX and copy issues.');
-    text('panel-ai-config',ai.config?.hasKey?`Model: ${ai.config.model}. Your API key stays in extension settings.`:'Add your Anthropic API key in Settings.');
+    const provider=ai.config?.provider==='openai'?'OpenAI':'Anthropic',managedModel=ai.config?.provider==='openai'?'GPT-6.1 Sol':'Claude Opus 5.5';
+    text('panel-ai-config',ai.config?.hasKey?(ai.config.reviewEngine==='managed'?`UX & Accessibility Reviewer · ${managedModel} · Max effort · $${ai.config.reviewBudgetUsd||2} ${ai.config.provider==='openai'?'estimated spending guard':'limit'} per review. Screenshots are stored in your ${provider} account.`:`Model: ${ai.config.model}. Your API key stays in extension settings.`):`Add your ${provider} API key in Settings.`);
+    text('panel-ai-disclosure',`Run sends the current screenshot(s), your instructions, and any linked Figma design context to ${provider} using your API key. API charges apply. Suggestions become comments only when you accept them.`);
     const mcp=ai.config?.mcp||{},referenceReady=Boolean(mcp.configured??mcp.enabled);
     const desktop=/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(?::\d+)?\//.test(mcp.endpoint||'');
     text('panel-ai-reference-status',referenceReady?(desktop?'Uses the matching file open in Figma desktop.':'Uses your configured design server.'):'Connect Figma in Settings to review against this frame.');
@@ -180,6 +212,7 @@
     shown.forEach(item=>{
       const card=node('article',undefined,'suggestion-card');
       card.append(node('div',`${category(item.category)} · Size ${item.score??item.mismatchScore??0}/100 · ${Math.round((item.confidence||0)*100)}% confidence`,'suggestion-meta'),node('h3',item.title||'Suggested change'));
+      appendAiReviewGuidance(card,item,'muted','panel-details');
       const current=node('section');current.append(node('h4','Current'),node('p',item.comment||''));const change=node('section',undefined,'suggestion-change');change.append(node('h4','Change to'),node('p',item.expected||'No proposed change recorded.'));
       const actions=node('div',undefined,'button-row');for(const [action,label]of[['preview','Show area'],['accept','Accept comment'],['dismiss','Dismiss']])actions.append(button(label,()=>act('aiSuggestion',{suggestionAction:action,id:item.id}),locked||(action==='preview'&&!item.region)));
       card.append(current,change,actions);list.append(card);
@@ -190,7 +223,7 @@
   function paint() {
     $('dock-workspace').hidden=!session;
     window.dispatchEvent(new CustomEvent('diffuse-panel-state',{detail:{session,state,busy:Boolean(pendingAction)}}));
-    if(!session){clearDraft();return;}
+    if(!session){clearDraft();document.body.dataset.aiReviewView='closed';return;}
     const starting=state?.code==='PANEL_PAGE_STARTING';
     const hasReference=Number.isInteger(session.sourceTabId);text('panel-mode','REVIEW');text('panel-title',starting?'Starting review…':state?.recording?'Recording…':'Your review');text('panel-page',session.target?.title||'Reviewed page');
     const away=!state||state.active===false||state.available===false;
@@ -203,7 +236,11 @@
     $('panel-stop').disabled=starting||(Boolean(pendingAction)&&pendingAction!=='runAi')||Boolean(state?.recordingBusy);
     if(away)return;
     const view=state.view==='comment'&&!state.comment?'controls':state.view||'controls';
-    $('panel-controls').hidden=view==='ai';$('panel-composer').hidden=!(state.commentOpen||state.comment);$('panel-ai-view').hidden=view!=='ai';
+    const showAiEntry=aiEntryOpen&&view!=='ai';
+    $('panel-controls').hidden=view==='ai'||showAiEntry;$('panel-composer').hidden=!(state.commentOpen||state.comment);$('panel-ai-view').hidden=view!=='ai';
+    $('panel-ai-entry').hidden=!showAiEntry;
+    document.body.dataset.aiReviewView=aiEntryOpen||view==='ai'?'open':'closed';
+    $('open-ai-entry').setAttribute('aria-expanded',String(aiEntryOpen));
     if(!state.comment)clearDraft();
     if(state.commentOpen||state.comment)paintComment(state.comment);
     if(view==='ai')paintAi(state.ai);
@@ -218,6 +255,10 @@
     const selecting=state.picking||state.areaArmed;
     const locked=state.captureBusy||state.commentSaving||state.recordingBusy||Boolean(state.recording)||Boolean(state.commentOpen||state.comment)||state.aiBusy||state.aiOperationBusy||session.aiRunning||Boolean(pendingAction);
     $('panel-ai').disabled=locked||selecting;
+    // Journey navigation stays available while an existing journey is active,
+    // so the reviewer can reach its pause and stop controls.
+    $('open-ai-entry').disabled=$('panel-ai').disabled&&$('panel-journey').disabled&&$('panel-interactive-audit').disabled;
+    if(aiReturnFocus&&showAiEntry&&!$('panel-ai').disabled){aiReturnFocus=false;$('panel-ai').focus({preventScroll:true});}
     $('panel-cancel-selection').hidden=!selecting;$('panel-retry').hidden=!state.pendingCaptureAction;
     notice('panel-capture-error',[state.captureDescription,state.captureError].filter(Boolean).join(' '));
     $('panel-retry').disabled=Boolean(state.captureNeedsAccess)||Boolean(pendingAction)||state.captureBusy;
@@ -226,7 +267,11 @@
     paintComments();
   }
 
-  const actions={'panel-diff':'openDiff','panel-cancel-selection':'cancelSelection','panel-ai':'openAi','panel-close-ai':'closeAi','panel-return-comment':'focusComment','panel-retry':'retryCapture','panel-focus':'focusTarget','panel-source':'focusSource','panel-reconnect':'reconnect','panel-stop':'stop'};
+  $('open-ai-entry').addEventListener('click',()=>{aiEntryOpen=true;paint();$('panel-ai-entry-title').focus({preventScroll:true});});
+  $('panel-ai-entry-back').addEventListener('click',()=>{aiEntryOpen=false;paint();$('open-ai-entry').focus({preventScroll:true});});
+  $('panel-ai').addEventListener('click',()=>{aiEntryOpen=true;act('openAi');});
+  $('panel-close-ai').addEventListener('click',()=>{aiEntryOpen=true;aiReturnFocus=true;act('closeAi');});
+  const actions={'panel-diff':'openDiff','panel-cancel-selection':'cancelSelection','panel-return-comment':'focusComment','panel-retry':'retryCapture','panel-focus':'focusTarget','panel-source':'focusSource','panel-reconnect':'reconnect','panel-stop':'stop'};
   for(const [id,action]of Object.entries(actions))$(id).addEventListener('click',()=>act(action,action==='focusComment'?{draftId}:undefined));
   $('panel-stop-recording').addEventListener('click',()=>act('stopRecording'));
   $('panel-recover-page').addEventListener('click',()=>act('recoverPage'));

@@ -5,6 +5,7 @@ import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
 import {webcrypto} from 'node:crypto';
 import {assertPageAccess, isReviewableUrl} from '../extension/core.mjs';
+import {aiProviderName} from '../extension/ai-providers.mjs';
 
 const source = await readFile(new URL('../extension/background.js', import.meta.url), 'utf8');
 const event = () => ({listeners: [], addListener(listener) { this.listeners.push(listener); }, emit(...args) { return this.listeners.map(listener => listener(...args)); }});
@@ -42,7 +43,7 @@ async function harness({initial = currentSession(), waitForStorage = null} = {})
   const reviews = {getReview: async () => ({comments: []}), putDraft: async draft => {state.savedDrafts.push(draft);}};
   const context = vm.createContext({createViewportController,chrome, reviews, crypto: webcrypto, AbortController, DEFAULT_SETTINGS: {}, viewportWarning: () => '', isReviewableUrl,
     assertPageAccess: (url, chromeApi = chrome, message) => assertPageAccess(url, chromeApi, message),
-    protectAIStorage: async () => {}, readAISettings: async () => ({hasKey: false}), setTimeout, clearTimeout, setInterval, clearInterval});
+    protectAIStorage: async () => {}, readAISettings: async () => ({hasKey: false}), aiProviderName, setTimeout, clearTimeout, setInterval, clearInterval});
   vm.runInContext(source.replace(/^import .*\n/gm, '') + `
     globalThis.api = {ready, handle, captureDraft, initializeTab, publish, syncPanelDocking,
       setSession(value) {session = value;}, setTransitioning(value) {transitioning = value;}, getSession() {return session;},
@@ -77,6 +78,13 @@ test('panel bridge rejects stale sessions and commands outside its allowlist wit
   await assert.rejects(worker.send({type: 'PANEL_COMMAND', windowId: 7, sessionId: 'session', action: 'CAPTURE_COMMENT'}), /Unknown drawer/);
   for (const type of ['CAPTURE_COMMENT', 'SETTINGS', 'RUN_AI_REVIEW', 'ENABLE_EVIDENCE']) await assert.rejects(worker.send({type, sessionId: 'session'}), /not part/);
   assert.equal(worker.state.messages.length, 0);
+});
+
+test('a provider change after review preflight is rejected before capture or evidence delivery', async () => {
+  const worker = await harness();
+  await assert.rejects(worker.send({type:'RUN_AI_REVIEW',sessionId:'session',expectedProvider:'openai'},{id:'test',tab:{id:2}}),error=>error.code==='AI_PROVIDER_CHANGED'&&/No evidence was sent/.test(error.message));
+  assert.equal(worker.state.captures,0);
+  assert.equal(worker.state.savedDrafts.length,0);
 });
 
 test('panel requests stay attached to their target window and active tab, while focus recovery works', async () => {

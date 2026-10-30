@@ -44,6 +44,7 @@
   let areaArmed = false;
   let areaDrag = null;
   let cHeld = false;
+  let heldAreaBinding = null;
   let ignoreNextAreaClick = false;
   let pinsTimer = null;
   let openPinId = null;
@@ -56,6 +57,7 @@
   let pinStatusTimer = null;
   const pinPlacements = new Map();
   let aiConfig = {hasKey:false,model:'',threshold:35};
+  let aiConfigRefreshVersion = 0;
   let aiBatch = null;
   let aiBusy = false;
   let aiOperationBusy = false;
@@ -96,6 +98,18 @@
   }
   const quietSend = (type, data) => send(type, data).catch(() => {});
   const el = id => root?.getElementById(id);
+  const shortcuts = globalThis.DiffuseShortcuts;
+  const defaultBinding = code => ({code, ctrlKey:false, altKey:false, shiftKey:false, metaKey:false});
+  let shortcutConfig = shortcuts?.getState() || {enabled:true,comment:defaultBinding('KeyC'),area:defaultBinding('KeyC'),cancel:defaultBinding('Escape')};
+  const shortcutMatches = (event, binding) => shortcuts ? shortcuts.matches(event,binding) : !event.isComposing && event.keyCode!==229 && event.code===binding.code && ['ctrlKey','altKey','shiftKey','metaKey'].every(key=>Boolean(event[key])===binding[key]);
+  const shortcutLabel = name => shortcuts ? shortcuts.format(shortcutConfig[name]) : name==='cancel'?'Esc':'C';
+  const cancelShortcut = event => !event.isComposing && event.keyCode!==229 && (event.key==='Escape' || (shortcutConfig.enabled && !editableEvent(event) && shortcutMatches(event,shortcutConfig.cancel)));
+  const cancelShortcutHint = () => shortcutConfig.enabled && shortcutConfig.cancel.code!=='Escape'?`${shortcutLabel('cancel')} or Esc to cancel.`:'Esc to cancel.';
+  shortcuts?.subscribe(config=>{
+    const changed=JSON.stringify(config)!==JSON.stringify(shortcutConfig);
+    shortcutConfig=config;
+    if(root&&changed){stopPicking(false);cancelArea();heldAreaBinding=null;paintReviewControls();}
+  });
   const hasReference = () => Number.isInteger(session?.sourceTabId);
   const isAudit = () => !hasReference();
   const categoryLabel = value => ({'design-mismatch':'Design mismatch','ux-issue':'UX issue','copy-change':'Copy change'}[value] || 'Design mismatch');
@@ -113,7 +127,7 @@
 :host{all:initial!important;position:fixed!important;inset:0!important;display:block!important;z-index:2147483647!important;pointer-events:none!important;color-scheme:dark!important;contain:layout style!important;--ink:#211a35;--panel:#241c35;--raised:#342844;--text:#fcfaff;--muted:#d2c7df;--line:#9381ae;--accent:#c9adff;--coral:#ff9b85;font:400 16px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important}
 :host::backdrop{background:transparent!important;pointer-events:none!important}:host([data-evidence-hidden]){opacity:0!important}
 :host([data-docked]) #ai-panel,:host([data-docked]) #panel-backdrop{display:none!important}
-*{box-sizing:border-box}[hidden]{display:none!important}button,input,textarea,select,summary{font:inherit}button,summary{cursor:pointer}button,input,textarea,select,summary{scroll-margin:84px 12px 20px}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:3px;box-shadow:0 0 0 2px #211a35}button:disabled{opacity:.55;cursor:default}
+*{box-sizing:border-box}[hidden]{display:none!important}button,input,textarea,select,summary{font:inherit}button,summary{cursor:pointer}button,input,textarea,select,summary{scroll-margin:84px 12px 20px}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:none!important;outline-offset:0!important;border-color:var(--accent)!important;box-shadow:inset 0 0 0 1px var(--accent)!important}button:disabled{opacity:.55;cursor:default}
 button,summary{min-height:44px;min-width:44px;display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:9px 13px;background:var(--raised);color:var(--text);font-size:16px;line-height:1.4;white-space:normal}button:hover,summary:hover{background:#49365f}input,textarea,select{color:var(--text);background:#171122;border:1px solid var(--line);border-radius:9px;padding:10px 12px;min-height:44px;min-width:0}input::placeholder,textarea::placeholder{color:#bbb0ca;opacity:1}input[type=range]{padding:0;accent-color:var(--accent);border:0;background:transparent;min-width:80px}input[type=checkbox]{accent-color:var(--accent);width:22px;height:22px;min-height:22px;padding:0;margin:0;flex-shrink:0}
 #layer{position:absolute;inset:0;overflow:hidden;pointer-events:none}#reference{position:absolute;top:0;left:0;max-width:none;max-height:none;object-fit:fill;pointer-events:none}#divider{position:absolute;top:0;bottom:0;width:2px;background:var(--accent);box-shadow:0 0 0 1px #211a3580;pointer-events:none}#handle{position:absolute;top:38%;left:-23px;width:48px;height:64px;border:2px solid #fff;border-radius:24px;background:var(--accent);color:var(--ink);font-size:25px;pointer-events:auto;cursor:ew-resize;touch-action:none;box-shadow:0 4px 18px #211a3555}
 .edge-label{position:absolute;top:16px;padding:7px 12px;border-radius:8px;background:#211a35;color:#fff;font-size:14px;font-weight:650;line-height:1.4;letter-spacing:.03em;white-space:nowrap;text-transform:uppercase}.production{right:14px}.prototype{left:14px}
@@ -136,7 +150,7 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
 :host([data-docked]) #toolbar button{padding:9px 12px}
 :host([data-docked]) #warning,:host([data-docked]) #diff-hint{flex-basis:100%;margin:0;padding:8px;font-size:14px}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
-@media(forced-colors:active){button,input,select,textarea,summary,#toolbar,#comment-panel,#ai-panel,#saved-comment-bubble{border-color:ButtonText}.comment-pin,#handle{forced-color-adjust:none}.mark{forced-color-adjust:none}button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid Highlight}}
+@media(forced-colors:active){button,input,select,textarea,summary,#toolbar,#comment-panel,#ai-panel,#saved-comment-bubble{border-color:ButtonText}.comment-pin,#handle{forced-color-adjust:none}.mark{forced-color-adjust:none}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid Highlight!important;outline-offset:-2px!important}}
 .viewport-bar{border-top:1px solid var(--line);gap:8px;padding:8px 12px}.viewport-segments{display:flex;gap:2px;border:1px solid var(--line);border-radius:10px;padding:2px}.viewport-segments button{font-size:14px;min-height:44px;padding:5px 9px;border:1px solid transparent;background:transparent}.viewport-segments button[aria-pressed=true]{background:var(--accent);color:var(--ink)}.viewport-bar .composer-note{font-size:14px;margin:0}:host([data-docked]) .viewport-bar{display:none!important}
 @media(max-width:650px){#toolbar .bar{padding:7px 9px;gap:6px}#toolbar .bar button,#toolbar .bar summary{font-size:14px;padding:5px 9px;min-height:44px}#toolbar .brand{font-size:18px;gap:8px}#toolbar #status,#toolbar #recording-note{display:none}#toolbar .viewport-bar{gap:5px}#toolbar .viewport-segments{gap:0}#toolbar #viewport-caption{flex-basis:100%}}
 
@@ -154,7 +168,7 @@ details{position:relative}summary{list-style:none}summary::-webkit-details-marke
 /* On-page annotations use the same cool canvas and blue accents as the drawer. */
 :host{color-scheme:light!important;--ink:#172b45;--panel:#fff;--raised:#f3f6fa;--text:#172b45;--muted:#62738a;--line:#bac9da;--accent:#235ed7}
 button,summary,input,textarea,select{border-radius:6px;font-size:14px}button:hover,summary:hover{background:#e8efff}input,textarea,select{background:#fff;color:var(--text)}input::placeholder,textarea::placeholder{color:var(--muted)}.composer-field select{color-scheme:light}
-button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline-width:2px;box-shadow:none}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:none!important;outline-offset:0!important;border-color:var(--accent)!important;box-shadow:inset 0 0 0 1px var(--accent)!important}
 #handle{left:-21px;width:44px;height:52px;border:1px solid #bac9da;border-radius:6px;background:#fff;color:#235ed7;font-size:20px;box-shadow:0 2px 10px #213c5b20}
 .edge-label{top:12px;padding:5px 8px;border:1px solid #d3dff1;border-radius:4px;background:#f4f8fff5;color:#2355a2;font-size:11px;font-weight:600;letter-spacing:.04em}
 #selection-outline{background:#235ed710;box-shadow:0 0 0 1px #ffffffb0}#selection-outline[data-region=true]{background:#235ed718}#selection-label,#ai-region-label{background:#235ed7;color:#fff}
@@ -168,7 +182,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 #save-comment{background:linear-gradient(180deg,#3677f5,#1b53cc);color:#fff;border-color:#235ed7;box-shadow:inset 0 1px 0 #ffffff2e,0 2px 6px #164cb326}.composer-error{background:#fff0f1;color:#a32942;border-color:#f0cbd4}.evidence-options button[aria-pressed=true]{color:#fff}
 .ai-suggestion,.ai-disclosure,#ai-results-status{background:#f3f6fa;border-color:#d4dfed;border-radius:8px}.ai-suggestion h4,.ai-suggestion-meta,.threshold-ends small,#ai-results-status p,.ai-disclosure{color:var(--muted)}.ai-change{background:#e8efff;border-color:#94b3ef}.ai-change h4{color:#235ed7}#ai-show-all{background:#e8efff;color:#235ed7;border-color:#bac9da}#ai-accept-all{background:#235ed7;color:#fff;border-color:#235ed7}
 *{scrollbar-color:#bdcbdb transparent}*::-webkit-scrollbar-thumb{background-color:#bdcbdb}
-@media(forced-colors:active){*{scrollbar-color:auto}}
+:is(#save-comment,#ai-run,#ai-accept-all):focus-visible{border-color:#fff!important;box-shadow:inset 0 0 0 1px #fff!important}
+@media(forced-colors:active){*{scrollbar-color:auto}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid Highlight!important;outline-offset:-2px!important;box-shadow:none!important}}
 /* A quiet activity cue at the inside edge, without covering or blocking the page. */
 #ai-review-glow{position:absolute;inset:0;z-index:3;pointer-events:none;box-shadow:inset 0 0 0 1px #82aaff66,inset 0 0 20px 3px #397bfa70,inset 0 0 56px 9px #579bff2e;opacity:.4;animation:diffuse-ai-pulse 2.6s ease-in-out infinite}
 @keyframes diffuse-ai-pulse{0%,100%{opacity:.35}50%{opacity:.95}}
@@ -495,7 +510,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
         evidenceChoice,error:el('comment-error').textContent,fieldRevisions:Object.fromEntries(commentFieldRevisions),
         evidenceKey,evidenceIncluded,...(evidenceIncluded?{evidence:commentDraft.evidence||{}}:{}),
       }:null,
-      ai:{config:{hasKey:Boolean(aiConfig.hasKey),model:aiConfig.model||'',threshold:aiConfig.threshold,mcp:aiConfig.mcp||{enabled:false}},instructions:el('ai-instructions').value,referenceUrl:el('ai-reference-url').value,threshold:Number(el('ai-threshold').value),batch:aiBatch,error:el('ai-error').textContent},
+      ai:{config:{hasKey:Boolean(aiConfig.hasKey),provider:aiConfig.provider||'anthropic',model:aiConfig.model||'',managedModel:aiConfig.managedModel,reviewEngine:aiConfig.reviewEngine||'direct',reviewBudgetUsd:aiConfig.reviewBudgetUsd,threshold:aiConfig.threshold,mcp:aiConfig.mcp||{enabled:false}},instructions:el('ai-instructions').value,referenceUrl:el('ai-reference-url').value,threshold:Number(el('ai-threshold').value),batch:aiBatch,error:el('ai-error').textContent},
       openPinId,
     };
   }
@@ -609,7 +624,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     areaArmed=true;areaDrag=null;remapAreaId=remapping;
     composerPoint=null;
     el('comment-panel').hidden=true;
-    el('picker-tip').firstElementChild.textContent=remapping?'Draw the area for this comment, or set its dimensions below. Esc to cancel.':'Drag an area, or set its dimensions below. Esc to cancel.';
+    el('picker-tip').firstElementChild.textContent=(remapping?'Draw the area for this comment, or set its dimensions below. ':'Drag an area, or set its dimensions below. ')+cancelShortcutHint();
     el('area-coordinates').hidden=false;
     el('area-coordinates').open=false;
     el('area-error').textContent='';
@@ -631,7 +646,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   function cancelArea(restoreRemap = false) {
     const remapping=remapAreaId;remapAreaId=null;
     if(areaDrag) ignoreNextAreaClick=true;
-    areaArmed=false;areaDrag=null;cHeld=false;
+    areaArmed=false;areaDrag=null;cHeld=false;heldAreaBinding=null;
     if(!root)return;
     el('selection-outline').hidden=true;
     el('selection-outline').removeAttribute('data-region');
@@ -651,21 +666,26 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     const options={capture:true,signal:abort.signal};
     const suppress=event=>{event.preventDefault();event.stopImmediatePropagation();};
     document.addEventListener('keydown',event=>{
-      if(event.key==='Escape'&&(areaArmed||areaDrag||cHeld)){suppress(event);cancelArea(true);stopPicking(false);return;}
-      if(event.code==='KeyC'&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&!event.shiftKey&&!editableEvent(event)&&canSelect()){
-        suppress(event);
-        if(remapAreaId||event.repeat||cHeld)return;
-        // Arm on the initial press, independent of where focus is on release.
-        // Holding C still turns the next primary pointer gesture into an area.
-        startPicking();cHeld=true;
-      }
+      if(cancelShortcut(event)&&(picking||areaArmed||areaDrag||cHeld)){suppress(event);cancelArea(true);stopPicking(false);return;}
+      if(!shortcutConfig.enabled||editableEvent(event)||!canSelect())return;
+      const commentMatch=shortcutMatches(event,shortcutConfig.comment),areaMatch=shortcutMatches(event,shortcutConfig.area);
+      if(!commentMatch&&!areaMatch)return;
+      suppress(event);
+      if(remapAreaId||event.repeat||cHeld)return;
+      // Shared keys support tap-and-click as well as hold-and-drag. A separate
+      // area key arms the area picker and remains armed after the key is released.
+      if(commentMatch)startPicking();else armArea();
+      heldAreaBinding=areaMatch?{...shortcutConfig.area}:null;cHeld=areaMatch;
     },options);
     document.addEventListener('keyup',event=>{
-      if(event.code!=='KeyC')return;
-      if(cHeld)suppress(event);
-      cHeld=false;
+      if(!heldAreaBinding)return;
+      const released=event.code===heldAreaBinding.code;
+      const modifierReleased=['ctrlKey','altKey','shiftKey','metaKey'].some(key=>heldAreaBinding[key]&&!event[key]);
+      if(!released&&!modifierReleased)return;
+      if(cHeld&&released)suppress(event);
+      cHeld=false;heldAreaBinding=null;
     },options);
-    window.addEventListener('blur',()=>{cHeld=false;if(areaDrag)cancelArea(true);},{signal:abort.signal});
+    window.addEventListener('blur',()=>{cHeld=false;heldAreaBinding=null;if(areaDrag)cancelArea(true);},{signal:abort.signal});
     document.addEventListener('pointerdown',event=>{
       if(event.button!==0||!(areaArmed||cHeld)||!canSelect()||isDiffuseEvent(event)||editableEvent(event))return;
       suppress(event);stopPicking(false);closePin();closeAi();
@@ -697,7 +717,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       if(bounds.width<4||bounds.height<4){
         const target=pickTarget(event);
         if(target){selectedElement=target;selectionMetadata=globalThis.DiffuseInspector.inspect(target);setComposerPoint(selectionMetadata,{x:event.clientX,y:event.clientY});captureComment();}
-        else {localWarning='Press C, then choose an element. Hold C and drag to select an area.';paint();}
+        else {localWarning=shortcutConfig.enabled?`Press ${shortcutLabel('comment')}, then choose an element. Use ${shortcutLabel('area')} and drag to select an area.`:'Choose an element or area using the review controls.';paint();}
         return;
       }
       selectedElement=null;selectionMetadata=globalThis.DiffuseInspector.region(bounds.x,bounds.y,bounds.width,bounds.height);
@@ -982,6 +1002,28 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     } catch {}
   }
 
+  async function refreshAiConfig({includeReference=false}={}) {
+      const activeRoot=root,sessionId=session?.id,version=++aiConfigRefreshVersion;
+      const [response,mcpResponse]=await Promise.all([send('GET_AI_CONFIG').then(requireSuccess),includeReference?send('GET_MCP_CONFIG').then(requireSuccess):null]);
+      if(!root||root!==activeRoot||session?.id!==sessionId||version!==aiConfigRefreshVersion)return false;
+      aiConfig={...aiConfig,...response.config,...(mcpResponse?{mcp:mcpResponse.config}:{})};
+      if(aiSavedThreshold!==aiConfig.threshold)aiThresholdOverride=null;
+      aiSavedThreshold=aiConfig.threshold;
+      el('ai-threshold').value=String(aiThresholdOverride??Math.max(0,Math.min(100,Number(aiConfig.threshold)||0)));
+      el('ai-threshold-value').value=el('ai-threshold').value;
+      const provider=aiConfig.provider==='openai'?'OpenAI':'Anthropic',managedModel=aiConfig.provider==='openai'?'GPT-6.1 Sol':'Claude Opus 5.5';
+      el('ai-disclosure').textContent=`Run sends the current screenshot(s), your instructions, and any linked Figma design context to ${provider} using your configured API key. API charges apply. Nothing is sent until you click Run.`;
+      el('ai-config-status').textContent=aiConfig.hasKey?(aiConfig.reviewEngine==='managed'?`UX & Accessibility Reviewer · ${managedModel} · Max effort · $${aiConfig.reviewBudgetUsd||2} ${aiConfig.provider==='openai'?'estimated spending guard':'limit'} per review. Screenshots are stored in your ${provider} account.`:`Model: ${aiConfig.model||'Configured model'} · API key stays in extension settings.`):`Add your ${provider} API key in AI settings to run a review.`;
+      paintReviewControls();notifyPanel();
+      return true;
+  }
+
+  function refreshVisibleAiConfig() {
+    if(role!=='target'||!root||el('ai-panel').hidden||aiBusy||aiOperationBusy)return;
+    const activeRoot=root;
+    refreshAiConfig().catch(error=>{if(root===activeRoot){el('ai-error').textContent=error.message;notifyPanel();}});
+  }
+
   async function openAi() {
     if(!root||hasCommentComposer()||captureBusy||recording)return;
     stopPicking(false);cancelArea();closePin();
@@ -989,14 +1031,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     el('ai-mode-note').textContent=isAudit()?'Review this page for potential UX and copy issues. Add a reference with Diff to compare designs.':'Review the current page and reference screenshots for potential mismatches.';
     el('ai-config-status').textContent='Checking AI settings…';
     try{
-      const [response,mcpResponse]=await Promise.all([send('GET_AI_CONFIG').then(requireSuccess),send('GET_MCP_CONFIG').then(requireSuccess)]);
-      if(!root)return;
-      aiConfig={...aiConfig,...response.config,mcp:mcpResponse.config};
-      if(aiSavedThreshold!==aiConfig.threshold)aiThresholdOverride=null;
-      aiSavedThreshold=aiConfig.threshold;
-      el('ai-threshold').value=String(aiThresholdOverride??Math.max(0,Math.min(100,Number(aiConfig.threshold)||0)));
-      el('ai-threshold-value').value=el('ai-threshold').value;
-      el('ai-config-status').textContent=aiConfig.hasKey?`Model: ${aiConfig.model||'Configured model'} · API key stays in extension settings.`:'Add your Anthropic API key in AI settings to run a review.';
+      if(!await refreshAiConfig({includeReference:true}))return;
       await refreshAiBatch();
     }catch(error){if(root)el('ai-error').textContent=error.message;}
     paintReviewControls();
@@ -1014,6 +1049,35 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     const y=Math.max(0,Math.min(1,Number(region.y)||0))*height+(context.scroll?.y||0)-scrollY;
     Object.assign(el('ai-region-preview').style,{left:`${x}px`,top:`${y}px`,width:`${Math.max(0,Math.min(1,Number(region.width)||0))*width}px`,height:`${Math.max(0,Math.min(1,Number(region.height)||0))*height}px`});
     el('ai-region-preview').hidden=false;
+  }
+
+  // Classic content scripts cannot import the shared report helper; keep the
+  // source allowlist and labels aligned with review-sources.mjs.
+  function appendAiReviewGuidance(card,item,noteClass,detailsClass) {
+    const labels={observed:'Visible observation',heuristic:'UX recommendation','needs-verification':'Needs verification'};
+    if(typeof item.assessment==='string'&&Object.hasOwn(labels,item.assessment)){
+      const label=document.createElement('p');label.className=noteClass;label.textContent=labels[item.assessment];card.append(label);
+    }
+    const sources=[],seen=new Set();
+    for(const source of (Array.isArray(item.sources)?item.sources.slice(0,32):[])){
+      const value=source?.url;
+      if(typeof value!=='string'||value.length>2048||/[\u0000-\u0020\u007f<>"'`\\]/.test(value))continue;
+      try{
+        const url=new URL(value);
+        if(url.protocol!=='https:'||!['nngroup.com','www.nngroup.com','w3.org','www.w3.org'].includes(url.hostname)||url.username||url.password||url.port||seen.has(url.href))continue;
+        const title=typeof source.title==='string'?source.title.replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,240):'';
+        sources.push({url:url.href,title:title||(url.hostname.includes('nngroup.com')?'NN/g reference':'W3C reference')});seen.add(url.href);
+        if(sources.length===8)break;
+      }catch{}
+    }
+    if(!sources.length)return;
+    const details=document.createElement('details');details.className=detailsClass;
+    const summary=document.createElement('summary');summary.textContent=`Sources (${sources.length})`;
+    const list=document.createElement('ul');
+    for(const source of sources){
+      const entry=document.createElement('li'),link=document.createElement('a');link.href=source.url;link.textContent=source.title;link.target='_blank';link.rel='noopener noreferrer';link.style.overflowWrap='anywhere';link.style.color='var(--ui-accent, var(--accent, #235ed7))';entry.append(link);list.append(entry);
+    }
+    details.append(summary,list);card.append(details);
   }
 
   function renderAiSuggestions() {
@@ -1064,7 +1128,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       }
       card.addEventListener('mouseenter',()=>aiPreview(suggestion));card.addEventListener('mouseleave',()=>{if(root)el('ai-region-preview').hidden=true;});
       card.addEventListener('focusin',()=>aiPreview(suggestion));
-      card.append(meta,title,current,expected);if(suggestion.reason)card.append(reason);card.append(actions);list.append(card);
+      card.append(meta,title);appendAiReviewGuidance(card,suggestion,'composer-note','ai-run-details');card.append(current,expected);if(suggestion.reason)card.append(reason);card.append(actions);list.append(card);
     }
     if(aiBatch?.summary||aiBatch?.limitations?.length){
       const details=document.createElement('details');details.className='ai-run-details';
@@ -1079,18 +1143,23 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 
   async function runAi() {
     if(!root||aiBusy||aiOperationBusy||recording||captureBusy||hasCommentComposer())return;
-    if(!aiConfig.hasKey){el('ai-error').textContent='Add your API key in AI settings, then reopen this panel.';return;}
+    const displayedProvider=aiConfig.provider||'anthropic';
     const sessionId=session?.id;aiBusy=true;pendingCaptureAction=null;el('ai-error').textContent='';aiPreviewContext=currentContext();
-    const instructions=el('ai-instructions').value.trim();const threshold=Number(el('ai-threshold').value);
     paintReviewControls();renderAiSuggestions();
     try{
-      const result=requireSuccess(await send('RUN_AI_REVIEW',{instructions,threshold,referenceUrl:el('ai-reference-url').value.trim()}));
+      if(!await refreshAiConfig()||!root||session?.id!==sessionId)return;
+      const expectedProvider=aiConfig.provider||'anthropic';
+      if(expectedProvider!==displayedProvider){el('ai-error').textContent=`Your AI provider changed to ${expectedProvider==='openai'?'OpenAI':'Anthropic'}. Review the updated connection above, then click Run again.`;return;}
+      if(!aiConfig.hasKey){el('ai-error').textContent=`Add your ${expectedProvider==='openai'?'OpenAI':'Anthropic'} API key in AI settings before running this review.`;return;}
+      const instructions=el('ai-instructions').value.trim();const threshold=Number(el('ai-threshold').value);
+      const result=requireSuccess(await send('RUN_AI_REVIEW',{instructions,threshold,expectedProvider,referenceUrl:el('ai-reference-url').value.trim()}));
       if(!root||session?.id!==sessionId)return;
       aiBatch=result.batch||null;aiPreviewContext=aiBatch?.context?.production||aiPreviewContext;
     }catch(error){
       if(root&&session?.id===sessionId){
         if(error.code==='NEEDS_CAPTURE_ACCESS'){pendingCaptureAction='ai';el('ai-error').textContent='Click the Diffuse icon in Chrome on this page, then Start Diffuse. This requested review will retry after access is granted.';}
-        else if(error.code==='NEEDS_AI_KEY'){aiConfig.hasKey=false;el('ai-error').textContent='Add your Anthropic API key in AI settings, then reopen this panel.';}
+        else if(error.code==='NEEDS_AI_KEY'){aiConfig.hasKey=false;el('ai-error').textContent='Add your selected provider’s API key in AI settings, then reopen this panel.';}
+        else if(error.code==='AI_PROVIDER_CHANGED'){await refreshAiConfig().catch(()=>{});if(root&&session?.id===sessionId)el('ai-error').textContent=error.message;}
         else el('ai-error').textContent=error.message;
       }
     }finally{if(session?.id===sessionId){aiBusy=false;paintReviewControls();renderAiSuggestions();}}
@@ -1211,7 +1280,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     pickerAbort = new AbortController();
     const options = {capture: true, signal: pickerAbort.signal};
     el('area-coordinates').hidden=true;
-    el('picker-tip').firstElementChild.textContent='Choose an element, or use arrow keys and Enter. Esc to cancel.';
+    el('picker-tip').firstElementChild.textContent='Choose an element, or use arrow keys and Enter. '+cancelShortcutHint();
     el('picker-tip').hidden = false;
     const suppress = event => {
       if (event.button !== 0 || isDiffuseEvent(event)) return;
@@ -1234,14 +1303,14 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     let keyboardIndex=-1;
     const keyboardTargets=[...document.querySelectorAll('button,a[href],input,select,textarea,h1,h2,h3,p,[data-component],[data-testid],[role]')].filter(node=>!node.closest('[data-diffuse-ui]')&&node.getClientRects().length&&getComputedStyle(node).visibility!=='hidden').slice(0,400);
     document.addEventListener('keydown', event => {
-      if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); stopPicking();return; }
+      if (cancelShortcut(event)) { event.preventDefault(); event.stopImmediatePropagation(); stopPicking();return; }
       if(['ArrowDown','ArrowRight','ArrowUp','ArrowLeft'].includes(event.key)&&keyboardTargets.length){
         event.preventDefault();event.stopImmediatePropagation();
         const direction=['ArrowUp','ArrowLeft'].includes(event.key)?-1:1;
         keyboardIndex=(keyboardIndex+direction+keyboardTargets.length)%keyboardTargets.length;
         hoveredElement=keyboardTargets[keyboardIndex];hoveredElement.scrollIntoView({block:'nearest',inline:'nearest'});drawSelection(hoveredElement);
         const label=(hoveredElement.getAttribute('aria-label')||hoveredElement.textContent||hoveredElement.tagName).trim().replace(/\s+/g,' ').slice(0,90);
-        el('picker-tip').firstElementChild.textContent=`${label}. ${keyboardIndex+1} of ${keyboardTargets.length}. Enter to comment; arrows to choose; Esc to cancel.`;
+        el('picker-tip').firstElementChild.textContent=`${label}. ${keyboardIndex+1} of ${keyboardTargets.length}. Enter to comment; arrows to choose. ${cancelShortcutHint()}`;
       }
       if(event.key==='Enter'&&hoveredElement&&(!isDiffuseEvent(event)||root.activeElement===el('comment'))){
         event.preventDefault();event.stopImmediatePropagation();choosePickedElement(hoveredElement);
@@ -1611,8 +1680,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     el('comment').disabled = captureBusy || commentSaving || recordingBusy || Boolean(recording) || hasCommentComposer() || aiBusy || aiOperationBusy || Boolean(session?.aiRunning);
     el('comment').setAttribute('aria-pressed', String(picking));
     el('comment').textContent = picking ? 'Cancel selection' : 'Comment';
+    el('comment').title=shortcutConfig.enabled?`Press ${shortcutLabel('comment')}, then click to leave a comment`:'Leave a comment';
     el('area-comment').disabled=el('comment').disabled;
     el('area-comment').setAttribute('aria-pressed',String(areaArmed));
+    el('area-comment').title=shortcutConfig.enabled?`Select an area, or use ${shortcutLabel('area')} and drag on the page`:'Select an area';
     const count = Number(session?.commentCount) || 0;
     el('review').textContent = `Review (${count})`;
     el('record').disabled = recordingBusy || captureBusy || commentSaving || (hasCommentComposer() && !recording) || picking || areaArmed || aiBusy || aiOperationBusy || Boolean(session?.aiRunning);
@@ -1870,6 +1941,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   }
 
   function stopResources() {
+    aiConfigRefreshVersion++;
     composerResizeObserver?.disconnect();composerResizeObserver=null;
     releaseTheme?.(); releaseTheme = null;
     clearInterval(contextTimer); contextTimer = null;
@@ -1934,7 +2006,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     stopResources();
     stopPicking(false);
     clearInterval(pinsTimer);pinsTimer=null;
-    areaArmed=false;areaDrag=null;cHeld=false;ignoreNextAreaClick=false;openPinId=null;pinItems=[];pinsUrl='';pinsViewport='';
+    areaArmed=false;areaDrag=null;cHeld=false;heldAreaBinding=null;ignoreNextAreaClick=false;openPinId=null;pinItems=[];pinsUrl='';pinsViewport='';
     remapAreaId=null;remapBusy=false;pinPendingDrops.clear();
     aiBatch=null;aiBusy=false;aiOperationBusy=false;aiBulkAccepting=false;aiThresholdOverride=null;aiSavedThreshold=null;aiPreviewContext=null;
     clearInterval(recordingTimer); recordingTimer = null;
@@ -1954,6 +2026,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       abort = new AbortController();
       contextTimer = setInterval(() => { if (!runtimeAvailable()) invalidateContext(); }, 1000);
       if (role === 'target') { makeOverlay(); setRecording(session.recording || null); paint(); }
+      shortcuts?.refresh().catch(()=>{});
       const resize = () => {
         if(role==='target'){
           if(areaArmed||areaDrag){cancelArea();localWarning='The page resized. Select the area again at this size.';}
@@ -1967,6 +2040,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
         updatePinPositions();clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>quietSend('VIEWPORT',{viewport:viewport()}),150);
       };
       window.addEventListener('resize', resize, {signal: abort.signal});
+      window.addEventListener('focus', refreshVisibleAiConfig, {signal: abort.signal});
+      document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshVisibleAiConfig();},{signal:abort.signal});
       window.visualViewport?.addEventListener('resize', resize, {signal: abort.signal});
       document.addEventListener('wheel', referenceWheel, {capture: true, passive: false, signal: abort.signal});
       document.addEventListener('scroll', event => {
@@ -2072,7 +2147,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (contextInvalidated || !runtimeAvailable()) { invalidateContext(); return; }
-    if (sender.id !== chrome.runtime.id || message?.namespace !== 'diffuse' || message.target || message.type === 'APPEARANCE_CHANGED') return;
+    if (sender.id !== chrome.runtime.id || message?.namespace !== 'diffuse' || message.target || ['APPEARANCE_CHANGED','SHORTCUTS_CHANGED'].includes(message.type)) return;
     const reply = value => { try { respond(value); } catch { /* The sender may have reloaded as well. */ } };
     receive(message).then(reply, error => { localWarning = error.message; paint(); reply({ok: false, error: error.message, code: error.code}); });
     return true;

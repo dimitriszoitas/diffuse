@@ -1,7 +1,11 @@
 import {DEFAULT_SETTINGS, safeSettings, safeReferenceWheel, safeLinkedScroll, isReviewableUrl, assertPageAccess, viewportWarning} from './core.mjs';
 import * as reviews from './review-store.mjs';
-import {reviewScreens} from './ai-client.mjs';
+import {reviewScreens, AIReviewError} from './ai-client.mjs';
+import {reviewScreensManaged} from './review-managed.mjs';
+import {readReviewAgent, setupReviewAgent, publicReviewAgentStatus} from './review-agent-config.mjs';
 import {readAISettings, saveAISettings, clearAIKey, protectAIStorage} from './ai-config.mjs';
+import {aiProviderName, aiProviderOrigin} from './ai-providers.mjs';
+import {readOpenAIJourneyAgents, setupOpenAIJourneyAgents, publicOpenAIJourneyAgentsStatus, readOpenAIReviewAgent, setupOpenAIReviewAgent, publicOpenAIReviewAgentStatus} from './openai-agent-config.mjs';
 import {generateJiraTitles, hasJiraTitle} from './jira-titles.mjs';
 import {readMCPSettings, saveMCPSettings, clearMCPSettings, mcpPermissionOrigin} from './mcp-config.mjs';
 import {testMCPConnection, readFigmaReference, parseFigmaReference} from './mcp-client.mjs';
@@ -13,6 +17,10 @@ import {formatGitHubSummary} from './github-format.mjs';
 import {createJourneyService, JOURNEY_MESSAGES} from './journey-service.mjs';
 import {createJourneyExecutor} from './journey-executor.mjs';
 import {deleteJourneys, getJourney, putJourney} from './journey-store.mjs';
+import {readJourneyAgents, setupJourneyAgents, publicJourneyAgentsStatus} from './journey-agent-config.mjs';
+import {createBrowserAuditService, BROWSER_AUDIT_MESSAGES} from './browser-audit-service.mjs';
+import {deleteBrowserAudits} from './browser-audit-store.mjs';
+import './shortcuts.js';
 
 let session = null;
 let transitioning = false;
@@ -33,6 +41,32 @@ let panelDockState = null;
 let diffWindow = null;
 let githubWorker = null;
 let journeyService = null;
+let browserAuditService = null;
+function getBrowserAuditService() {
+  return browserAuditService ||= createBrowserAuditService({getSession: () => session, changed: notifyPanels, acceptFinding: acceptBrowserAuditFinding,
+    ensureReview: current => reviews.ensureReview({id: current.reviewId, mode: current.mode || 'audit',
+      title: `${current.target?.title || 'Page'} — design review`, productionUrl: current.target?.url || '',
+      createdAt: current.startedAt || new Date().toISOString(), updatedAt: new Date().toISOString()})});
+}
+async function acceptBrowserAuditFinding(audit, index, identity) {
+  const review = await reviews.getReview(audit.reviewId);
+  if (!review) throw new Error('This review was removed. The audit cannot add a comment to it.');
+  const existing = review.comments.find(comment => comment.ai?.browserAuditFinding === identity);
+  if (existing) return existing.id;
+  const finding = audit.analysis.findings[index], page = audit.evidence?.page || audit.page;
+  const screenshot = audit.evidence?.screenshots?.find(image => /^data:image\/(?:png|jpeg|webp);base64,/.test(image.dataUrl || ''));
+  if (!screenshot) throw new Error('This audit no longer has a screenshot to attach. Its findings remain in the audit report.');
+  const production = {...screenshot, width: screenshot.width || page?.viewport?.width, height: screenshot.height || page?.viewport?.height};
+  const draft = {id: crypto.randomUUID(), reviewId: audit.reviewId, mode: 'audit', createdAt: new Date().toISOString(), selection: null,
+    context: {production: {url: page?.url || audit.approvedUrl, title: page?.title || '', viewport: page?.viewport || {}}}, evidence: {production},
+    ai: {provider: audit.analysis.provider, model: audit.analysis.model, browserAuditFinding: identity, browserAuditId: audit.id, assessment: finding.assessment, evidenceIds: finding.evidenceIds}};
+  await reviews.putDraft(draft);
+  const {comment} = await reviews.addComment(draft.id, {title: finding.title, comment: finding.description,
+    expected: finding.recommendation, severity: finding.severity, category: 'ux-issue', state: 'Interactive audit · sampled page state',
+    steps: `Evidence: ${finding.evidenceIds.join(', ')}. The attached screenshot shows the audited page, not an exact issue pin.`});
+  if (session?.reviewId === audit.reviewId) { await refreshComments(); await publish(); }
+  return comment.id;
+}
 const referenceRequests = new Map();
 const viewportController = createViewportController({chromeApi: chrome, assertPageAccess,
   onOwnershipChanged: async tabs => {if(session){session.viewportDebuggerTabs=tabs;await persist();}},
@@ -64,13 +98,20 @@ const persist = () => chrome.storage.session.set({comparison: session});
 const tabMessage = (tabId, type, data = {}) => chrome.tabs.sendMessage(tabId, {namespace: 'diffuse', type, ...data}, {frameId: 0});
 const softTabMessage = (tabId, type, data) => tabMessage(tabId, type, data).catch(() => null);
 const safeAppearance = value => ['light', 'dark', 'system'].includes(value) ? value : 'light';
+const readShortcuts = async () => globalThis.DiffuseShortcuts.normalize((await chrome.storage.local.get('diffuseShortcuts')).diffuseShortcuts);
 chrome.storage.onChanged?.addListener((changes, area) => {
-  if (area !== 'local' || !changes.diffuseTheme) return;
+  if (area !== 'local' || (!changes.diffuseTheme && !changes.diffuseShortcuts)) return;
   ready.then(async () => {
     if (!session) return;
-    const preference = safeAppearance((await chrome.storage.local.get('diffuseTheme')).diffuseTheme);
     const tabs = new Set([session?.targetTabId, session?.sourceTabId].filter(Number.isInteger));
-    await Promise.all([...tabs].map(tabId => softTabMessage(tabId, 'APPEARANCE_CHANGED', {preference})));
+    if (changes.diffuseTheme) {
+      const preference = safeAppearance((await chrome.storage.local.get('diffuseTheme')).diffuseTheme);
+      await Promise.all([...tabs].map(tabId => softTabMessage(tabId, 'APPEARANCE_CHANGED', {preference})));
+    }
+    if (changes.diffuseShortcuts) {
+      const config = await readShortcuts();
+      await Promise.all([...tabs].map(tabId => softTabMessage(tabId, 'SHORTCUTS_CHANGED', {config})));
+    }
   }).catch(() => {});
 });
 
@@ -515,7 +556,7 @@ async function initializeTab(role) {
   const tabId = role === 'source' ? current.sourceTabId : current.targetTabId;
   const tab = await chrome.tabs.get(tabId);
   await assertPageAccess(tab.url, chrome, 'This page moved to a site that Diffuse cannot access. Open Diffuse on this page and start a new review.');
-  await chrome.scripting.executeScript({target: {tabId}, files: ['inspector.js', 'select-controls.js', 'theme.js', 'theme-content.js', 'content.js']});
+  await chrome.scripting.executeScript({target: {tabId}, files: ['inspector.js', 'select-controls.js', 'theme.js', 'theme-content.js', 'shortcuts.js', 'content.js']});
   if (session?.id !== current.id) return;
   const response = await tabMessage(tabId, 'INITIALIZE', {role, session: current});
   if (!response?.ok) throw new Error(response?.error || 'Could not prepare the page for comparison.');
@@ -1101,8 +1142,12 @@ async function runAIReview(message) {
   if (aiJob || acceptingSuggestions.size) throw new Error('Wait for the current AI review action to finish.');
   if (session.pendingDraftId) throw new Error('Save or cancel the open comment before running the AI review.');
   const config = await readAISettings({includeKey: true});
-  if (!config.hasKey) { const error = new Error('Add your Anthropic API key in AI settings first.'); error.code = 'NEEDS_AI_KEY'; throw error; }
-  if (!(await chrome.permissions.contains({origins: ['https://api.anthropic.com/*']}))) throw new Error('Open AI settings and save to allow a connection to Anthropic.');
+  if (message.expectedProvider !== undefined && message.expectedProvider !== (config.provider || 'anthropic')) {
+    const error = new Error(`Your AI provider changed to ${aiProviderName(config.provider)}. Review the updated connection, then click Run again. No evidence was sent.`);
+    error.code = 'AI_PROVIDER_CHANGED'; throw error;
+  }
+  if (!config.hasKey) { const error = new Error(`Add your ${aiProviderName(config.provider)} API key in AI settings first.`); error.code = 'NEEDS_AI_KEY'; throw error; }
+  if (!(await chrome.permissions.contains({origins: [aiProviderOrigin(config.provider)]}))) throw new Error(`Open AI settings and save to allow a connection to ${aiProviderName(config.provider)}.`);
   if (session !== current) throw new Error('This review belongs to a session that has ended.');
   if (transitioning) throw new Error('Finish choosing the reference before running AI review.');
   if (current.pendingDraftId) throw new Error('Save or cancel the open comment before running the AI review.');
@@ -1126,7 +1171,7 @@ async function runAIReview(message) {
     if (job.controller.signal.aborted || session !== current || aiJob !== job) throw new Error('The AI review was cancelled.');
   };
   let draft, replacedBatchId;
-  const timer = setTimeout(() => job.controller.abort(), referenceUrl ? 180000 : 90000);
+  const timer = setTimeout(() => job.controller.abort(), config.reviewEngine === 'managed' ? 360000 : referenceUrl ? 180000 : 90000);
   // A finite, user-requested streamed review may take longer than the worker's idle timeout.
   const keepAlive = setInterval(() => chrome.storage.session.get('comparison').catch(() => {}), 20000);
   current.aiRunning = true;
@@ -1148,10 +1193,11 @@ async function runAIReview(message) {
       if (prepared.images[0]) draft.evidence.designReference = {...prepared.images[0], capturedAt: draft.designReference.capturedAt};
       if (prepared.images[1]) draft.evidence.designReferenceAdditional = [{...prepared.images[1], capturedAt: draft.designReference.capturedAt}];
     }
-    const result = await reviewScreens({apiKey: config.apiKey, model: config.model, instructions, mode: current.mode || 'comparison', production: images.production, prototype: images.prototype, designReference, signal: job.controller.signal});
+    const review = config.reviewEngine === 'managed' ? reviewScreensManaged : reviewScreens;
+    const result = await review({apiKey: config.apiKey, provider: config.provider, model: config.model, budgetUsd: config.reviewBudgetUsd, instructions, mode: current.mode || 'comparison', production: images.production, prototype: images.prototype, designReference, signal: job.controller.signal});
     assertCurrentJob();
     if (referenceConfig?.token && JSON.stringify(result).includes(referenceConfig.token)) throw new Error('The AI response contained credential-like content and was discarded.');
-    draft.aiBatch = {model: result.model || config.model, summary: result.summary, limitations: [...result.limitations, ...(designReference?.warnings || [])].slice(0, 8), suggestions: result.suggestions.map(suggestion => ({...suggestion, id: crypto.randomUUID(), score: suggestion.mismatchScore, status: 'pending'}))};
+    draft.aiBatch = {provider: config.provider || 'anthropic', model: result.model || config.model, ...(result.knowledgeRevision ? {knowledgeRevision: result.knowledgeRevision, checkedAt: result.checkedAt} : {}), summary: result.summary, limitations: [...result.limitations, ...(designReference?.warnings || [])].slice(0, 8), suggestions: result.suggestions.map(suggestion => ({...suggestion, id: crypto.randomUUID(), score: suggestion.mismatchScore, status: 'pending'}))};
     await reviews.putDraft(draft);
     assertCurrentJob();
     const oldBatchId = current.aiBatchId;
@@ -1168,6 +1214,7 @@ async function runAIReview(message) {
       current.aiBatchId = replacedBatchId;
       await persist().catch(() => {});
     }
+    if (config.reviewEngine === 'managed' && error instanceof AIReviewError) throw error;
     if (job.controller.signal.aborted) throw new Error('The AI review was cancelled or timed out. Try again when the page is ready.');
     throw error;
   } finally {
@@ -1252,8 +1299,9 @@ function getJourneyService() {
       return tab;
     },
     readConfig: async () => {
-      if (!await chrome.permissions.contains({origins: ['https://api.anthropic.com/*']})) throw new Error('Open AI settings and save your key to allow Anthropic access.');
-      return readAISettings({includeKey: true});
+      const config = await readAISettings({includeKey: true});
+      if (!await chrome.permissions.contains({origins: [aiProviderOrigin(config.provider)]})) throw new Error(`Open AI settings and save your key to allow ${aiProviderName(config.provider)} access.`);
+      return config;
     },
     createExecutor: async (current, startUrl) => {
       const previous = {hidden: current.settings.hidden, linked: current.settings.linked};
@@ -1339,7 +1387,7 @@ async function acceptSuggestion(message) {
         assertSuggestionSession(current, message.batchId);
         prototype = reference.production;
       }
-      const draft = {id: `ai-${batch.id}-${suggestion.id}`, reviewId: batch.reviewId, mode: batch.mode, createdAt: batch.createdAt, selection, context: batch.context, evidence: {...batch.evidence, production: production.production, ...(prototype ? {prototype} : {})}, ai: {provider: 'anthropic', model: batch.aiBatch.model, runId: batch.id, suggestionId: suggestion.id, mismatchScore: suggestion.mismatchScore, confidence: suggestion.confidence, reason: suggestion.reason || '', acceptedAt: new Date().toISOString(), mode: batch.mode, ...(batch.designReference ? {designReference: batch.designReference} : {})}};
+      const draft = {id: `ai-${batch.id}-${suggestion.id}`, reviewId: batch.reviewId, mode: batch.mode, createdAt: batch.createdAt, selection, context: batch.context, evidence: {...batch.evidence, production: production.production, ...(prototype ? {prototype} : {})}, ai: {provider: batch.aiBatch.provider || 'anthropic', model: batch.aiBatch.model, runId: batch.id, suggestionId: suggestion.id, mismatchScore: suggestion.mismatchScore, confidence: suggestion.confidence, reason: suggestion.reason || '', acceptedAt: new Date().toISOString(), mode: batch.mode, ...(suggestion.sources ? {sources: suggestion.sources, ruleIds: suggestion.ruleIds, assessment: suggestion.assessment, knowledgeRevision: batch.aiBatch.knowledgeRevision, checkedAt: batch.aiBatch.checkedAt} : {}), ...(batch.designReference ? {designReference: batch.designReference} : {})}};
       assertSuggestionSession(current, message.batchId);
       await reviews.putDraft(draft);
       assertSuggestionSession(current, message.batchId);
@@ -1440,8 +1488,15 @@ async function handle(message, sender) {
   const isAISettings = isSettings || sender.url?.split(/[?#]/)[0] === chrome.runtime.getURL('ai-settings.html');
   const role = session && Number.isInteger(sender.tab?.id) ? sender.tab.id === session.targetTabId ? 'target' : sender.tab.id === session.sourceTabId ? 'source' : null : null;
   const isDiff = sender.id === chrome.runtime.id && sender.url?.split('?')[0] === chrome.runtime.getURL('diff.html');
+  if (typeof message.type === 'string' && message.type.startsWith('BROWSER_AUDIT_')) {
+    const isBrowserAuditReport = sender.url?.split(/[?#]/)[0] === chrome.runtime.getURL('browser-audit-report.html');
+    if (!BROWSER_AUDIT_MESSAGES.has(message.type) || sender.id !== chrome.runtime.id || (sender.frameId != null && sender.frameId !== 0) || !(isPanel || isSettings || isReport || isBrowserAuditReport)) throw new Error('Open Diffuse to use the local browser audit.');
+    if (['BROWSER_AUDIT_OPEN','BROWSER_AUDIT_RUN','BROWSER_AUDIT_ANALYZE'].includes(message.type) && !isPanel) throw new Error('Start audits and AI analysis from the review sidebar.');
+    if (message.type === 'BROWSER_AUDIT_OPEN' && (!session || message.sessionId !== session.id)) throw new Error('This review has ended. Open the current review sidebar.');
+    return getBrowserAuditService().handle(message);
+  }
   if (message.type === 'JOURNEY_CAPTURE_ENDED' && isMedia && sender.id === chrome.runtime.id && message.sessionId === session?.id) {
-    await journeyService?.recordingEnded(message.recordingId);
+    await journeyService?.recordingEnded(message.recordingId, message.reason);
     return {ok: true};
   }
   if (typeof message.type === 'string' && message.type.startsWith('JOURNEY_')) {
@@ -1456,6 +1511,13 @@ async function handle(message, sender) {
     return getGitHubWorker().handle(message);
   }
   if (message.type === 'GET_APPEARANCE' && sender.id === chrome.runtime.id && role && sender.frameId === 0) return {ok: true, preference: safeAppearance((await chrome.storage.local.get('diffuseTheme')).diffuseTheme)};
+  if (message.type === 'GET_SHORTCUTS' && sender.id === chrome.runtime.id && (isSettings || isPanel || isPopup || (role && sender.frameId === 0))) return {ok: true, config: await readShortcuts()};
+  if (message.type === 'SAVE_SHORTCUTS') {
+    if (!isSettings || sender.id !== chrome.runtime.id || (sender.frameId != null && sender.frameId !== 0)) throw new Error('Open Diffuse settings to change keyboard shortcuts.');
+    const config = globalThis.DiffuseShortcuts.validate(message.config);
+    await chrome.storage.local.set({diffuseShortcuts: config});
+    return {ok: true, config};
+  }
   if (isDiff) {
     if (!session || sender.url !== chrome.runtime.getURL('diff.html') + `?session=${encodeURIComponent(session.id)}` || (message.type !== 'GET_DIFF_CONTEXT' && message.sessionId !== session.id)) throw new Error('This review changed. Close this window and open Diff again.');
     if (message.type === 'GET_DIFF_CONTEXT') return diffContext();
@@ -1473,13 +1535,49 @@ async function handle(message, sender) {
   if (message.type === 'PANEL_STATE' || message.type === 'PANEL_COMMAND') return panelRequest(message, sender);
   if (message.type === 'VIEWPORT_PRESET') return setViewportPreset(message,sender);
   if (['OPEN_SETTINGS', 'OPEN_AI_SETTINGS', 'OPEN_JIRA_SETTINGS'].includes(message.type) && (isPopup || isPanel || isReport || isSettings || role === 'target')) {
-    const section = message.type === 'OPEN_AI_SETTINGS' ? '#ai' : message.type === 'OPEN_JIRA_SETTINGS' ? '#jira' : '';
+    const section = message.type === 'OPEN_AI_SETTINGS' ? '#ai' : message.type === 'OPEN_JIRA_SETTINGS' ? '#jira' : message.section === 'browser' ? '#browser' : '';
     await chrome.tabs.create({url: chrome.runtime.getURL('settings.html') + section}); return {ok: true};
   }
   if (message.type === 'OPEN_REVIEW' && sender.id === chrome.runtime.id && (isReport || isPopup || isPanel)) return openSavedReview(message);
-  if (message.type === 'GET_AI_CONFIG' && (isAISettings || isPopup || isPanel || role === 'target')) return {ok: true, config: await readAISettings()};
+  if (message.type === 'GET_AI_CONFIG' && (isAISettings || isPopup || isPanel || role === 'target')) return {ok: true, config: await readAISettings(isAISettings ? {provider: message.provider} : {})};
   if (isAISettings && message.type === 'SAVE_AI_CONFIG') return {ok: true, config: await saveAISettings(message)};
-  if (isAISettings && message.type === 'CLEAR_AI_KEY') return {ok: true, config: await clearAIKey()};
+  if (isAISettings && message.type === 'CLEAR_AI_KEY') return {ok: true, config: await clearAIKey({provider: message.provider})};
+  if (isAISettings && message.type === 'GET_JOURNEY_AGENTS_STATUS') {
+    const config = await readAISettings({includeKey: true, provider: message.provider});
+    const read = config.provider === 'openai' ? readOpenAIJourneyAgents : readJourneyAgents;
+    const publicStatus = config.provider === 'openai' ? publicOpenAIJourneyAgentsStatus : publicJourneyAgentsStatus;
+    return {ok: true, agents: publicStatus(await read(config.apiKey))};
+  }
+  if (isAISettings && message.type === 'SETUP_JOURNEY_AGENTS') {
+    if (getJourneyService().busy) throw new Error('Finish or stop the current journey before setting up agents.');
+    const config = await readAISettings({includeKey: true, provider: message.provider});
+    if (!config.hasKey || !(await chrome.permissions.contains({origins: [aiProviderOrigin(config.provider)]}))) throw new Error(`Save your ${aiProviderName(config.provider)} API key and allow the connection first.`);
+    const setup = config.provider === 'openai' ? setupOpenAIJourneyAgents : setupJourneyAgents;
+    const publicStatus = config.provider === 'openai' ? publicOpenAIJourneyAgentsStatus : publicJourneyAgentsStatus;
+    const agents = await setup({apiKey: config.apiKey});
+    const fresh = await readAISettings({includeKey: true, provider: config.provider});
+    if (fresh.apiKey !== config.apiKey) throw new Error('The API key changed during setup. Set up agents with the current key.');
+    await saveAISettings({provider: config.provider, journeyEngine: 'managed'});
+    return {ok: true, agents: publicStatus(agents)};
+  }
+  if (isAISettings && message.type === 'GET_REVIEW_AGENT_STATUS') {
+    const config = await readAISettings({includeKey: true, provider: message.provider});
+    const read = config.provider === 'openai' ? readOpenAIReviewAgent : readReviewAgent;
+    const publicStatus = config.provider === 'openai' ? publicOpenAIReviewAgentStatus : publicReviewAgentStatus;
+    return {ok: true, agent: publicStatus(await read(config.apiKey))};
+  }
+  if (isAISettings && message.type === 'SETUP_REVIEW_AGENT') {
+    if (aiJob || getJourneyService().busy) throw new Error('Finish or stop the current AI review or journey before setting up the reviewer.');
+    const config = await readAISettings({includeKey: true, provider: message.provider});
+    if (!config.hasKey || !(await chrome.permissions.contains({origins: [aiProviderOrigin(config.provider)]}))) throw new Error(`Save your ${aiProviderName(config.provider)} API key and allow the connection first.`);
+    const setup = config.provider === 'openai' ? setupOpenAIReviewAgent : setupReviewAgent;
+    const publicStatus = config.provider === 'openai' ? publicOpenAIReviewAgentStatus : publicReviewAgentStatus;
+    const agent = await setup({apiKey: config.apiKey});
+    const fresh = await readAISettings({includeKey: true, provider: config.provider});
+    if (fresh.apiKey !== config.apiKey) throw new Error('The API key changed during setup. Set up the reviewer with the current key.');
+    await saveAISettings({provider: config.provider, reviewEngine: 'managed'});
+    return {ok: true, agent: publicStatus(agent)};
+  }
   if (message.type === 'GET_MCP_CONFIG' && sender.id === chrome.runtime.id && (isSettings || isPanel || role === 'target')) return {ok: true, config: await readMCPSettings()};
   if (isSettings && sender.id === chrome.runtime.id && message.type === 'SAVE_MCP_CONFIG') {
     if (!(await chrome.permissions.contains({origins: [mcpPermissionOrigin(message.endpoint)]}))) throw new Error('Allow access to this MCP server before connecting.');
@@ -1514,8 +1612,8 @@ async function handle(message, sender) {
       if (comments.some(comment => !comment)) throw new Error('A selected comment is no longer available. Reopen the Jira preview.');
       const untitled = comments.filter(comment => !hasJiraTitle(comment));
       if (!untitled.length) return {ok: true, titles: [], reason: 'existing'};
-      if (!(await chrome.permissions.contains({origins: ['https://api.anthropic.com/*']}))) return {ok: true, titles: [], reason: 'not-configured'};
       const config = await readAISettings({includeKey: true});
+      if (!(await chrome.permissions.contains({origins: [aiProviderOrigin(config.provider)]}))) return {ok: true, titles: [], reason: 'not-configured'};
       return {ok: true, ...await generateJiraTitles(untitled, config)};
     }
     if (message.type === 'LIST_REVIEWS') return {ok: true, reviews: await reviews.listReviews()};
@@ -1530,8 +1628,10 @@ async function handle(message, sender) {
       if (transitioning && session?.reviewId === message.reviewId) throw new Error('Finish choosing the reference before deleting this review.');
       if (session?.reviewId === message.reviewId && journeyService?.busy) throw new Error('Stop the journey before deleting this review.');
       if (session?.reviewId === message.reviewId && (session.recording || recordingStart || aiJob || acceptingSuggestions.size)) throw new Error('Stop the recording or wait for the AI review action before deleting this review.');
+      if (await getBrowserAuditService().reviewBusy(message.reviewId)) throw new Error('Stop the interactive audit or its analysis before deleting this review.');
       await reviews.deleteReview(message.reviewId);
       await deleteJourneys(message.reviewId);
+      await deleteBrowserAudits(message.reviewId);
       if (session?.reviewId === message.reviewId) { session.commentCount = 0; session.comments = []; session.pendingDraftId = null; session.aiBatchId = null; await publish(); }
       return {ok: true};
     }

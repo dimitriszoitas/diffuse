@@ -198,7 +198,7 @@ async function startRecording(message) {
     } catch (error) {
       if (recording === item) recording = null;
       item.reject(error);
-      report(item.journey?'JOURNEY_CAPTURE_ENDED':'RECORDING_ERROR', {sessionId: item.sessionId, recordingId: item.id, reason:'capture-error', error: error.message}).catch(() => {});
+      report(item.journey?'JOURNEY_CAPTURE_ENDED':'RECORDING_ERROR', {sessionId: item.sessionId, recordingId: item.id, reason:item.journey&&['size-limit','time-limit'].includes(item.reason)?item.reason:'capture-error', error: error.message}).catch(() => {});
     }
   };
   media.getVideoTracks()[0].onended = () => autoStop('capture-ended');

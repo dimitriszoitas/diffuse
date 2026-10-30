@@ -36,7 +36,87 @@
   };
   const isActive = value => activeStatuses.has(value?.status);
   const asText = value => typeof value === 'string' ? value : '';
+  const stopReasonText = value => asText(value?.message) || asText(value);
   const numeric = value => Number.isFinite(Number(value)) ? Number(value) : 0;
+  const summaryText = value => asText(value?.summary) || asText(value?.summary?.text);
+  const endingDetails = value => {
+    const explicit = [...new Set([asText(value?.error), stopReasonText(value?.stopReason)].filter(Boolean))];
+    return explicit.length ? explicit : [summaryText(value)].filter(Boolean);
+  };
+  const actionTarget = value => {
+    const target = Number(value?.actionTarget ?? value?.input?.actionTarget ?? value?.maxSteps ?? value?.input?.maxSteps ?? 20);
+    return Number.isInteger(target) && target >= 1 && target <= 500 ? target : 20;
+  };
+  const actionCount = value => Number.isFinite(value?.metrics?.actions) ? Math.max(0, value.metrics.actions)
+    : (value?.steps || []).filter(step => step.action && !['finish', 'complete', 'observe'].includes(step.action.type || step.action.action)).length;
+  const recordingEndText = value => ({'size-limit': 'The recording reached its size limit.', 'time-limit': 'The recording reached its duration limit.', 'capture-ended': 'The tab capture ended.', 'capture-error': 'The tab recording encountered an error.'})[value?.video?.stopReason] || '';
+  const isManaged = value => value?.managed?.engine === 'managed';
+  const modelLabel = value => value === 'gpt-6.1-sol' ? 'GPT-6.1 Sol' : value === 'claude-opus-5-5' ? 'Claude Opus 5.5' : value === 'claude-fable-5' ? 'Claude Fable 5' : asText(value) || 'AI';
+  const providerName = value => (value?.managed?.provider || value?.provider) === 'openai' ? 'OpenAI' : 'Anthropic';
+  const agentName = value => providerName(value) === 'OpenAI' ? 'OpenAI agents' : 'Claude agents';
+  const assessmentReady = value => !isManaged(value) || value.managed.evaluatorStatus === 'complete';
+  const evaluatorBudgetExhausted = metadata => metadata.evaluatorBudgetExhausted || /budget|spending|cost limit/i.test(asText(metadata.evaluatorError));
+  const evaluatorCreationUncertain = metadata => metadata.evaluatorSessionCreationUncertain || (metadata.evaluatorReservationVersion !== 1 && !metadata.evaluatorSessionId && Boolean(metadata.actorOutcome));
+  // A completed assessment is needed for scores, not for a conversation about
+  // the saved evidence. The worker can start an unused evaluator allocation.
+  const evaluatorCanDiscuss = value => !isManaged(value) || (!value.managed.evaluatorInterrupted && !value.managed.evaluatorRequestInFlight && !value.managed.evaluatorSessionCreationPending && !evaluatorCreationUncertain(value.managed) && !evaluatorBudgetExhausted(value.managed));
+  function evaluationState(value) {
+    const metadata = value.managed, status = metadata.evaluatorStatus || 'not-started';
+    // A closed attempt cannot finish an abandoned request. A live follow-up
+    // started in this panel still has its own pending reply and busy controls.
+    if (metadata.evaluatorInterrupted || evaluatorBudgetExhausted(metadata) || evaluatorCreationUncertain(metadata) || (!isActive(value) && (status !== 'complete' || ((metadata.evaluatorRequestInFlight || metadata.evaluatorSessionCreationPending) && !asking)))) return 'unavailable';
+    return status;
+  }
+  function unavailableEvaluationHelp(value) {
+    if (evaluatorCanDiscuss(value)) return 'No usability evaluation was completed. You can still discuss the recorded steps.';
+    const assessment = value.managed.evaluatorStatus === 'complete' ? 'Your existing evaluation and conversation are still available.' : 'No usability scores were added. Your recorded steps are still available.';
+    return `${discussionProblem(value)} ${assessment}`;
+  }
+  function discussionProblem(value) {
+    const metadata = value.managed;
+    if (evaluatorBudgetExhausted(metadata)) return 'The evaluator reached this journey’s spending limit. Continue the journey or start a new run to use a new budget.';
+    if (evaluatorCreationUncertain(metadata)) return 'The evaluator connection was interrupted during setup. Its creation could not be confirmed, so chat is paused to avoid starting a second budget.';
+    if (metadata.evaluatorSessionCreationPending) return asking ? 'Connecting the evaluator to this journey…' : 'Evaluator setup did not finish. Chat is paused to avoid starting a second budget.';
+    if (metadata.evaluatorInterrupted) return 'The evaluator session was interrupted. Continue the journey or start a new run to discuss a new attempt.';
+    if (metadata.evaluatorRequestInFlight) return asking ? 'Diffuse is reading the recorded steps…' : 'The evaluator’s last reply could not be confirmed. Chat is paused to avoid sending the same request twice.';
+    return evaluationProblem(metadata.evaluatorError);
+  }
+  function evaluationProblem(value) {
+    // Provider errors can contain diagnostics or account information. Only
+    // known actionable categories belong in the user-facing result.
+    const message = asText(value).toLowerCase();
+    if (/budget|spending|cost limit/.test(message)) return 'The evaluator reached its spending limit. Your recorded steps are still available. No additional budget was started.';
+    if (/model|effort|unsupported/.test(message)) return 'The configured AI model or effort is unavailable for this account. Check AI settings; your recorded steps are still available.';
+    if (/api key|permission|access|unauthorized|authentication/.test(message)) return 'Check your AI provider connection in Settings. Your recorded steps are still available.';
+    return 'The evaluator could not complete its review. Your recorded steps are still available. No usability scores were added.';
+  }
+  function renderEngine() {
+    const managed = aiConfig?.journeyEngine === 'managed';
+    text('journey-engine-description', !aiConfig ? 'Loading AI settings…' : managed
+      ? `${agentName(aiConfig)} · ${modelLabel(aiConfig.managedAgentModel || (aiConfig.provider==='openai'?'gpt-6.1-sol':'claude-opus-5-5'))} · Max effort`
+      : `Direct · ${modelLabel(aiConfig.model)}`);
+    $('journey-managed-consent').hidden = !managed;
+    if (managed) {
+      const budget = Number.isFinite(aiConfig.journeyBudgetUsd) ? aiConfig.journeyBudgetUsd : 2;
+      text('journey-managed-consent', `${providerName(aiConfig)} stores this journey’s conversation, screenshots and page context in your account. The $${budget.toFixed(2)} USD ${aiConfig.provider==='openai'?'estimated spending guard':'spending limit'} is shared between the journey agent (75%) and evaluator (25%); a request already running can take usage above that amount.${aiConfig.provider==='openai'?' Diffuse checks reported usage between requests.':''} API charges apply. Keep Chrome and the reviewed tab open.`);
+    }
+    text('journey-provider-consent', `Page content, screenshots, and your instructions go to ${providerName(aiConfig)} using your saved API key. API charges apply. A silent recording of the journey stays on this device. You can pause or stop at any time.`);
+    text('journey-key-provider', `Add your ${providerName(aiConfig)} API key in `);
+  }
+  function renderEvaluation() {
+    const managed = isManaged(run);
+    $('journey-evaluator').hidden = !managed;
+    $('journey-run-engine').hidden = !run.model && !managed;
+    text('journey-run-engine', managed ? `${agentName(run)} · ${modelLabel(run.managed.model || run.model)} · ${run.managed.effort === 'max' ? 'Max effort' : 'Journey and evaluator'}` : `Direct · ${modelLabel(run.model)}`);
+    if (!managed) return;
+    const status = evaluationState(run);
+    $('journey-evaluator').dataset.status = status;
+    text('journey-evaluator-status', ({'not-started': 'Waiting for the journey to finish', reviewing: 'Reviewing the recorded attempt…', complete: 'Evaluation complete', unavailable: 'Evaluation unavailable'})[status] || 'Evaluation unavailable');
+    text('journey-evaluator-help', status === 'complete'
+      ? 'A separate evaluator reviewed the recorded steps and evidence. Scores apply to this attempt and simulated persona.'
+      : status === 'reviewing' ? 'The evaluator is checking the evidence. Scores and suggested feedback appear after that review is complete.'
+        : status === 'not-started' ? 'The journey agent follows the persona. The evaluator reviews what happened afterwards.' : unavailableEvaluationHelp(run));
+  }
 
   // Keep this form outside the timeline renderer so polling never replaces a
   // question being typed, its selection, or the focused control.
@@ -71,6 +151,8 @@
   questionInput.placeholder = 'Why did you take this route? Could the wizard be simpler?';
   const questionStatus = node('p', '', 'journey-help');
   questionStatus.id = 'journey-question-status'; questionStatus.setAttribute('role', 'status');
+  const chatBudget = node('p', 'Follow-ups share this journey’s remaining evaluator budget. Sending a message does not reset it.', 'journey-help journey-chat-budget');
+  chatBudget.id = 'journey-chat-budget'; chatBudget.hidden = true;
   const questionError = node('p', '', 'journey-question-error');
   questionError.id = 'journey-question-error'; questionError.setAttribute('role', 'alert'); questionError.hidden = true;
   const askButton = node('button', 'Ask AI', 'journey-ask-submit');
@@ -92,7 +174,7 @@
   composerActions.append(helpStop, askButton);
   const helpRetry = button('Retry continuation', () => continueFromHelp(), 'journey-help-retry');
   helpRetry.id = 'journey-help-retry'; helpRetry.hidden = true;
-  questionForm.append(helpFields, questionLabel, questionInput, questionError, composerActions, helpRetry, questionStatus);
+  questionForm.append(helpFields, questionLabel, questionInput, questionError, composerActions, helpRetry, questionStatus, chatBudget);
   const chatHeader = node('div', undefined, 'journey-chat-header');
   chatHeader.append(chatBack, discussionHeading, discussionHelp, questionContext);
   discussion.append(chatHeader, conversation, questionForm);
@@ -183,7 +265,7 @@
   async function askQuestion(event) {
     event.preventDefault();
     if (needsHelp(run)) { await respondToHelp('continue'); return; }
-    if (asking || pending || !run || isActive(run) || !questionForm.reportValidity()) return;
+    if (asking || pending || !run || isActive(run) || !evaluatorCanDiscuss(run) || !questionForm.reportValidity()) return;
     const question = questionInput.value.trim();
     if (!question) return;
     const requestSession = session?.id, id = run.id, generation = ++questionGeneration;
@@ -291,10 +373,26 @@
       questionInput.value = ''; helpClassification.value = 'unsure'; questionError.hidden = true; selectQuestionStep(null, false);
     }
     const entries = Array.isArray(run.followUps) ? run.followUps : [];
-    const key = JSON.stringify([entries, pendingQuestion, asking, run.assistance]);
+    const key = JSON.stringify([entries, pendingQuestion, asking, run.assistance, run.error, run.stopReason, run.summary, run.status, run.recordingNotice, run.video?.stopReason]);
     if (key !== conversationKey) {
       conversationKey = key;
       const fragment = document.createDocumentFragment();
+      const stopDetails = endingDetails(run);
+      if (!isActive(run) && stopDetails.length && run.status !== 'completed') {
+        const stopped = node('article', undefined, 'journey-answer-copy journey-stop-reason');
+        stopped.id = 'journey-chat-stop-reason';
+        const explicitReason = asText(run.error) || stopReasonText(run.stopReason);
+        stopped.append(node('strong', explicitReason ? (run.status === 'blocked' ? 'Why the journey paused' : 'Why the journey ended') : 'Recorded ending'));
+        for (const detail of stopDetails) stopped.append(node('p', detail));
+        fragment.append(stopped);
+      }
+      const recordingDetail = stopReasonText(run.recordingNotice) || recordingEndText(run);
+      if (!isActive(run) && recordingDetail) {
+        const recording = node('article', undefined, 'journey-answer-copy journey-recording-ending');
+        recording.id = 'journey-chat-recording-ending';
+        recording.append(node('strong', 'Recording status'), node('p', recordingDetail));
+        fragment.append(recording);
+      }
       if (run.assistance) {
         const prompt = node('article', undefined, 'journey-answer-copy journey-help-prompt');
         prompt.id = 'journey-help-question';
@@ -347,19 +445,23 @@
       if (chatOpen) conversation.scrollTop = conversation.scrollHeight;
     }
     const helping = needsHelp(run), full = entries.length >= 20 && !helping;
+    const evaluationUnavailable = isManaged(run) && evaluationState(run) === 'unavailable';
+    const evaluationPending = isManaged(run) && !evaluationUnavailable && !evaluatorCanDiscuss(run);
+    chatBudget.hidden = !isManaged(run) || helping;
     helpFields.hidden = !helping; helpStop.hidden = !helping;
     helpClassification.disabled = Boolean(pending); helpStop.disabled = Boolean(pending);
     questionInput.disabled = asking || Boolean(pending) || full;
-    askButton.disabled = asking || Boolean(pending) || full || (!helping && aiConfig?.hasKey !== true);
+    askButton.disabled = asking || Boolean(pending) || full || (!helping && (aiConfig?.hasKey !== true || !evaluatorCanDiscuss(run)));
     clearContext.disabled = asking || helping;
     questionContext.hidden = helping;
     discussionTitle.textContent = helping ? 'I need your help' : 'Journey chat';
     questionLabel.textContent = helping ? 'Your guidance' : 'Message Diffuse';
-    if (helping) questionInput.placeholder = 'For example, scroll inside the list, then use the search field.';
+    questionInput.placeholder = helping ? 'For example, scroll inside the list, then use the search field.' : questionStep ? 'Why did you choose this action? What about another route?' : 'Why did you take this route? Could the wizard be simpler?';
     askButton.textContent = pending === 'JOURNEY_RESPOND' ? 'Saving…' : pending === 'JOURNEY_START' ? 'Continuing…' : helping ? 'Continue' : asking ? 'Replying…' : 'Send';
     questionStatus.textContent = helping
       ? 'Your assessment stays with this blocker. Stop saves it; Continue sends your guidance to AI and resumes from the current page.'
-      : full ? 'This journey has reached its 20-question limit.' : 'Enter to send · Shift + Enter for a new line. Uses your AI key; messages and evidence go to Anthropic.';
+      : asking ? 'Diffuse is reading the recorded steps…' : evaluationUnavailable ? unavailableEvaluationHelp(run)
+        : evaluationPending ? 'The evaluator is completing its current request. You can send another message once it is ready.' : full ? 'This journey has reached its 20-question limit.' : `Enter to send · Shift + Enter for a new line. Uses your AI key; messages and evidence go to ${providerName(run)}.`;
     helpRetry.hidden = run.assistance?.response?.decision !== 'continue';
     helpRetry.disabled = Boolean(pending || asking);
     helpRetry.textContent = run.assistance?.response?.continuationRunId ? 'Open continued journey' : 'Continue with saved answer';
@@ -408,6 +510,7 @@
     }, isActive(run) ? 1500 : 7000);
   }
   function updateAvailability() {
+    renderEngine();
     const occupied = Boolean(panelBusy || pageState?.captureBusy || pageState?.commentSaving || pageState?.recordingBusy || pageState?.recording || pageState?.commentOpen || pageState?.comment || pageState?.aiBusy || session?.aiRunning || pageState?.picking || pageState?.areaArmed);
     // The page's AI configuration is lazy-loaded only when its screenshot audit
     // opens. Journey availability must use the worker's actual settings instead.
@@ -416,12 +519,14 @@
     $('journey-start').disabled = Boolean(pending || !session || occupied || hasKey !== true);
     $('journey-key-help').hidden = hasKey !== false;
     $('journey-form').setAttribute('aria-busy', String(pending === 'JOURNEY_START'));
-    for (const field of $('journey-form').querySelectorAll('textarea,select')) field.disabled = pending === 'JOURNEY_START';
+    for (const field of $('journey-form').querySelectorAll('textarea,select,input')) field.disabled = pending === 'JOURNEY_START';
     window.diffuseJourneyPersona?.setDisabled(pending === 'JOURNEY_START');
     window.diffuseJourneyOptions?.setDisabled(pending === 'JOURNEY_START');
     forkCancel.disabled = Boolean(pending);
     forkFields.hidden = !forkContext;
     routeInput.required = Boolean(forkContext);
+    const targetLabel = $('journey-action-target')?.labels?.[0];
+    if (targetLabel) targetLabel.textContent = forkContext?.continuation ? 'Action target for this part' : 'Action target';
     forkHeading.textContent = forkContext?.continuation ? 'Continue this journey' : 'Try another route';
     routeCaption.textContent = forkContext?.continuation ? 'Instructions for continuing' : 'Route to try';
     routeInput.placeholder = forkContext?.continuation ? 'Continue in the existing project. Scroll the recipe picker and find four recipes to import.' : 'Use the first step of the wizard before opening Ingredients.';
@@ -517,7 +622,7 @@
       $('journey-goal').value = previous.goal || '';
       $('journey-success').value = previous.successCriteria || previous.input?.successCriteria || '';
       $('journey-test-data').value = previous.testData || previous.input?.testData || '';
-      $('journey-max-steps').value = String(previous.maxSteps || previous.input?.maxSteps || 20);
+      $('journey-action-target').value = String(actionTarget(previous));
     } else {
       $('journey-form').reset();
       window.diffuseJourneyPersona?.reset();
@@ -534,7 +639,7 @@
       goal: $('journey-goal').value.trim(),
       successCriteria: $('journey-success').value.trim(),
       testData: $('journey-test-data').value.trim(),
-      maxSteps: Number($('journey-max-steps').value),
+      actionTarget: Number($('journey-action-target').value),
       ...(window.diffuseJourneyPersona ? {persona: window.diffuseJourneyPersona.read()} : {}),
       ...(window.diffuseJourneyOptions ? window.diffuseJourneyOptions.read() : {}),
       ...(forkContext ? {[forkContext.continuation ? 'continuation' : 'fork']: {parentRunId: forkContext.parentRunId, ...(!forkContext.continuation && forkContext.stepIndex ? {stepIndex: forkContext.stepIndex} : {}), instructions: routeInput.value.trim()}} : {})
@@ -583,6 +688,23 @@
     const seconds = Math.round(Math.max(0, numeric(metrics.elapsedMs)) / 1000);
     runtimeNote.textContent = `Automation duration: ${Math.floor(seconds / 60)}m ${seconds % 60}s · ${numeric(metrics.scrolls)} scroll attempts · ${numeric(metrics.waits)} wait actions. Includes AI, network and pauses; not human task time.`;
   }
+  function renderTarget() {
+    const target = actionTarget(run), count = actionCount(run), overBy = Math.max(0, count - target);
+    const continuation = run.targetAssessment?.scope === 'segment' || Boolean(run.continuation);
+    text('journey-target-title', continuation ? 'Action efficiency · this part' : 'Action efficiency');
+    text('journey-progress', `${count} AI ${count === 1 ? 'action' : 'actions'} · target ${target}`);
+    text('journey-target-comparison', `${count} action ${count === 1 ? 'attempt' : 'attempts'} · ${overBy ? `${overBy} over target` : 'within target'}`);
+    $('journey-target-assessment').dataset.result = overBy ? 'over' : 'within';
+    const result = run.targetAssessment;
+    const verified = !isActive(run) && run.status === 'completed' && result?.verifiedComplete === true;
+    const score = verified && Number.isFinite(result?.efficiencyScore) && result.efficiencyScore >= 0 && result.efficiencyScore <= 100 ? result.efficiencyScore : null;
+    text('journey-target-score', score === null ? (verified && count === 0 ? 'Not applicable' : 'Not scored yet') : `${score}/100`);
+    const explanation = isActive(run)
+      ? 'Crossing the target does not stop the journey. Efficiency is scored once completion is verified.'
+      : score === null ? (verified && count === 0 ? 'No AI action attempts were needed, so action efficiency is not scored.' : run.status === 'completed' ? 'No verified efficiency score was saved for this journey.' : 'Completion was not verified, so no efficiency score was assigned. The target does not stop the journey.')
+        : 'At or below target: 100/100. Above target: target ÷ action attempts × 100. This measures AI action efficiency, not human effort or overall usability.';
+    text('journey-target-help', explanation + (continuation ? ' Counts and score cover this continuation only, excluding earlier attempts.' : ''));
+  }
   function actionLabel(step) {
     const action = step.action;
     if (typeof action === 'string') return action;
@@ -601,11 +723,13 @@
   function renderRecording() {
     const recording = run.recording || {};
     const labels = {recording: 'Recording the journey · no audio', paused: 'Recording paused', processing: 'Preparing the journey recording…', saved: 'Journey recording saved', unavailable: 'Recording unavailable'};
-    text('journey-recording-status', recording.status === 'unavailable' && run.recordingError ? `Recording unavailable. ${run.recordingError}` : labels[recording.status] || '');
-    $('journey-recording-status').hidden = !labels[recording.status] || recording.status === 'saved';
+    const recordingNotice = stopReasonText(run.recordingNotice) || recordingEndText(run);
+    text('journey-recording-status', recordingNotice || (recording.status === 'unavailable' && run.recordingError ? `Recording unavailable. ${run.recordingError}` : labels[recording.status] || ''));
+    $('journey-recording-status').hidden = !recordingNotice && (!labels[recording.status] || recording.status === 'saved');
     $('journey-recording-status').dataset.status = recording.status || '';
     const src = asText(run.video?.dataUrl);
     const valid = /^data:video\/(?:webm|mp4)(?:;codecs=[^;,]+)?;base64,[a-zA-Z0-9+/=\s]+$/.test(src);
+    text('journey-recording-caption', recordingNotice ? `${recordingNotice} This saved video covers only part of the journey; use the steps below for the rest.` : 'Watch the recorded attempt, or jump to a step below.');
     $('journey-recording-section').hidden = !valid;
     if (valid && src !== videoSource) {
       videoSource = src;
@@ -656,7 +780,7 @@
     const existing = new Map([...list.children].map(item => [Number(item.dataset.step), item]));
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i], index = Number(step.index || i + 1);
-      const signature = JSON.stringify([step.action, step.reason, step.result, step.executionStatus, step.observation?.url, step.observation?.title, Boolean(screenshotUrl(step)), Boolean(videoSource), step.videoOffsetMs, isActive(run)]);
+      const signature = JSON.stringify([step.action, step.reason, step.result, step.executionStatus, step.executionError, step.observation?.url, step.observation?.title, Boolean(screenshotUrl(step)), Boolean(videoSource), step.videoOffsetMs, isActive(run)]);
       let item = existing.get(index);
       if (item?.dataset.signature === signature) { existing.delete(index); continue; }
       const wasOpen = item?.querySelector('details')?.open || false;
@@ -672,7 +796,7 @@
       detail.append(summary);
       const body = node('div', undefined, 'journey-step-detail');
       if (step.reason) body.append(node('p', step.reason));
-      if (step.executionStatus === 'error') body.append(node('p', 'Diffuse could not perform this action. This alone does not confirm an app defect.', 'journey-step-error'));
+      if (step.executionStatus === 'error') body.append(node('p', `${stopReasonText(step.executionError) || 'Diffuse could not perform this action.'} This alone does not confirm an app defect.`, 'journey-step-error'));
       if (step.executionStatus === 'interrupted') body.append(node('p', 'This action was interrupted. Its outcome is not confirmed.', 'journey-step-result'));
       if (step.executionStatus === 'running') body.append(node('p', 'Performing this action…', 'journey-step-result'));
       const result = typeof step.result === 'string' ? step.result : step.result?.message || step.result?.error || step.result?.description;
@@ -704,7 +828,7 @@
     text('journey-timeline-empty', isActive(run) ? 'Reading the starting page…' : 'No steps were captured.');
   }
   function renderScores() {
-    const scores = Array.isArray(run.scores) ? run.scores : [];
+    const scores = assessmentReady(run) && Array.isArray(run.scores) ? run.scores : [];
     $('journey-assessment').hidden = !scores.length;
     const openedScores = new Set([...$('journey-scores').querySelectorAll('details[open]')].map(item => item.dataset.dimension));
     const fragment = document.createDocumentFragment();
@@ -744,7 +868,7 @@
     finally { acceptedBusy.delete(index); if (run?.id === id) renderFindings(); }
   }
   function renderFindings() {
-    const findings = Array.isArray(run.findings) ? run.findings : [];
+    const findings = assessmentReady(run) && Array.isArray(run.findings) ? run.findings : [];
     $('journey-findings-section').hidden = !findings.length;
     text('journey-findings-count', findings.length);
     const fragment = document.createDocumentFragment();
@@ -832,11 +956,12 @@
     $('journey-history').hidden = isActive(run) || !historyKey || historyKey === '[]';
     if (!run || showForm) return;
     renderRecording();
+    renderEvaluation();
     const active = isActive(run);
     const paused = run.status === 'paused';
     $('journey-run').dataset.status = run.status;
     text('journey-status', run.assistance?.response?.decision === 'stop' ? 'Stopped by you' : needsHelp(run) ? 'Needs your help' : statusLabels[run.status] || run.status);
-    text('journey-progress', `${numeric(run.metrics?.actions ?? run.steps?.length)} / ${run.maxSteps || run.input?.maxSteps || 20} actions`);
+    renderTarget();
     $('journey-run-controls').hidden = !active;
     $('journey-pause').hidden = paused;
     $('journey-resume').hidden = !paused;
@@ -849,7 +974,7 @@
     text('journey-stop', pending === 'JOURNEY_STOP' ? 'Stopping…' : 'Stop journey');
     text('journey-run-goal', run.goal);
     text('journey-current-page', pageLabel(run.steps?.at(-1)?.observation?.url || run.startUrl));
-    const notice = paused ? 'The journey is paused. You can inspect the page, then resume when ready.' : active ? 'You are watching AI operate this site. Pause before making changes yourself.' : asText(run.error) || asText(run.stopReason);
+    const notice = paused ? 'The journey is paused. You can inspect the page, then resume when ready.' : active ? 'You are watching AI operate this site. Pause before making changes yourself.' : run.status === 'completed' ? '' : endingDetails(run).join(' ');
     text('journey-run-notice', notice);
     $('journey-run-notice').hidden = !notice;
     $('journey-finished-actions').hidden = active;
@@ -870,7 +995,7 @@
     const summary = asText(run.summary) || asText(run.summary?.text);
     $('journey-summary-section').hidden = !summary;
     text('journey-summary', summary);
-    const key = JSON.stringify([run.id, run.updatedAt, run.status, run.steps?.length, run.metrics, run.summary, run.scores, run.findings, Boolean(videoSource)]);
+    const key = JSON.stringify([run.id, run.updatedAt, run.status, run.steps?.length, run.metrics, run.summary, run.scores, run.findings, run.managed, Boolean(videoSource)]);
     if (key !== renderKey) {
       renderKey = key;
       renderMetrics();

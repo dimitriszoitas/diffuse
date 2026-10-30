@@ -1,5 +1,7 @@
+import {journeyTargetAssessment} from './journey-outcome.mjs';
 import {JourneyError, validateJourneyDecision, journeyControlBounds, journeyControlScroll} from './journey-ai.mjs';
 import {journeyAssistance} from './journey-assistance.mjs';
+import {journeyExecutionFailure} from './journey-executor.mjs';
 
 const ACTIVE = new Set(['running', 'paused']);
 const MAX_EVIDENCE_BYTES = 24 * 1024 * 1024;
@@ -57,7 +59,7 @@ function fingerprint(observation) {
     observation.controls.map(({role, label, type, value, checked, scroll}) => [role, label, type, value, checked, scroll?.x, scroll?.y])]);
 }
 
-export function createJourneyRunner({observe, execute, decide, onUpdate = () => {}, maxDurationMs = 10 * 60 * 1000} = {}) {
+export function createJourneyRunner({observe, execute, decide, onUpdate = () => {}, maxDurationMs = null} = {}) {
   if (![observe, execute, decide, onUpdate].every(value => typeof value === 'function')) throw new TypeError('Journey runner requires observe, execute and decide functions.');
   let state = null, controller = null, generation = 0, wake = null, activePromise = null, deadlineTimer = null, updates = Promise.resolve(), persistenceError = null;
   let lastFingerprint = null, unchanged = 0, previousUrl = null, startedAt = 0, lastObservedActions = 0;
@@ -65,19 +67,23 @@ export function createJourneyRunner({observe, execute, decide, onUpdate = () => 
   const notify = () => {
     state.updatedAt = stamp();
     state.metrics.elapsedMs = Math.max(0, Date.now() - startedAt);
+    state.targetAssessment = journeyTargetAssessment(state);
     const snapshot = getState();
     updates = updates.then(() => {
       if (!persistenceError) return onUpdate(snapshot);
     }).catch(() => {
       persistenceError = new JourneyError('JOURNEY_STORAGE', 'Diffuse could not save the journey evidence. The run stopped before performing more actions.');
       state.status = 'inconclusive'; state.summary = persistenceError.message;
+      state.stopReason = {source: 'storage', code: 'JOURNEY_STORAGE', message: persistenceError.message};
+      state.targetAssessment = journeyTargetAssessment(state);
       state.updatedAt = stamp(); generation++; controller?.abort(); wake?.(); wake = null;
     });
     return updates;
   };
-  const finish = (status, summary) => {
+  const finish = (status, summary, reason) => {
     if (!state || !ACTIVE.has(state.status)) return;
     state.status = status; state.summary = summary;
+    state.stopReason = reason || {source: 'runner', code: 'JOURNEY_INTERRUPTED', message: summary};
     state.updatedAt = stamp();
     if (status === 'blocked') state.assistance = journeyAssistance(state);
     generation++; controller?.abort(); wake?.(); wake = null; notify();
@@ -91,7 +97,8 @@ export function createJourneyRunner({observe, execute, decide, onUpdate = () => 
     state.status = 'running'; generation++; wake?.(); wake = null; notify(); return getState();
   };
   const stop = () => {
-    finish('stopped', 'Stopped by the reviewer. The task outcome was not verified.');
+    const message = 'Stopped by the reviewer. The task outcome was not verified.';
+    finish('stopped', message, {source: 'reviewer', code: 'JOURNEY_STOPPED', message});
     return getState();
   };
   function retainEvidence() {
@@ -128,30 +135,25 @@ export function createJourneyRunner({observe, execute, decide, onUpdate = () => 
         unchanged = nextFingerprint !== lastFingerprint ? 0 : state.metrics.actions > lastObservedActions ? unchanged + 1 : unchanged;
         lastFingerprint = nextFingerprint;
         lastObservedActions = state.metrics.actions;
-        // Capture the resulting screen even when an execution or loop limit ends
+        // Capture the resulting screen even when a no-progress guard ends
         // the run. This is evidence, not an invented application failure.
         if (unchanged >= 3) {
-          state.steps.push({index: state.steps.length + 1, observation, action: null, reason: 'Execution limit reached.', result: null, createdAt: stamp()});
+          state.steps.push({index: state.steps.length + 1, observation, action: null, reason: 'No observed progress after three actions.', result: null, createdAt: stamp()});
           retainEvidence();
-          finish('inconclusive', 'Stopped after three actions without an observed page change. This may be an app or automation limitation; the task outcome was not verified.');
+          const message = 'Stopped after three actions without an observed page change. This may be an app or automation limitation; the task outcome was not verified.';
+          finish('inconclusive', message, {source: 'runner', code: 'JOURNEY_NO_PROGRESS', message, stepIndex: state.steps.length});
           break;
         }
         const decision = validateJourneyDecision(await interruptible(decide({
-          goal: input.goal, successCriteria: input.successCriteria, testData: input.testData,
+          goal: input.goal, successCriteria: input.successCriteria, testData: input.testData, actionTarget: input.actionTarget,
           history: clone(state.steps), observation: clone(observation), signal: currentController.signal,
         }), currentController.signal), {observation, history: state.steps});
         if (version !== generation || state.status !== 'running') continue;
-        if (state.metrics.actions >= input.maxSteps && decision.action.type !== 'finish') {
-          state.steps.push({index: state.steps.length + 1, observation, action: null, reason: 'Execution limit reached.', result: null, createdAt: stamp()});
-          retainEvidence();
-          finish('inconclusive', `Stopped after ${input.maxSteps} actions. The task outcome was not verified.`);
-          break;
-        }
         const step = {index: state.steps.length + 1, observation, ...decision, result: null, createdAt: stamp()};
         state.steps.push(step); retainEvidence();
         if (decision.action.type === 'finish') {
           state.findings = decision.action.findings; state.scores = decision.action.scores;
-          finish(decision.action.outcome, decision.action.summary); break;
+          finish(decision.action.outcome, decision.action.summary, {source: 'agent', code: `JOURNEY_${decision.action.outcome.toUpperCase()}`, message: decision.action.summary, stepIndex: step.index}); break;
         }
         countAction(decision.action); step.executionStatus = 'running'; await notify();
         if (version !== generation || state.status !== 'running') {
@@ -174,6 +176,8 @@ export function createJourneyRunner({observe, execute, decide, onUpdate = () => 
           step.executionStatus = 'complete';
         } catch (error) {
           step.executionStatus = currentController.signal.aborted ? 'interrupted' : 'error';
+          const failure = journeyExecutionFailure(error);
+          if (!currentController.signal.aborted && failure) step.executionError = failure;
           throw error;
         }
         await notify();
@@ -182,7 +186,11 @@ export function createJourneyRunner({observe, execute, decide, onUpdate = () => 
         const blocked = error?.code === 'JOURNEY_BLOCKED';
         // Tool failures and model/service errors must never become product bugs.
         const knownError = error instanceof JourneyError;
-        finish(blocked ? 'blocked' : 'inconclusive', knownError ? error.message : blocked ? 'The next action needs the reviewer’s attention. The journey was stopped before continuing.' : 'Diffuse could not continue this journey. This is an automation limitation; the task outcome was not verified.');
+        const executionFailure = journeyExecutionFailure(error);
+        const message = executionFailure?.message || (knownError ? error.message : blocked ? 'The next action needs the reviewer’s attention. The journey was stopped before continuing.' : 'Diffuse could not continue this journey. This is an automation limitation; the task outcome was not verified.');
+        const reason = executionFailure || {source: knownError && /^(AI_|AGENT_)/.test(error.code) ? 'agent' : 'runner', code: knownError ? error.code : blocked ? 'JOURNEY_BLOCKED' : 'JOURNEY_INTERRUPTED', message};
+        finish(blocked ? 'blocked' : 'inconclusive', message, {...reason,
+          ...(state.steps.at(-1)?.executionStatus === 'error' ? {stepIndex: state.steps.at(-1).index} : {})});
       }
     }
     await updates;
@@ -196,11 +204,11 @@ export function createJourneyRunner({observe, execute, decide, onUpdate = () => 
       const startUrl = inputText(input.startUrl || '', 2048, true);
       const parsed = new URL(startUrl);
       if (!['http:', 'https:', 'file:'].includes(parsed.protocol)) throw new Error('unsupported');
-      const maxSteps = input.maxSteps ?? 20;
-      if (!Number.isInteger(maxSteps) || maxSteps < 5 || maxSteps > 30) throw new JourneyError('JOURNEY_INPUT', 'Choose between 5 and 30 journey actions.');
+      const actionTarget = input.actionTarget ?? input.maxSteps ?? 20;
+      if (!Number.isInteger(actionTarget) || actionTarget < 1 || actionTarget > 500) throw new JourneyError('JOURNEY_INPUT', 'Choose an action target between 1 and 500. This is a scoring target, not a stopping limit.');
       config = {
         id: inputText(input.id || globalThis.crypto.randomUUID(), 120, true), goal: inputText(input.goal, 4000, true),
-        successCriteria: inputText(input.successCriteria || '', 4000), testData: inputText(input.testData || '', 4000), startUrl, maxSteps,
+        successCriteria: inputText(input.successCriteria || '', 4000), testData: inputText(input.testData || '', 4000), startUrl, actionTarget,
       };
     } catch (error) { return Promise.reject(error instanceof JourneyError ? error : new JourneyError('JOURNEY_INPUT', 'Choose a supported starting page for the journey.')); }
     startedAt = Date.now(); previousUrl = null; lastFingerprint = null; unchanged = 0; lastObservedActions = 0; persistenceError = null; generation++;
@@ -209,7 +217,10 @@ export function createJourneyRunner({observe, execute, decide, onUpdate = () => 
       metrics: {actions: 0, clicks: 0, typing: 0, selects: 0, scrolls: 0, backtracks: 0, waits: 0, navigations: 0, pagesVisited: [], elapsedMs: 0},
     };
     notify();
-    deadlineTimer = setTimeout(() => finish('inconclusive', 'The journey reached its time limit. The task outcome was not verified.'), Math.max(1, Math.min(maxDurationMs, 10 * 60 * 1000)));
+    if (Number.isFinite(maxDurationMs) && maxDurationMs > 0) deadlineTimer = setTimeout(() => {
+      const message = 'The journey reached its time limit. The task outcome was not verified.';
+      finish('inconclusive', message, {source: 'runner', code: 'JOURNEY_TIME_LIMIT', message});
+    }, maxDurationMs);
     activePromise = loop(config).finally(() => { clearTimeout(deadlineTimer); controller = null; activePromise = null; });
     return activePromise;
   }

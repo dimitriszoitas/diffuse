@@ -59,5 +59,36 @@ try{
  await page.keyboard.down('c');await page.mouse.move(point.x,point.y);await page.mouse.down();await page.mouse.move(point.x+20,point.y+20);await page.keyboard.press('Escape');await page.mouse.up();await page.keyboard.up('c');assert.equal((await state()).picking,false);assert.equal((await state()).comment,null);
  await tapC();captured=await captureAt('#action');assert.equal(captured.selection.selector,'#action');await cancel();
  pass('Cancelling a drag leaves no stale suppression or capture state for the next tap-and-click');
+ const settings=await context.newPage();await settings.goto(`chrome-extension://${id}/settings.html#browser`);
+ await until(()=>settings.locator('#shortcut-comment').isEnabled(),'shortcut preferences ready');
+ async function setKey(name,key){await settings.locator(`#shortcut-${name}`).click();await settings.keyboard.press(key);}
+ async function saveKeys(){await settings.locator('#save-shortcuts').click();await until(async()=>/Shortcuts saved|Keyboard shortcuts are off/.test(await settings.locator('#shortcut-feedback').textContent()),'shortcuts saved');}
+ await setKey('comment','q');await setKey('area','w');await setKey('cancel','x');await saveKeys();
+ assert.deepEqual(await worker.evaluate(async()=>{const v=(await chrome.storage.local.get('diffuseShortcuts')).diffuseShortcuts;return[v.comment.code,v.area.code,v.cancel.code];}),['KeyQ','KeyW','KeyX']);
+ await page.bringToFront();await page.evaluate(()=>document.activeElement?.blur());await page.keyboard.press('c');assert.equal((await state()).picking,false);
+ await page.keyboard.press('q');assert.equal((await state()).picking,true);captured=await captureAt('#action');assert.equal(captured.selection.selector,'#action');await cancel();
+ await page.keyboard.press('q');await page.keyboard.press('x');assert.equal((await state()).picking,false);
+ await page.keyboard.press('q');await page.keyboard.press('Escape');assert.equal((await state()).picking,false);
+ pass('Settings saves custom element, area, and cancel keys; active pages update immediately, old C is inactive, and Escape remains available');
+ await page.keyboard.press('w');assert.equal((await state()).areaArmed,true);
+ const customRegion=await page.locator('#region').boundingBox();await page.mouse.move(customRegion.x+20,customRegion.y+20);await page.mouse.down();await page.mouse.move(customRegion.x+170,customRegion.y+90,{steps:5});await page.mouse.up();
+ await until(async()=>Boolean((await state()).comment),'custom area composer');captured=await draft();assert.equal(captured.selection.kind,'region');assert.equal(captured.selection.rect.viewport.width,150);await cancel();
+ await page.locator('#typing').fill('');await page.keyboard.press('q');await page.keyboard.press('w');await page.keyboard.press('x');assert.equal(await page.locator('#typing').inputValue(),'qwx');assert.equal((await state()).picking,false);await page.evaluate(()=>document.activeElement?.blur());
+ await page.evaluate(()=>document.dispatchEvent(new KeyboardEvent('keydown',{key:'q',code:'KeyQ',bubbles:true,isComposing:true})));assert.equal((await state()).picking,false);
+ await page.keyboard.press('Control+q');assert.equal((await state()).picking,false);
+ pass('A separate area key supports press-and-release then drag; configured keys stay ordinary text and ignore IME or extra modifiers');
+ const denied=await worker.evaluate(async()=>{const s=(await chrome.storage.session.get('comparison')).comparison;return(await chrome.scripting.executeScript({target:{tabId:s.targetTabId},func:async()=>chrome.runtime.sendMessage({namespace:'diffuse',target:'worker',type:'SAVE_SHORTCUTS',config:{...globalThis.DiffuseShortcuts.getState(),enabled:false}})}))[0].result;});
+ assert.equal(denied.ok,false);assert.match(denied.error,/settings/);
+ await page.reload();await until(async()=>(await currentSession())?.status==='live','reloaded review live');await page.evaluate(()=>document.activeElement?.blur());await page.keyboard.press('q');await until(async()=>(await state()).picking,'persisted shortcut rearmed');await page.keyboard.press('x');
+ await settings.reload();await until(()=>settings.locator('#shortcut-comment').isEnabled(),'reloaded preferences ready');assert.equal(await settings.locator('#shortcut-comment').textContent(),'Q');
+ pass('Preferences survive both page and settings reloads, and a reviewed page cannot write shortcut settings');
+ await settings.bringToFront();await setKey('comment','Shift+k');await setKey('area','Shift+k');await saveKeys();await page.bringToFront();await page.evaluate(()=>document.activeElement?.blur());
+ await page.keyboard.down('Shift');await page.keyboard.down('k');assert.equal((await state()).picking,true);await page.keyboard.up('Shift');
+ await page.locator('#action').click();await until(async()=>Boolean((await state()).comment),'capture after modifier release');captured=await draft();assert.equal(captured.selection.selector,'#action');await page.keyboard.up('k');await cancel();
+ await page.keyboard.press('k');assert.equal((await state()).picking,false);await page.keyboard.press('Shift+k');assert.equal((await state()).picking,true);await page.keyboard.press('Escape');
+ pass('Shared modified shortcuts support tap-and-click and release their held gesture when a modifier is released first');
+ await settings.bringToFront();await settings.locator('#shortcuts-enabled').uncheck();await saveKeys();await page.bringToFront();await page.evaluate(()=>document.activeElement?.blur());await page.keyboard.press('Shift+k');assert.equal((await state()).picking,false);
+ await command('selectElement');assert.equal((await state()).picking,true);await page.keyboard.press('Escape');assert.equal((await state()).picking,false);
+ pass('Disabling shortcuts stops keyboard activation while manual selection and Escape cancellation remain available');
  await writeFile(join(artifacts,'results.json'),JSON.stringify({localOnly:true,results},null,2));
 }catch(error){console.log('SHORTCUT STATE',await state().catch(()=>null));console.log('SHORTCUT SESSION',await currentSession().catch(()=>null));await page?.screenshot({path:join(artifacts,'failure.png')}).catch(()=>{});throw error;}finally{for(const wait of pending.values()){clearTimeout(wait.timer);wait.reject(new Error('Fixture ended'));}pending.clear();await context?.close();await new Promise(resolve=>server.close(resolve));await rm(temporary,{recursive:true,force:true});}

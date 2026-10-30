@@ -302,3 +302,63 @@ test('continuation and follow-up prompts retain human blocker classification wit
   }});
   assert.deepEqual(run, original);
 });
+
+test('long journeys continue beyond thirty actions with bounded context and original indexes', async () => {
+  const history = Array.from({length: 120}, (_, i) => ({index: i + 1, observation: observation(), action: {type: 'click', targetId: 'c1'}, reason: 'Open.', executionStatus: 'complete', result: {ok: true}}));
+  let data;
+  const result = await requestJourneyDecision(request({history, actionTarget: 20}), {fetchImpl: async (url, init) => {
+    data = JSON.parse(JSON.parse(init.body).messages[0].content[0].text);
+    return response({action: {type: 'click', targetId: 'c1'}, reason: 'The task is not yet complete.'});
+  }});
+  assert.equal(result.action.type, 'click');
+  assert.equal(data.currentStep, 121); assert.equal(data.actionTarget, 20);
+  assert.equal(data.history.length, 32); assert.equal(data.contextCoverage.omittedStepCount, 88);
+  assert.equal(data.history.at(-1).index, 120);
+  assert.equal(history.length, 120);
+});
+
+test('direct discussion sees the actual recording stop reason and a selected step above thirty-one', async () => {
+  const steps = Array.from({length: 100}, (_, i) => ({index: i + 1, observation: observation(), action: {type: 'click', targetId: 'c1'}, reason: 'Open.', executionStatus: 'complete'}));
+  const run = {goal: 'Create ingredient.', status: 'inconclusive', summary: 'The recording ended before the journey finished. Review captured steps.',
+    video: {stopReason: 'size-limit', dataUrl: 'do-not-send-video'}, metrics: {actions: 100}, actionTarget: 20, steps};
+  let data;
+  await requestJourneyFollowUp({apiKey: KEY, run, question: 'Why did it stop?', stepIndex: 55}, {fetchImpl: async (url, init) => {
+    data = JSON.parse(JSON.parse(init.body).messages[0].content[0].text);
+    return response({answer: 'The saved recording reached its size limit.', evidenceSteps: [55], routeSuggestion: null});
+  }});
+  assert.equal(data.journey.stopReason.code, 'JOURNEY_RECORDING_SIZE_LIMIT');
+  assert.equal(data.journey.recording.stopReason, 'size-limit');
+  assert.equal(data.journey.targetAssessment.efficiencyScore, null);
+  assert.ok(data.journey.steps.some(step => step.index === 55));
+  assert.equal(data.contextCoverage.omittedStepCount, 60);
+  assert.equal(JSON.stringify(data).includes('do-not-send-video'), false);
+});
+
+test('continuation keeps the old ending and a bounded ledger above thirty-one steps', async () => {
+  const priorJourney = {id: 'long-parent', goal: 'Create ingredient.', status: 'blocked', summary: 'Need guidance.',
+    stopReason: {source: 'browser', code: 'JOURNEY_BLOCKED', message: 'The target was hidden.'},
+    steps: Array.from({length: 90}, (_, i) => ({index: i + 1, observation: observation(), action: {type: 'click', targetId: 'c1'}, reason: 'Open.'}))};
+  let data;
+  await requestJourneyDecision(request({continuation: {parentRunId: priorJourney.id, instructions: 'Use the other visible route.'}, priorJourney}), {fetchImpl: async (url, init) => {
+    data = JSON.parse(JSON.parse(init.body).messages[0].content[0].text); return response(finish());
+  }});
+  assert.equal(data.priorJourney.steps.length, 24);
+  assert.equal(data.priorJourney.contextCoverage.omittedStepCount, 66);
+  assert.equal(data.priorJourney.stopReason.message, 'The target was hidden.');
+});
+
+test('direct completion rejects omitted citations while retaining the real current-step index', async () => {
+  const history = Array.from({length: 100}, (_, index) => ({index: index + 1, observation: observation(), action: {type: 'click', targetId: 'c1'}, reason: 'Continue.'}));
+  for (const cited of [20, 100, 101]) {
+    const value = finish();
+    for (const score of value.action.scores) if (score.score !== null) score.evidenceSteps = [cited];
+    const promise = requestJourneyDecision(request({history}), {fetchImpl: async (url, init) => {
+      const data = JSON.parse(JSON.parse(init.body).messages[0].content[0].text);
+      assert.equal(data.currentStep, 101);
+      assert.equal(data.history.some(step => step.index === 20), false);
+      return response(value);
+    }});
+    if (cited === 20) await assert.rejects(promise, error => error.code === 'JOURNEY_OUTPUT');
+    else assert.equal((await promise).action.scores[0].evidenceSteps[0], cited);
+  }
+});

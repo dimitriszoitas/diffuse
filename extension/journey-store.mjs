@@ -43,6 +43,22 @@ export function retainedJourneyIds(runs, writtenId, {maxRuns = 10, maxBytes = 80
   return kept;
 }
 
+// Keep the complete step ledger indefinitely. Only bulky media follows the
+// device evidence budget; older attempts remain discoverable in Reports.
+export function archiveJourneyEvidence(run) {
+  const archived = structuredClone(run);
+  const strip = value => {
+    if (!value || typeof value !== 'object') return;
+    for (const [key, child] of Object.entries(value)) {
+      if (['dataUrl', 'screenshotDataUrl', 'annotatedDataUrl', 'cropDataUrl'].includes(key) && typeof child === 'string' && /^data:(image|video)\//.test(child)) delete value[key];
+      else strip(child);
+    }
+  };
+  strip(archived);
+  archived.evidenceArchived = true;
+  return archived;
+}
+
 export async function putJourney(run) {
   const transaction = (await db()).transaction('runs', 'readwrite');
   const done = complete(transaction);
@@ -50,7 +66,7 @@ export async function putJourney(run) {
   store.put(run);
   const all = await request(store.getAll());
   const kept = retainedJourneyIds(all, run.id);
-  for (const previous of all) if (!kept.has(previous.id)) store.delete(previous.id);
+  for (const previous of all) if (!kept.has(previous.id) && !previous.evidenceArchived) store.put(archiveJourneyEvidence(previous));
   await done;
   return run;
 }

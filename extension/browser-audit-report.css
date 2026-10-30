@@ -1,0 +1,14 @@
+body { padding: 0 32px 32px; }
+.audit-toolbar { max-width: 1320px; margin: 0 auto 24px; padding: 22px 0; border-bottom: 1px solid var(--ui-line); display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.audit-toolbar > a { text-decoration: none; font-weight: 600; border-radius: 8px; padding: 8px 0; }
+.audit-toolbar > div { display: flex; gap: 10px; }
+.audit-toolbar button { border: 1px solid var(--ui-line-strong); border-radius: 9px; background: var(--ui-surface); color: var(--ui-ink); padding: 9px 14px; min-height: 44px; }
+.audit-toolbar button:hover { background: var(--ui-surface-muted); }
+.audit-toolbar button:disabled { opacity: .5; cursor: default; }
+.audit-notice { max-width: 1320px; margin: 0 auto 20px; padding: 14px 18px; background: var(--ui-surface-muted); border-radius: 10px; }
+.audit-finding-actions { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--ui-line); }
+.audit-finding-actions button { border: 1px solid var(--ui-line-strong); border-radius: 9px; background: var(--ui-surface-muted); color: var(--ui-ink); padding: 8px 14px; min-height: 44px; }
+.audit-finding-actions button:disabled { opacity: .65; cursor: default; }
+.audit-finding-actions p { font-size: 13px; margin: 8px 0 0; }
+main { max-width: 1320px; margin: auto; }
+@media (max-width: 700px) { body { padding: 0 16px 20px; } .audit-toolbar { flex-wrap: wrap; } }

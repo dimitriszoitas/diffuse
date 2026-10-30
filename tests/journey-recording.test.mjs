@@ -192,7 +192,7 @@ test('a delayed final chunk cannot retain a movie above the strict twenty MiB li
   assert.equal(h.context.api.retained(), null);
   assert.equal(h.state.stoppedTracks, 1);
   assert.equal(h.state.reports[0].type, 'JOURNEY_CAPTURE_ENDED');
-  assert.equal(h.state.reports[0].reason, 'capture-error');
+  assert.equal(h.state.reports[0].reason, 'size-limit');
 });
 
 test('ending the review discards a late recorder callback instead of restoring old media', async () => {
@@ -242,4 +242,17 @@ test('restarting an audit with the same ID invalidates an earlier pending record
   } finally {
     if (h.context.api.current()) await h.message('STOP_CAPTURE');
   }
+});
+
+test('oversized final chunks preserve the expected size-limit cause even if the movie cannot be retained', async () => {
+  const h = harness();
+  await h.start({journey: true});
+  const finished = h.context.api.current().finished;
+  h.data(new Uint8Array(21 * 1024 * 1024));
+  await assert.rejects(finished, /size limit/);
+  await tick();
+  assert.equal(h.state.reports[0].type, 'JOURNEY_CAPTURE_ENDED');
+  assert.equal(h.state.reports[0].reason, 'size-limit', 'The journey may continue with screenshots even when the video is too large to save.');
+  assert.equal(h.context.api.current(), null);
+  assert.ok(h.state.stoppedTracks >= 1);
 });

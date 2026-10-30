@@ -1,3 +1,6 @@
+import {getJourney, listJourneys} from './journey-store.mjs';
+import {listBrowserAudits} from './browser-audit-store.mjs';
+import {formatBrowserAuditIndex, browserAuditNeedsRefresh} from './browser-audit-report.mjs';
 import {suggestedAiPrompt} from './ai-handoff.mjs';
 import {requestPageAccess} from './core.mjs';
 import {
@@ -154,7 +157,11 @@ async function selectReview(reviewId) {
     const review = await getReview(reviewId);
     if (revision !== loadingRevision) return;
     if (!review) throw new Error('This review is no longer available. Refresh the notebook to see your saved reviews.');
-    const displayReview = await prepareReviewEvidence(review);
+    const [displayReview, journeyIndex, auditIndex] = await Promise.all([prepareReviewEvidence(review), listJourneys(reviewId), listBrowserAudits(reviewId)]);
+    displayReview.journeys = (await Promise.all(journeyIndex.map(run => getJourney(run.id)))).filter(Boolean);
+    const activeAudits = auditIndex.filter(browserAuditNeedsRefresh);
+    if (activeAudits.length) await Promise.allSettled(activeAudits.map(audit => request('BROWSER_AUDIT_STATE', {id: audit.id})));
+    displayReview.browserAudits = activeAudits.length ? await listBrowserAudits(reviewId) : auditIndex;
     if (revision !== loadingRevision) return;
     selectedReview = displayReview;
     const url = new URL(location.href);
@@ -305,6 +312,12 @@ function renderReview() {
   setExportEnabled(true);
   // All user content, URLs, attributes, and media are validated/escaped in this pure formatter.
   ui['report-content'].innerHTML = formatReviewHtml(review);
+  const auditIndexHtml = formatBrowserAuditIndex(review.browserAudits);
+  if (auditIndexHtml) {
+    const footer = ui['report-content'].querySelector('.report-footer');
+    if (footer) footer.insertAdjacentHTML('beforebegin', auditIndexHtml);
+    else ui['report-content'].insertAdjacentHTML('beforeend', auditIndexHtml);
+  }
   const heading = ui['report-content'].querySelector('.report-heading');
   ui['review-header-copy'].replaceChildren(heading.querySelector('h1'), heading.querySelector('.review-summary'));
   const cards = [...ui['report-content'].querySelectorAll('.comment-card')];
@@ -413,7 +426,7 @@ function renderReview() {
     }));
   });
   jiraExporter.mount(review, ui['report-content'], cards);
-  githubReview.mount(review, ui['report-content'], cards);
+  if (cards.length || review.prContext) githubReview.mount(review, ui['report-content'], cards);
 }
 
 function editComment(comment, reviewId) {

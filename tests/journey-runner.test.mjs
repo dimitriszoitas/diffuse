@@ -80,23 +80,31 @@ test('stop resolves a paused journey and an unresponsive decision without mislab
   });
   const promise = runner.start(input());
   await ready.promise; runner.pause(); runner.stop();
-  assert.equal((await promise).status, 'stopped');
+  const result = await promise;
+  assert.equal(result.status, 'stopped');
+  assert.deepEqual(result.stopReason, {source: 'reviewer', code: 'JOURNEY_STOPPED', message: result.summary});
   assert.equal(executions, 0);
 });
 
-test('bounded execution allows final verification but never another action over the limit', async () => {
-  for (const finishAtLimit of [false, true]) {
+test('an action target never stops execution, including the legacy maxSteps input', async () => {
+  for (const target of [{actionTarget: 20}, {maxSteps: 5}]) {
     let executions = 0;
     const runner = createJourneyRunner({
       observe: async () => screen(`step-${executions}`),
       execute: async () => { executions++; },
-      decide: async () => finishAtLimit && executions === 5 ? done(6) : click(),
+      decide: async ({actionTarget}) => {
+        assert.equal(actionTarget, target.actionTarget ?? target.maxSteps);
+        return executions === 45 ? done(46) : click();
+      },
     });
-    const result = await runner.start(input({maxSteps: 5}));
-    assert.equal(executions, 5);
-    assert.equal(result.status, finishAtLimit ? 'completed' : 'inconclusive');
-    assert.equal(result.steps.length, 6);
-    assert.ok(result.steps[5].observation.screenshot);
+    const result = await runner.start(input(target));
+    assert.equal(executions, 45);
+    assert.equal(result.status, 'completed');
+    assert.equal(result.actionTarget, target.actionTarget ?? target.maxSteps);
+    assert.equal(result.maxSteps, undefined);
+    assert.equal(result.steps.length, 46);
+    assert.ok(result.steps[45].observation.screenshot);
+    assert.deepEqual(result.stopReason, {source: 'agent', code: 'JOURNEY_COMPLETED', message: result.summary, stepIndex: 46});
   }
 });
 
@@ -108,6 +116,7 @@ test('no-progress actions terminate with uncertainty rather than a fabricated is
   assert.equal(result.status, 'inconclusive');
   assert.deepEqual(result.findings, []);
   assert.match(result.summary, /without an observed page change/);
+  assert.equal(result.stopReason.code, 'JOURNEY_NO_PROGRESS');
 });
 
 test('model, observer and executor failures are inconclusive; explicit guards are blocked', async () => {
@@ -126,17 +135,30 @@ test('model, observer and executor failures are inconclusive; explicit guards ar
   assert.equal((await guarded.start(input())).status, 'blocked');
 });
 
+test('an arbitrary exception is not trusted merely because it uses a browser error name and code', async () => {
+  const runner = createJourneyRunner({observe: async () => screen(), decide: async () => click(), execute: async () => {
+    throw Object.assign(new Error('private network data: sk-ant-secret'), {name: 'JourneyExecutionError', code: 'JOURNEY_BLOCKED'});
+  }});
+  const run = await runner.start(input());
+  assert.equal(run.status, 'blocked');
+  assert.deepEqual(run.stopReason, {source: 'runner', code: 'JOURNEY_BLOCKED', message: run.summary, stepIndex: 1});
+  assert.equal(run.steps[0].executionError, undefined);
+  assert.equal(JSON.stringify(run).includes('sk-ant-secret'), false);
+  assert.deepEqual(run.findings, []);
+});
+
 test('wall-clock limit interrupts stuck observation and preserves an inconclusive outcome', async () => {
   const runner = createJourneyRunner({observe: () => new Promise(() => {}), decide: async () => click(), execute: async () => {}, maxDurationMs: 5});
   const result = await runner.start(input());
   assert.equal(result.status, 'inconclusive');
   assert.match(result.summary, /time limit/);
+  assert.deepEqual(result.stopReason, {source: 'runner', code: 'JOURNEY_TIME_LIMIT', message: result.summary});
 });
 
 test('rejects oversized instructions and bounds before touching the page; cannot run twice concurrently', async () => {
   let reads = 0;
   const runner = createJourneyRunner({observe: async () => { reads++; return screen(); }, decide: async () => new Promise(() => {}), execute: async () => {}});
-  for (const extra of [{maxSteps: 31}, {maxSteps: 4}, {maxSteps: '20'}, {goal: ''}, {goal: 'a'.repeat(4001)}, {startUrl: 'javascript:alert(1)'}]) await assert.rejects(runner.start(input(extra)), error => error.code === 'JOURNEY_INPUT');
+  for (const extra of [{actionTarget: 501}, {actionTarget: 0}, {actionTarget: 2.5}, {actionTarget: '20'}, {maxSteps: '20'}, {goal: ''}, {goal: 'a'.repeat(4001)}, {startUrl: 'javascript:alert(1)'}]) await assert.rejects(runner.start(input(extra)), error => error.code === 'JOURNEY_INPUT');
   assert.equal(reads, 0);
   const promise = runner.start(input());
   await assert.rejects(runner.start(input()), error => error.code === 'JOURNEY_RUNNING');
@@ -182,6 +204,7 @@ test('persistence failure stops before any further action and surfaces a fixed s
     await assert.rejects(runner.start(input()), error => error.code === 'JOURNEY_STORAGE' && !error.message.includes('secret'));
     assert.equal(runner.getState().status, 'inconclusive');
     assert.match(runner.getState().summary, /could not save/);
+    assert.deepEqual(runner.getState().stopReason, {source: 'storage', code: 'JOURNEY_STORAGE', message: runner.getState().summary});
     assert.equal(executions, failureAt === 3 ? 1 : 0);
     assert.equal(writes, failureAt, 'Must not loop retrying persistence or continue the journey.');
   }
@@ -244,4 +267,22 @@ test('blocked model and executor outcomes retain a help question without inventi
   const stopped = await guarded.start(input());
   assert.match(stopped.assistance.question, /This action needs the reviewer.*What should I do next/);
   assert.deepEqual(stopped.findings, []);
+});
+
+test('AI timeouts and budget failures retain their specific safe stop causes', async () => {
+  for (const [code, message] of [['AI_TIMEOUT', 'The model request timed out.'], ['AGENT_BUDGET', 'This journey reached its spending limit.']]) {
+    const runner = createJourneyRunner({observe: async () => screen(), execute: async () => {}, decide: async () => { throw new JourneyError(code, message); }});
+    const result = await runner.start(input());
+    assert.equal(result.status, 'inconclusive');
+    assert.deepEqual(result.stopReason, {source: 'agent', code, message});
+    assert.deepEqual(result.findings, []);
+  }
+});
+
+test('there is no default wall-clock stopping timer', async t => {
+  const timers = [];
+  t.mock.method(globalThis, 'setTimeout', (callback, delay) => { timers.push({callback, delay}); return 1; });
+  const runner = createJourneyRunner({observe: async () => screen(), execute: async () => {}, decide: async () => done(1)});
+  assert.equal((await runner.start(input())).status, 'completed');
+  assert.deepEqual(timers, []);
 });

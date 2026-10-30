@@ -11,7 +11,8 @@ globalThis.DiffuseDarkStyles = `
 :host([data-theme="dark"]) :is(input, textarea, select) { background: #13202e; color: var(--text); border-color: var(--line); color-scheme: dark; }
 :host([data-theme="dark"]) :is(input, textarea)::placeholder { color: #90a2b9; }
 :host([data-theme="dark"]) .composer-field select { color-scheme: dark; }
-:host([data-theme="dark"]) :is(button, input, textarea, select, summary):focus-visible { outline-color: var(--accent); }
+:host([data-theme="dark"]) :is(button, input, textarea, select, summary):focus-visible { outline: none !important; outline-offset: 0 !important; border-color: var(--focus-color, var(--accent)) !important; box-shadow: inset 0 0 0 1px var(--focus-color, var(--accent)) !important; }
+:host([data-theme="dark"]) :is(#save-comment, #ai-run, #ai-accept-all) { --focus-color: #fff; }
 :host([data-theme="dark"]) #handle { background: #1b3048; color: #bdd7ff; border-color: #6889b2; box-shadow: 0 2px 10px #00000045; }
 :host([data-theme="dark"]) .edge-label { background: #182b42f5; color: #bed7fc; border-color: #4b6c95; }
 :host([data-theme="dark"]) #divider { background: #8fb7fb; }
@@ -69,6 +70,7 @@ globalThis.DiffuseDarkStyles = `
   :host([data-theme="dark"]) { --panel: Canvas; --raised: Canvas; --text: CanvasText; --muted: CanvasText; --line: ButtonText; --accent: Highlight; }
   :host([data-theme="dark"]) :is(.df-select, .df-severity, .df-select-menu) { --ds-bg: Canvas; --ds-ink: CanvasText; --ds-muted: CanvasText; --ds-line: ButtonText; --ds-focus: Highlight; --ds-option: Highlight; }
   :host([data-theme="dark"]) .df-severity-choice>input:checked+span { outline: 2px solid Highlight; outline-offset: -3px; }
+  :host([data-theme="dark"]) :is(button, input, textarea, select, summary):focus-visible { outline: 2px solid Highlight !important; outline-offset: -2px !important; border-color: Highlight !important; box-shadow: none !important; }
   :host([data-theme="dark"]) * { scrollbar-color: auto; }
 }
 `;

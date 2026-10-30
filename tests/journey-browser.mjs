@@ -195,6 +195,8 @@ try {
   await popup.click('#start-comparison');
   panel = await nativeView('sidepanel.html');
   await until(() => panel.evaluate(`document.getElementById('popup')?.getAttribute('aria-busy')==='false'`), 'native panel ready');
+  await until(() => panel.visible('#open-ai-entry'), 'AI review entry');
+  await panel.click('#open-ai-entry');
   await until(() => panel.visible('#panel-journey'), 'journey entry');
   await panel.click('#panel-journey');
   // Let the initial state response settle with no saved journey. A comparison
@@ -443,6 +445,8 @@ try {
     try { return await panel.evaluate('!document.documentElement.dataset.nativeTestReload && document.querySelector("#popup")?.getAttribute("aria-busy")==="false"'); }
     catch { return false; } // The old execution context briefly disappears.
   }, 'sidebar reloaded');
+  await until(() => panel.visible('#open-ai-entry'), 'AI review entry after reload');
+  await panel.click('#open-ai-entry');
   await until(() => panel.visible('#panel-journey'), 'journey entry after reload');
   await panel.click('#panel-journey');
   await until(async () => await panel.visible('#journey-help-question') || await panel.visible('#journey-help-open'), 'saved blocker offers help after reload');

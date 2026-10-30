@@ -13,11 +13,14 @@ try {
   await cp(join(project, 'QUICKSTART.md'), join(staging, 'START-HERE.md'));
   await cp(join(project, 'README.md'), join(staging, 'Diffuse', 'README.md'));
   await mkdir(join(staging, 'Diffuse', 'docs', 'releases'), {recursive: true});
-  for (const name of ['PRIVACY.md', 'TERMS.md', 'jira-integration.md', 'github-review.md', 'journey-reviews.md']) await cp(join(project, 'docs', name), join(staging, 'Diffuse', 'docs', name));
+  for (const name of ['PRIVACY.md', 'TERMS.md', 'jira-integration.md', 'github-review.md', 'journey-reviews.md', 'managed-agents.md', 'ux-accessibility-reviewer.md', 'openai-connection.md', 'playwright-review.md']) await cp(join(project, 'docs', name), join(staging, 'Diffuse', 'docs', name));
+  await mkdir(join(staging, 'Local Browser'), {recursive: true});
+  for (const name of ['package.json', 'package-lock.json', 'server.mjs', 'mcp-browser.mjs', 'collectors.mjs', 'Start Local Browser.command']) await cp(join(project, 'local-browser', name), join(staging, 'Local Browser', name));
+  await cp(join(project, 'docs', 'playwright-review.md'), join(staging, 'Local Browser', 'README.md'));
   await cp(join(project, 'docs', 'releases', `${manifest.version}.md`), join(staging, 'Diffuse', 'docs', 'releases', `${manifest.version}.md`));
   const archive = join(releases, `Diffuse-${manifest.version}.zip`);
   await rm(archive, {force: true});
-  execFileSync('zip', ['-qr', archive, 'Diffuse', 'START-HERE.md'], {cwd: staging});
+  execFileSync('zip', ['-qr', archive, 'Diffuse', 'Local Browser', 'START-HERE.md'], {cwd: staging});
   // Never overwrite a legacy unkeyed installation: its reviews belong to its old ID.
   // Official keyed releases share their identity regardless of extraction path.
   await cp(join(staging, 'Diffuse'), join(releases, `Diffuse-${manifest.version}`), {recursive: true, force: true});

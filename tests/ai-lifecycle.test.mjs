@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
+import {aiProviderName, aiProviderOrigin} from '../extension/ai-providers.mjs';
 import {webcrypto} from 'node:crypto';
 
 const source = await readFile(new URL('../extension/background.js', import.meta.url), 'utf8');
@@ -50,7 +51,7 @@ async function harness({initial = null, settings} = {}) {
     permissions: {contains: async () => true},
   };
   const context = vm.createContext({createViewportController, assertPageAccess:(url,api=chrome,message)=>coreAssertPageAccess(url,api,message),
-    chrome, crypto: webcrypto, AbortController,
+    chrome, crypto: webcrypto, AbortController, aiProviderName, aiProviderOrigin,
     DEFAULT_SETTINGS: {}, viewportWarning: () => '',
     reviews: {},
     protectAIStorage: async () => { state.sequence.push('protect-storage'); },

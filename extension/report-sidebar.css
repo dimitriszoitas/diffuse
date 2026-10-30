@@ -34,7 +34,6 @@
 .review-actions-menu { position: absolute; top: calc(100% + 7px); right: 0; z-index: 100; width: 228px; max-width: calc(100vw - 32px); max-height: min(340px,60vh); overflow: auto; padding: 5px; background: #fff; border: 1px solid #d9e3f0; border-radius: 8px; box-shadow: 0 12px 32px #1e3a611f,0 2px 6px #1e3a6108; }
 .review-actions-menu button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 36px; border: 0; border-radius: 5px; background: transparent; padding: 8px 10px; color: #354f6f; font: inherit; font-size: 12px; font-weight: 400; text-align: left; }
 .review-actions-menu button:hover, .review-actions-menu button:focus-visible { background: #edf3fe; color: #235ed7; filter: none; }
-.review-actions-menu button:focus-visible { outline: 2px solid var(--violet); outline-offset: -2px; }
 .review-actions-menu button span { color: #7189a8; }
 @media(max-width:900px) { .review-header { margin-inline: 22px; } }
 @media(max-width:700px) {

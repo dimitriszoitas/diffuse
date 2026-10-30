@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createJourneyExecutor, journeyOrigin, validateJourneyAction} from '../extension/journey-executor.mjs';
+import {createJourneyRunner} from '../extension/journey-runner.mjs';
 
 function fixture({owned = false} = {}) {
   const calls = [], listeners = new Set(), detachListeners = new Set();
@@ -111,8 +112,8 @@ test('unknown, disabled, and guarded controls never reach page execution', async
   observed.controls[0].disabled = true;
   await assert.rejects(f.executor.execute({type: 'click', targetId: 'control-1'}, observed), {code: 'JOURNEY_BLOCKED'});
   observed.controls[0].disabled = false;
-  observed.controls[0].blockedReason = 'Payment needs a person.';
-  await assert.rejects(f.executor.execute({type: 'click', targetId: 'control-1'}, observed), /Payment/);
+  observed.controls[0].blockedReason = 'Credential or payment fields require a person to continue.';
+  await assert.rejects(f.executor.execute({type: 'click', targetId: 'control-1'}, observed), /Credential or payment/);
   assert.equal(f.calls.filter(call => call[0] === 'message' && call[1].type === 'EXECUTE').length, 0);
   await f.executor.cleanup();
 });
@@ -233,6 +234,56 @@ test('switching away while deciding stops the pending action', async () => {
   await assert.rejects(f.executor.execute({type: 'click', targetId: 'control-1'}, observed), {code: 'JOURNEY_BLOCKED'});
   assert.equal(f.calls.filter(call => call[0] === 'message' && call[1].type === 'EXECUTE').length, 0);
   await f.executor.cleanup();
+});
+
+test('runner retains the actionable browser reason when the reviewed tab loses focus', async () => {
+  const f = fixture();
+  const runner = createJourneyRunner({
+    observe: options => f.executor.observe(options),
+    execute: (action, observation, options) => f.executor.execute(action, observation, options),
+    decide: async () => {
+      f.setActive(false);
+      return {action: {type: 'click', targetId: 'control-1'}, reason: 'Open the ingredient list.'};
+    },
+  });
+  const run = await runner.start({goal: 'Open the ingredient list.', startUrl: 'https://example.test/dashboard'});
+  assert.equal(run.status, 'blocked');
+  assert.equal(run.summary, 'Return to the journey’s tab before continuing.');
+  assert.match(run.assistance.question, /Return to the journey’s tab/);
+  assert.deepEqual(run.stopReason, {source: 'browser', code: 'JOURNEY_BLOCKED', message: run.summary, stepIndex: 1});
+  assert.deepEqual(run.steps[0].executionError, {source: 'browser', code: 'JOURNEY_BLOCKED', message: run.summary});
+  assert.equal(run.steps[0].executionStatus, 'error');
+  assert.deepEqual(run.findings, []);
+  assert.deepEqual(run.scores, []);
+  assert.equal(f.calls.some(call => call[0] === 'message' && call[1].type === 'EXECUTE'), false);
+  await f.executor.cleanup();
+});
+
+test('known protected-control reasons survive the page bridge without exposing arbitrary exceptions', async () => {
+  for (const [pageMessage, code, expected] of [
+    ['Sign-in, permission changes, and sending messages require a person to continue.', 'JOURNEY_BLOCKED', 'Sign-in, permission changes, and sending messages require a person to continue.'],
+    ['The control is covered by another element. Read the page again.', 'JOURNEY_STALE', 'The control is covered by another element. Read the page again.'],
+    ['private page details and sk-ant-secret', 'JOURNEY_BLOCKED', 'The page could not safely perform this action. A person needs to inspect the selected control before continuing.'],
+    ['private page details and sk-ant-secret', 'PRIVATE_PROVIDER_CODE', 'The browser could not complete this action. Its outcome was not verified; review the current page before continuing.'],
+  ]) {
+    const f = fixture();
+    f.setHandler(async message => message.type === 'OBSERVE'
+      ? {ok: true, result: f.observationResult()}
+      : message.type === 'EXECUTE' ? {ok: false, code, error: pageMessage} : {ok: true, result: {}});
+    const runner = createJourneyRunner({observe: options => f.executor.observe(options),
+      execute: (action, observation, options) => f.executor.execute(action, observation, options),
+      decide: async () => ({action: {type: 'click', targetId: 'control-1'}, reason: 'Open the ingredient list.'})});
+    const run = await runner.start({goal: 'Open the ingredient list.', startUrl: 'https://example.test/dashboard'});
+    assert.equal(run.status, code === 'JOURNEY_BLOCKED' ? 'blocked' : 'inconclusive');
+    assert.equal(run.summary, expected);
+    assert.equal(run.stopReason.message, expected);
+    assert.equal(run.steps[0].executionError.message, expected);
+    assert.equal(JSON.stringify(run).includes('sk-ant-secret'), false);
+    assert.equal(JSON.stringify(run).includes('PRIVATE_PROVIDER_CODE'), false);
+    assert.deepEqual(run.findings, []);
+    assert.deepEqual(run.scores, []);
+    await f.executor.cleanup();
+  }
 });
 
 test('browser guard notifies the runner immediately only once', async () => {

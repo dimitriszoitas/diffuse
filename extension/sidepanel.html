@@ -6,11 +6,14 @@
     <title>Diffuse side drawer</title>
     <link rel="stylesheet" href="popup.css" />
     <link rel="stylesheet" href="sidepanel.css" />
+    <link rel="stylesheet" href="ai-review-entry.css" />
     <link rel="stylesheet" href="viewport-panel.css" />
     <script src="popup.js" defer></script>
     <script src="sidepanel.js" defer></script>
+    <script src="shortcut-hints.js" type="module"></script>
     <script src="journey-persona-ui.js" defer></script>
     <script src="journey-panel.js" defer></script>
+    <script src="interactive-audit-panel.js" defer></script>
     <script src="review-loader.js" defer></script>
     <script src="viewport-panel.js" type="module"></script>
     <link rel="stylesheet" href="ui-chrome.css">
@@ -20,6 +23,7 @@
   <script src="theme.js"></script>
   <link rel="stylesheet" href="journey-conversation.css">
   <link rel="stylesheet" href="journey-persona.css">
+  <link rel="stylesheet" href="interactive-audit-panel.css">
 </head>
   <body data-surface="sidepanel">
     <main class="popup" id="popup" aria-busy="true">
@@ -64,7 +68,7 @@
         <form id="comparison-form">
           <button class="primary-button" id="start-comparison" type="submit" disabled><span class="button-label">Start Diffuse</span><span aria-hidden="true">→</span></button>
         </form>
-        <button class="secondary-button load-review-button" id="load-review" type="button"><span>Load review</span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 15v5h14v-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button class="secondary-button load-review-button" id="load-review" type="button"><span>Load review</span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 19V6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v2M3 19l3-8h16l-3 8a2 2 0 0 1-2 1H5a2 2 0 0 1-2-1Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </div>
         <p id="page-access-message" class="feedback" role="status" hidden></p>
         <p class="field-help">Compare pages with <strong>Diff</strong> in the sidebar.</p>
@@ -128,16 +132,16 @@
           </section>
           <section id="panel-controls" aria-label="Review controls">
             <section class="comment-shortcuts" aria-labelledby="capture-group-title">
-              <h2 id="capture-group-title" class="control-group-title">Comment on the page</h2>
-              <div class="shortcut-cheatsheet" aria-label="Comment shortcuts"><p><span>On an element</span><span class="shortcut-keys"><kbd>C</kbd><span>then</span><kbd>Click</kbd></span></p><p><span>On an area</span><span class="shortcut-keys"><kbd>C</kbd><span>+</span><kbd>Click + drag</kbd></span></p></div>
+              <div class="comment-shortcuts-heading"><h2 id="capture-group-title" class="control-group-title">Comment on the page</h2><button id="customize-shortcuts" type="button" aria-label="Customize comment shortcuts" title="Customize comment shortcuts"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9.5 3-.6 2.3-2 .9-2.2-.6-2 3.5 1.7 1.7v2.4l-1.7 1.7 2 3.5 2.2-.6 2 .9.6 2.3h4l.6-2.3 2-.9 2.2.6 2-3.5-1.7-1.7v-2.4l1.7-1.7-2-3.5-2.2.6-2-.9-.6-2.3Z"/><circle cx="11.5" cy="12" r="3"/></svg></button></div>
+              <div id="comment-shortcut-keys" class="shortcut-cheatsheet" aria-label="Comment shortcuts"><p><span>On an element</span><span class="shortcut-keys"><kbd id="comment-shortcut-label">C</kbd><span>then</span><kbd>Click</kbd></span></p><p><span>On an area</span><span class="shortcut-keys"><kbd id="area-shortcut-label">C</kbd><span id="area-shortcut-join">+</span><kbd>Click + drag</kbd></span></p></div>
+              <p id="shortcuts-disabled-help" class="muted" hidden>Keyboard shortcuts are off. Customize them in Settings.</p>
               <p id="panel-instruction" class="muted" role="status" hidden></p>
               <button id="panel-cancel-selection" type="button" hidden>Cancel selection</button>
               <p id="panel-capture-error" class="feedback" role="alert" hidden></p>
               <button id="panel-retry" type="button" hidden>Retry capture</button>
             </section>
             <section class="review-tools" aria-label="Review tools">
-              <button id="panel-ai" class="review-tool" type="button"><span class="review-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="m10 3 2.3 6.7L19 12l-6.7 2.3L10 21l-2.3-6.7L1 12l6.7-2.3Z"/><path d="m19 2 1 3 3 1-3 1-1 3-1-3-3-1 3-1Z"/></svg></span><span class="review-tool-copy"><strong>Review with AI</strong><small>Audit this screen against your instructions.</small></span><span class="review-tool-arrow" aria-hidden="true">›</span></button>
-              <button id="panel-journey" class="review-tool" type="button" aria-controls="panel-journey-view"><span class="review-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M7 5h10a4 4 0 0 1 0 8H8a3 3 0 0 0 0 6h9"/></svg></span><span class="review-tool-copy"><strong>Journey Testing with AI</strong><small>Give a goal. Test the path across pages.</small></span><span class="review-tool-arrow" aria-hidden="true">›</span></button>
+              <button id="open-ai-entry" aria-controls="panel-ai-entry" aria-expanded="false" class="review-tool" type="button"><span class="review-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="m10 3 2.3 6.7L19 12l-6.7 2.3L10 21l-2.3-6.7L1 12l6.7-2.3Z"/><path d="m19 2 1 3 3 1-3 1-1 3-1-3-3-1 3-1Z"/></svg></span><span class="review-tool-copy"><strong>Review with AI</strong><small>Review a screen or test a user journey.</small></span><span class="review-tool-arrow" aria-hidden="true">›</span></button>
               <div class="diff-tool">
                 <button id="panel-diff" class="review-tool" type="button" aria-describedby="panel-diff-hint"><span class="review-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16m-6-8h3m6 0h3"/></svg></span><span class="review-tool-copy"><strong>Diff View</strong><small id="panel-diff-hint">Compare with a reference tab.</small></span><span class="review-tool-arrow" aria-hidden="true">›</span></button>
             <div id="panel-comparison-controls">
@@ -152,29 +156,96 @@
             </section>
             <section id="panel-comments" aria-label="Saved comments"></section>
           </section>
+          <section id="panel-ai-entry" hidden aria-labelledby="panel-ai-entry-title">
+            <button id="panel-ai-entry-back" class="journey-back" type="button" aria-label="Back to review"><span aria-hidden="true">←</span> Review</button>
+            <div class="section-heading"><h2 id="panel-ai-entry-title" tabindex="-1">Review with AI</h2></div>
+            <p class="muted">Choose what you want to review.</p>
+            <div class="review-tools" aria-label="AI review options">
+              <button id="panel-ai" class="review-tool" type="button"><span class="review-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="m10 3 2.3 6.7L19 12l-6.7 2.3L10 21l-2.3-6.7L1 12l6.7-2.3Z"/><path d="m19 2 1 3 3 1-3 1-1 3-1-3-3-1 3-1Z"/></svg></span><span class="review-tool-copy"><strong>Screen review</strong><small>Audit this screen against your instructions.</small></span><span class="review-tool-arrow" aria-hidden="true">›</span></button>
+              <button id="panel-interactive-audit" class="review-tool" type="button" aria-controls="panel-interactive-audit-view" aria-expanded="false"><span class="review-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01m-2 7 2 2 5-4"/></svg></span><span class="review-tool-copy"><strong>Interactive audit</strong><small>Inspect styles, accessibility and interaction states.</small></span><span class="review-tool-arrow" aria-hidden="true">›</span></button>
+              <button id="panel-journey" class="review-tool" type="button" aria-controls="panel-journey-view"><span class="review-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M7 5h10a4 4 0 0 1 0 8H8a3 3 0 0 0 0 6h9"/></svg></span><span class="review-tool-copy"><strong>Journey test</strong><small>Give a goal. Test the path across pages.</small></span><span class="review-tool-arrow" aria-hidden="true">›</span></button>
+            </div>
+          </section>
           <section id="panel-ai-view" hidden aria-labelledby="panel-ai-title">
-            <div class="section-heading"><h2 id="panel-ai-title">Review with AI</h2><button id="panel-close-ai" class="close-button" type="button" aria-label="Close AI review">×</button></div>
+            <button id="panel-close-ai" class="journey-back" type="button" aria-label="Back to AI review"><span aria-hidden="true">←</span> Review with AI</button>
+            <div class="section-heading"><h2 id="panel-ai-title">Screen review</h2></div>
             <p id="panel-ai-mode" class="muted"></p>
             <label class="panel-field">Instructions <span class="optional">(optional)</span><textarea id="panel-ai-instructions" maxlength="4000" rows="3" placeholder="What should this review focus on?"></textarea></label>
             <label class="panel-field" for="panel-ai-reference-url">Figma frame link <span class="optional">(optional)</span><input id="panel-ai-reference-url" type="url" maxlength="4096" autocomplete="off" spellcheck="false" placeholder="https://www.figma.com/design/…?node-id=…" aria-describedby="panel-ai-reference-help"></label>
             <p id="panel-ai-reference-help" class="muted mcp-reference-help"><span id="panel-ai-reference-status">Add a Figma connection to use a design reference.</span> You can also paste the frame link in your instructions. <a id="panel-ai-reference-settings" href="settings.html#figma" target="_blank" rel="noopener">Figma settings ↗</a></p>
             <label class="panel-field">Minimum issue size <output id="panel-ai-threshold-value">35/100</output><input id="panel-ai-threshold" type="range" min="0" max="100" value="35" aria-describedby="panel-threshold-help"></label>
             <p id="panel-threshold-help" class="muted">0 includes small details; 100 shows only the largest issues. Adjusting this filter uses existing results.</p>
-            <p class="panel-notice">Run sends the current screenshot(s), your instructions, and any linked Figma design context to Anthropic using your API key. API charges apply. Suggestions become comments only when you accept them.</p>
+            <p id="panel-ai-disclosure" class="panel-notice">Run sends the current screenshot(s), your instructions, and any linked Figma design context to Anthropic using your API key. API charges apply. Suggestions become comments only when you accept them.</p>
             <p id="panel-ai-config" class="muted"></p>
             <button id="panel-ai-run" type="button" class="primary-button">Run AI review</button>
             <p id="panel-ai-error" class="feedback" role="alert" hidden></p>
             <div id="panel-ai-results"></div>
           </section>
         </div>
+        <section id="panel-interactive-audit-view" hidden aria-labelledby="interactive-audit-title">
+          <button id="interactive-audit-back" class="journey-back" type="button" aria-label="Back to AI review"><span aria-hidden="true">←</span> Review with AI</button>
+          <div class="section-heading"><h2 id="interactive-audit-title" tabindex="-1">Interactive audit</h2><span class="journey-label">Local browser</span></div>
+          <p class="audit-help audit-intro">Inspect the page’s actual styles, accessibility checks and sampled hover and focus states. Add AI analysis when you’re ready.</p>
+          <p id="interactive-audit-error" class="feedback" role="alert" tabindex="-1" hidden></p>
+          <details id="interactive-audit-connection" class="audit-card audit-connection" open>
+            <summary><span>Browser connection</span><span id="interactive-audit-connection-label" class="audit-status">Checking…</span></summary>
+            <div class="audit-connection-content">
+              <p class="audit-help">Start the local browser helper from your Diffuse project folder. Copy the contents of the pairing-token file shown by the helper, then paste them below.</p>
+              <code class="audit-command">npm --prefix local-browser start</code>
+              <p class="audit-help">Keep the helper running while you audit. It opens a separate browser on this computer where you can sign in yourself.</p>
+              <form id="interactive-audit-pair-form">
+                <label class="panel-field" for="interactive-audit-token">Pairing token<input id="interactive-audit-token" type="password" autocomplete="off" spellcheck="false" maxlength="512" placeholder="Paste the local helper’s token" required></label>
+                <p class="audit-help">The saved token is never shown or included in reports.</p>
+                <div class="audit-actions"><button id="interactive-audit-pair" type="submit">Connect browser helper</button><button id="interactive-audit-disconnect" type="button" hidden>Disconnect</button></div>
+              </form>
+              <button id="interactive-audit-check" type="button">Check connection</button>
+              <p id="interactive-audit-connection-note" class="audit-help" role="status"></p>
+            </div>
+          </details>
+          <form id="interactive-audit-setup" class="audit-card">
+            <h3>Choose a page</h3>
+            <label class="panel-field" for="interactive-audit-url">Page URL<input id="interactive-audit-url" type="url" autocomplete="off" spellcheck="false" maxlength="4096" placeholder="https://your-site.example" required aria-describedby="interactive-audit-scope-help"></label>
+            <p id="interactive-audit-scope-help" class="audit-help">One page per audit. Open the browser, sign in and navigate to the screen you want, then collect evidence.</p>
+            <fieldset class="audit-checks"><legend>What should Diffuse check?</legend>
+              <label><input id="interactive-audit-styles" type="checkbox" checked><span><strong>Styles &amp; consistency</strong><small>Typography, colors, spacing and corner radii.</small></span></label>
+              <label><input id="interactive-audit-accessibility" type="checkbox" checked><span><strong>Accessibility</strong><small>Automated checks with evidence and items to verify.</small></span></label>
+              <label><input id="interactive-audit-interactions" type="checkbox" checked><span><strong>Interaction states</strong><small>Sample hover and Tab focus. No clicks or submissions.</small></span></label>
+            </fieldset>
+            <p class="audit-help">Evidence is saved locally. Collecting it does not call an AI provider.</p>
+            <button id="interactive-audit-open" class="primary-button" type="submit" disabled>Open audit browser <span aria-hidden="true">↗</span></button>
+          </form>
+          <section id="interactive-audit-run" hidden aria-labelledby="interactive-audit-run-title">
+            <div class="audit-card">
+              <div class="audit-section-heading"><h3 id="interactive-audit-run-title">Page audit</h3><span id="interactive-audit-status" class="audit-status" role="status" aria-live="polite"></span></div>
+              <p id="interactive-audit-page" class="audit-help"></p>
+              <p id="interactive-audit-progress" class="audit-help" role="status" aria-live="polite"></p>
+              <div id="interactive-audit-ready" hidden><p>Sign in or navigate in the audit browser. When the right screen is ready, collect its evidence.</p><button id="interactive-audit-collect" class="primary-button" type="button">Collect evidence</button></div>
+              <div class="audit-actions"><button id="interactive-audit-stop" type="button" hidden>Stop audit</button><button id="interactive-audit-report" type="button">Open report <span aria-hidden="true">↗</span></button><button id="interactive-audit-new" type="button">New audit</button></div>
+              <p class="audit-help">Every attempt stays in Review reports, including stopped and incomplete audits.</p>
+            </div>
+            <div id="interactive-audit-counts" class="audit-metrics" aria-label="Collected evidence" hidden></div>
+            <details id="interactive-audit-steps-section" class="audit-card" hidden><summary>Audit steps <span id="interactive-audit-step-count"></span></summary><ol id="interactive-audit-steps" class="audit-steps"></ol></details>
+            <section id="interactive-audit-analysis-section" class="audit-card" aria-labelledby="interactive-audit-analysis-heading" hidden>
+              <div class="audit-section-heading"><h3 id="interactive-audit-analysis-heading">Make sense of the evidence</h3><span id="interactive-audit-provider" class="audit-status"></span></div>
+              <label class="panel-field" for="interactive-audit-instructions">Focus for AI <span class="optional">(optional)</span><textarea id="interactive-audit-instructions" rows="3" maxlength="4000" placeholder="For example, highlight inconsistent heading styles and unclear keyboard focus."></textarea></label>
+              <p id="interactive-audit-ai-disclosure" class="audit-help"></p>
+              <p class="audit-help"><a href="settings.html#ai" target="_blank" rel="noopener">AI settings ↗</a></p>
+              <button id="interactive-audit-analyze" class="primary-button" type="button" disabled>Analyze evidence</button>
+              <p id="interactive-audit-ai-error" class="feedback" role="alert" hidden></p>
+              <div id="interactive-audit-analysis" hidden><h4 id="interactive-audit-assessment-heading">AI assessment</h4><p id="interactive-audit-analysis-summary"></p><div id="interactive-audit-findings"></div><p id="interactive-audit-limitations" class="audit-help"></p></div>
+            </section>
+          </section>
+          <p class="audit-help audit-footer-note">This is an expert audit, not a simulated user journey. Automated checks and sampled states do not establish full accessibility conformance.</p>
+        </section>
         <section id="panel-journey-view" hidden aria-labelledby="journey-title">
           <div class="journey-heading">
-            <button id="journey-back" class="journey-back" type="button" aria-label="Back to review"><span aria-hidden="true">←</span> Review</button>
+            <button id="journey-back" class="journey-back" type="button" aria-label="Back to AI review"><span aria-hidden="true">←</span> Review with AI</button>
             <div class="section-heading"><h2 id="journey-title">Test a journey</h2><span class="journey-label">AI</span></div>
           </div>
           <p id="journey-error" class="feedback" role="alert" tabindex="-1" hidden></p>
           <form id="journey-form">
             <p class="journey-intro">Give Diffuse a goal. It will find a path through the app, try the task, and show you where it struggled.</p>
+            <div class="journey-engine-summary"><p id="journey-engine-description" role="status">Loading AI settings…</p><a href="settings.html#ai" target="_blank" rel="noopener">AI settings ↗</a></div>
             <label class="panel-field" for="journey-goal">What should the user achieve?<textarea id="journey-goal" rows="4" maxlength="2000" required placeholder="Add Oat milk to Ingredients, using ml as its unit. Start here and find the process yourself."></textarea></label>
             <details class="journey-options">
               <summary>Success criteria &amp; test data <span class="optional">Optional</span></summary>
@@ -182,10 +253,11 @@
               <label class="panel-field" for="journey-test-data">Test data &amp; constraints<textarea id="journey-test-data" rows="3" maxlength="4000" placeholder="Use a test record. Leave existing ingredients unchanged."></textarea></label>
               <p class="journey-help">Include exact steps only if you want to test a specific path. A goal alone lets Diffuse assess how easy the path is to find.</p>
             </details>
-            <div class="journey-limit"><label for="journey-max-steps">Action limit</label><select id="journey-max-steps" aria-describedby="journey-limit-help"><option value="10">10 actions</option><option value="20" selected>20 actions</option><option value="30">30 actions</option></select></div>
-            <p id="journey-limit-help" class="journey-help">The journey can cross pages within this site. It stops at the limit if the result is still unclear.</p>
-            <div class="journey-consent"><p>AI will operate the current site using your signed-in session and may create the test data you provide. Use a test environment.</p><p>Page content, screenshots, and your instructions go to Anthropic using your saved API key. API charges apply. A silent recording of the journey stays on this device. You can pause or stop at any time.</p></div>
-            <p id="journey-key-help" class="journey-help" hidden>Add your Anthropic API key in <a href="settings.html#ai" target="_blank" rel="noopener">AI settings ↗</a> to begin.</p>
+            <div class="journey-target"><label for="journey-action-target">Action target</label><input id="journey-action-target" type="number" min="1" max="500" step="1" value="20" required aria-describedby="journey-target-help-form"></div>
+            <p id="journey-target-help-form" class="journey-help">How many AI actions should this task take? The target affects efficiency scoring; passing it does not stop the journey. Clicks, typing, scrolling and other AI actions count. There is no fixed action or time cutoff; spending limits and genuine blockers can still end a run.</p>
+            <div class="journey-consent"><p>AI will operate the current site using your signed-in session and may create the test data you provide. Use a test environment.</p><p id="journey-provider-consent">Page content, screenshots, and your instructions go to Anthropic using your saved API key. API charges apply. A silent recording of the journey stays on this device. You can pause or stop at any time.</p></div>
+            <p id="journey-managed-consent" class="journey-managed-consent" hidden></p>
+            <p id="journey-key-help" class="journey-help" hidden><span id="journey-key-provider">Add your Anthropic API key in</span> <a href="settings.html#ai" target="_blank" rel="noopener">AI settings ↗</a> to begin.</p>
             <button id="journey-start" class="primary-button" type="submit">Start journey <span aria-hidden="true">→</span></button>
           </form>
           <section id="journey-run" hidden aria-labelledby="journey-run-goal">
@@ -196,11 +268,14 @@
             </div>
             <h3 id="journey-run-goal"></h3>
             <p id="journey-current-page" class="journey-help"></p>
+            <p id="journey-run-engine" class="journey-help" hidden></p>
             <p id="journey-run-notice" class="journey-help" role="status" hidden></p>
             <div id="journey-metrics" class="journey-metrics" aria-label="Observed journey metrics"></div>
+            <section id="journey-target-assessment" class="journey-target-assessment" aria-labelledby="journey-target-title"><div class="journey-section-title"><h3 id="journey-target-title">Action efficiency</h3><strong id="journey-target-score" class="journey-score-value">Not scored yet</strong></div><p id="journey-target-comparison"></p><p id="journey-target-help" class="journey-help"></p></section>
             <section id="journey-summary-section" class="journey-summary" hidden><h3>Task result</h3><p id="journey-summary"></p></section>
-            <section id="journey-recording-section" class="journey-recording-section" hidden aria-labelledby="journey-recording-title"><div class="journey-section-title"><h3 id="journey-recording-title">Journey recording</h3><a id="journey-video-download" class="journey-video-download" download="diffuse-journey.webm">Download ↧</a></div><video id="journey-video" controls preload="metadata" playsinline aria-label="Recording of this journey"></video><p class="journey-help">Watch the full attempt, or jump to a step below.</p></section>
+            <section id="journey-recording-section" class="journey-recording-section" hidden aria-labelledby="journey-recording-title"><div class="journey-section-title"><h3 id="journey-recording-title">Journey recording</h3><a id="journey-video-download" class="journey-video-download" download="diffuse-journey.webm">Download ↧</a></div><video id="journey-video" controls preload="metadata" playsinline aria-label="Recording of this journey"></video><p id="journey-recording-caption" class="journey-help">Watch the recorded attempt, or jump to a step below.</p></section>
             <section class="journey-timeline-section" aria-labelledby="journey-timeline-title"><div class="journey-section-title"><h3 id="journey-timeline-title">The path taken</h3><span id="journey-step-count"></span></div><ol id="journey-timeline" class="journey-timeline"></ol><p id="journey-timeline-empty" class="journey-help">Reading the starting page…</p></section>
+            <section id="journey-evaluator" class="journey-evaluator" aria-labelledby="journey-evaluator-title" hidden><h3 id="journey-evaluator-title">Separate evaluation</h3><p id="journey-evaluator-status" role="status" aria-live="polite"></p><p id="journey-evaluator-help" class="journey-help"></p></section>
             <section id="journey-assessment" hidden aria-labelledby="journey-assessment-title"><div class="journey-section-title"><h3 id="journey-assessment-title">Usability</h3><span class="journey-label">AI assessment</span></div><p class="journey-help">Scores describe this attempt, from 1 (difficult) to 5 (clear). They are not a substitute for testing with people.</p><div id="journey-scores"></div></section>
             <section id="journey-findings-section" hidden aria-labelledby="journey-findings-title"><div class="journey-section-title"><h3 id="journey-findings-title">Suggested feedback</h3><span id="journey-findings-count"></span></div><p class="journey-help">Accept the findings worth sharing. Each comment keeps the captured page and evidence.</p><div id="journey-findings"></div></section>
             <div id="journey-finished-actions" class="journey-finished-actions" hidden><button id="journey-use-goal" type="button">Use this goal again</button><button id="journey-new" type="button">New journey</button></div>

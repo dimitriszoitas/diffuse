@@ -1,5 +1,56 @@
 const NAMESPACE = 'diffuse-journey';
-const error = (message, code = 'JOURNEY_BLOCKED') => Object.assign(new Error(message), {code});
+class JourneyExecutionError extends Error {
+  constructor(message, code) { super(message); this.name = 'JourneyExecutionError'; this.code = code; }
+}
+const error = (message, code = 'JOURNEY_BLOCKED') => new JourneyExecutionError(message, code);
+// Content-script exceptions can contain page data. Only our fixed messages may
+// cross the boundary as a trusted explanation; never promote an arbitrary
+// response's message just because it carries a familiar error code.
+const pageMessages = new Set([
+  'This field requires a person to continue.',
+  'Credential or payment fields require a person to continue.',
+  'This action needs a person because it may delete, publish, purchase, or change access.',
+  'Sign-in, permission changes, and sending messages require a person to continue.',
+  'Sign-in and payment forms require a person to continue.',
+  'The page changed since it was observed. Read the page again before acting.',
+  'The selected control changed. Read the page again.',
+  'Choose a scrollable region from the current observation.',
+  'This region supports scrolling. Choose one of its visible controls to interact.',
+  'The selected control is disabled.',
+  'The link has an unsupported destination.',
+  'This link leaves the approved website.',
+  'Downloads and links opening another tab need a person.',
+  'The form has an unsupported destination.',
+  'This form submits outside the approved website.',
+  'This form opens another tab.',
+  'The control is no longer visible.',
+  'The control is covered by another element. Read the page again.',
+  'The scrollable region is no longer visible.',
+  'The scrollable region is covered. Read the page again.',
+  'This field does not support safe text entry. A person needs to continue.',
+  'The field did not retain the entered value.',
+  'This page is outside the approved website.',
+  'The control moved before the click. Read the page again.',
+  'This is not a native selection field. Open it and choose a visible option instead.',
+  'That option is not available.',
+  'Unsupported page action.',
+  'Unsupported journey message.',
+]);
+const pageFallbacks = Object.freeze({
+  JOURNEY_BLOCKED: 'The page could not safely perform this action. A person needs to inspect the selected control before continuing.',
+  JOURNEY_STALE: 'The page or selected control changed before the action. Review the current page, then continue the journey.',
+  JOURNEY_INVALID_ACTION: 'The requested action is not supported for this control. Choose another route before continuing.',
+  JOURNEY_ACTION_FAILED: 'The browser could not complete this action. Its outcome was not verified; review the current page before continuing.',
+  JOURNEY_TIMEOUT: 'The page did not respond in time. Check whether it finished loading before continuing.',
+  JOURNEY_CANCELLED: 'This journey was stopped.',
+});
+const pageError = (message, code = 'JOURNEY_BLOCKED') => {
+  const safeCode = Object.hasOwn(pageFallbacks, code) ? code : 'JOURNEY_ACTION_FAILED';
+  return error(pageMessages.has(message) ? message : pageFallbacks[safeCode], safeCode);
+};
+export function journeyExecutionFailure(value) {
+  return value instanceof JourneyExecutionError ? {source: 'browser', code: value.code, message: value.message} : null;
+}
 const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 
 export function journeyOrigin(value) {
@@ -138,7 +189,7 @@ export function createJourneyExecutor({
         chromeApi.tabs.sendMessage(tabId, {namespace: NAMESPACE, type, ...payload}, {frameId: 0}),
         new Promise((_, reject) => { timer = setTimeout(() => reject(error('The page did not respond. A dialog or unsupported control may need your attention.', 'JOURNEY_TIMEOUT')), timeout); }),
       ]);
-      if (!response?.ok) throw error(response?.error || 'The page did not respond to the journey.', response?.code || 'JOURNEY_ACTION_FAILED');
+      if (!response?.ok) throw pageError(response?.error, response?.code || 'JOURNEY_ACTION_FAILED');
       return response.result;
     } finally { clearTimeout(timer); }
   };
@@ -229,7 +280,7 @@ export function createJourneyExecutor({
         throw error('Choose a scrollable region from the current observation.', 'JOURNEY_INVALID_ACTION');
       }
       if (action.type !== 'scroll' && control.role === 'scroll-region') throw error('Choose a visible control inside this region, or scroll it.', 'JOURNEY_INVALID_ACTION');
-      if (action.type !== 'scroll' && control.blockedReason) throw error(control.blockedReason);
+      if (action.type !== 'scroll' && control.blockedReason) throw pageError(control.blockedReason);
       if (control.disabled) throw error('The selected control is disabled.');
     }
     let result;

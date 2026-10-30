@@ -1,0 +1,17 @@
+.settings-page .shortcut-settings .section-heading { flex-wrap: wrap; gap: 12px; }
+.settings-page .shortcut-enable { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; font-weight: 400; }
+.settings-page .shortcut-enable input { width: 17px; height: 17px; margin: 0; accent-color: var(--ui-accent); }
+.settings-page .shortcut-edit-list { margin: 20px 0 16px; }
+.settings-page .shortcut-edit-row { display: grid; grid-template-columns: minmax(0,1fr) minmax(100px,auto); align-items: center; gap: 20px; padding: 16px 0; border-bottom: 1px solid var(--ui-line); }
+.settings-page .shortcut-edit-row:first-child { padding-top: 0; }
+.settings-page .shortcut-edit-row label { margin: 0; font-size: 13px; font-weight: 550; }
+.settings-page .shortcut-edit-row .help { margin: 4px 0 0; font-size: 12px; }
+.settings-page .shortcut-recorder { min-width: 100px; max-width: 260px; border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+.settings-page .shortcut-recorder[aria-pressed="true"] { background: var(--ui-accent-soft); border-color: var(--ui-accent); box-shadow: inset 0 0 0 1px var(--ui-accent); color: var(--ui-ink); }
+.settings-page #shortcut-feedback { min-height: 20px; margin: 12px 0; }
+.settings-page #shortcut-feedback[data-error="true"] { color: var(--ui-danger, #b33f3a); }
+.settings-page .shortcut-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+@media(max-width:480px) {
+  .settings-page .shortcut-edit-row { grid-template-columns: minmax(0,1fr); gap: 10px; }
+  .settings-page .shortcut-recorder { justify-self: start; }
+}

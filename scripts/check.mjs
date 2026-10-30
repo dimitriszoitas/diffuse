@@ -6,7 +6,7 @@ const base = resolve(import.meta.dirname, '..');
 const manifest = JSON.parse(readFileSync(resolve(base, 'extension/manifest.json'), 'utf8'));
 const pkg = JSON.parse(readFileSync(resolve(base, 'package.json'), 'utf8'));
 if (manifest.version !== pkg.version) throw new Error('Extension and package versions must match before release.');
-for (const folder of ['extension', 'demo', 'scripts', 'tests', 'backend', 'backend/api']) {
+for (const folder of ['extension', 'demo', 'scripts', 'tests', 'backend', 'backend/api', 'local-browser']) {
   for (const name of readdirSync(resolve(base, folder))) {
     if (/\.(m?js)$/.test(name)) execFileSync(process.execPath, ['--check', resolve(base, folder, name)], {stdio: 'pipe'});
   }
@@ -17,6 +17,7 @@ for (const file of ['diff.html','diff.js','diff.css','jira-settings.html','jira-
 if (!manifest.permissions.includes('identity')) throw new Error('Jira authorization requires Chrome identity permission.');
 if (!manifest.permissions.includes('debugger')) throw new Error('Responsive viewport presets require Chrome debugger permission.');
 readFileSync(resolve(base,'extension/viewport-controller.mjs'));
+for (const file of ['review-agent-definitions.mjs', 'review-agent-config.mjs', 'review-managed.mjs', 'ux-knowledge.mjs', 'accessibility-knowledge.mjs', 'review-sources.mjs', 'claude-agents-client.mjs', 'journey-agent-config.mjs', 'journey-agent-definitions.mjs', 'journey-managed.mjs']) readFileSync(resolve(base, 'extension', file));
 for (const file of ['journey-ai.mjs', 'journey-runner.mjs', 'journey-executor.mjs', 'journey-page.js', 'journey-service.mjs', 'journey-store.mjs', 'journey-panel.js', 'journey-conversation.css', 'journey-persona.mjs', 'journey-settings.mjs', 'journey-assistance.mjs', 'journey-persona-ui.js', 'journey-persona.css', 'recording-pointer.js']) readFileSync(resolve(base, 'extension', file));
 for (const file of ['viewport-profile.mjs','viewport-panel.js','viewport-panel.css','select-controls.js','ui-chrome.css','report-sidebar.css','ui-theme.css','ai-handoff.mjs','review-transfer.mjs','settings.html','settings.css','theme.js','theme-content.js','ui-dark.css']) readFileSync(resolve(base, 'extension', file));
 console.log('Extension manifest, referenced files, and JavaScript syntax are valid.');

@@ -20,7 +20,6 @@ button:disabled { cursor: default; opacity: .5; }
 button:hover { filter: none; }
 button, a { -webkit-tap-highlight-color: transparent; }
 a { color: var(--violet); text-underline-offset: 3px; }
-:where(button, a, summary, input, textarea, select):focus-visible { outline: 2px solid var(--violet); outline-offset: 3px; }
 [hidden] { display: none !important; }
 
 .sidebar { position: fixed; inset: 0 auto 0 0; width: 252px; display: flex; flex-direction: column; padding: 22px 12px 14px; background: #e7eef6; color: var(--ink); border-right: 1px solid #dbe4ef; overflow: auto; }
@@ -105,7 +104,6 @@ dialog::backdrop { background: #1c36555c; backdrop-filter: blur(4px); }
 .image-zoom-controls output { color: var(--muted); font-size: 12px; margin-left: 6px; }
 .image-preview-scroll { overflow: auto; min-height: 0; max-height: calc(100dvh - 205px); padding: 16px; background: #eaf0f7; overscroll-behavior: contain; }
 .image-preview-scroll img { display: block; height: auto; margin: auto; max-width: none; }
-.image-preview-scroll:focus-visible { outline: 2px solid var(--violet); outline-offset: -3px; }
 .clipboard-fallback { position: fixed; left: -10000px; top: 0; width: 1px; height: 1px; }
 
 /* The notebook keeps context, filtering and ticket selection together. */
@@ -161,3 +159,11 @@ dialog::backdrop { background: #1c36555c; backdrop-filter: blur(4px); }
   .comment-actions .button { flex: 1 1 auto; }
 }
 @media(prefers-reduced-motion:reduce) { button { transition: none; } }
+.interactive-audits-index { margin: 36px 0 24px; padding-top: 28px; border-top: 1px solid var(--ui-line, #e0e7ef); }
+.interactive-audits-index h2 { margin: 0 0 12px; font-size: 23px; }
+.interactive-audits-index h2 > span { color: var(--ui-muted, #62738a); font-size: 17px; font-weight: 400; }
+.interactive-audits-index > p { color: var(--ui-muted, #62738a); margin: 0 0 18px; }
+.interactive-audit-link { display: flex; gap: 18px; justify-content: space-between; align-items: center; margin: 12px 0; padding: 20px; border: 1px solid var(--ui-line, #e0e7ef); border-radius: 12px; background: var(--ui-surface, white); color: var(--ui-ink, #172b45); text-decoration: none; }
+.interactive-audit-link:hover { background: var(--ui-surface-muted, #f3f6fa); }
+.interactive-audit-link > span:first-child { display: grid; gap: 5px; }
+.interactive-audit-link > span > span { font-size: 14px; color: var(--ui-muted, #62738a); }

@@ -16,10 +16,11 @@ try {
   await page.evaluate(()=>{
     const image=document.createElement('canvas');image.width=32;image.height=32;
     const dataUrl=image.toDataURL();
-    window.calls=[];window.failCapture=false;window.draft=null;
+    window.calls=[];window.failCapture=false;window.draft=null;window.aiProvider='anthropic';
     window.chrome={runtime:{id:'fixture',onMessage:{addListener(fn){window.receiver=fn;}},async sendMessage(message){
       window.calls.push(message);
-      if(message.type==='GET_AI_CONFIG')return{ok:true,config:{hasKey:true,model:'fixture',threshold:35,apiKey:'must-not-leak'}};
+      if(message.type==='GET_AI_CONFIG')return{ok:true,config:{hasKey:true,provider:window.aiProvider,model:'fixture',threshold:35,apiKey:'must-not-leak'}};
+      if(message.type==='RUN_AI_REVIEW'&&window.failProviderChange){window.failProviderChange=false;window.aiProvider='anthropic';return{ok:false,code:'AI_PROVIDER_CHANGED',error:'Your AI provider changed to Anthropic. Review the updated connection, then click Run again. No evidence was sent.'};}
       if(message.type==='GET_AI_SUGGESTIONS')return{ok:true,batch:null};
       if(message.type==='CAPTURE_COMMENT'){
         if(window.failCapture)return{ok:false,code:'NEEDS_CAPTURE_ACCESS',error:'Allow capture'};
@@ -152,6 +153,26 @@ try {
   await deliver({type:'DOCK_STATE',docked:false});assert.equal(await overlay.locator('#ai-instructions').inputValue(),'Use the latest input');
   assert.equal((await command('unknown')).ok,false);
   pass('AI fields survive docking and the snapshot never exposes secret config fields');
+  const initialReviews=await page.evaluate(()=>window.calls.filter(item=>item.type==='RUN_AI_REVIEW').length);
+  await page.evaluate(()=>{window.aiProvider='openai';});
+  await command('runAi');
+  assert.equal(await page.evaluate(()=>window.calls.filter(item=>item.type==='RUN_AI_REVIEW').length),initialReviews,'A changed provider is disclosed before any request');
+  assert.match((await state()).ai.error,/changed to OpenAI/);
+  assert.match(await overlay.locator('#ai-disclosure').textContent(),/to OpenAI/);
+  await command('runAi');
+  assert.equal(await page.evaluate(()=>window.calls.findLast(item=>item.type==='RUN_AI_REVIEW').expectedProvider),'openai');
+  await page.evaluate(()=>{window.aiProvider='anthropic';window.dispatchEvent(new Event('focus'));});
+  await page.waitForFunction(()=>document.querySelector('diffuse-live-overlay').shadowRoot.querySelector('#ai-disclosure').textContent.includes('to Anthropic'));
+  assert.equal((await state()).ai.config.provider,'anthropic');
+  await page.evaluate(()=>{window.aiProvider='openai';document.dispatchEvent(new Event('visibilitychange'));});
+  await page.waitForFunction(()=>document.querySelector('diffuse-live-overlay').shadowRoot.querySelector('#ai-disclosure').textContent.includes('to OpenAI'));
+  const beforeRace=await page.evaluate(()=>window.calls.filter(item=>item.type==='RUN_AI_REVIEW').length);
+  await page.evaluate(()=>{window.failProviderChange=true;});
+  await command('runAi');
+  assert.equal(await page.evaluate(()=>window.calls.filter(item=>item.type==='RUN_AI_REVIEW').length),beforeRace+1,'Provider race rejection never retries automatically');
+  assert.match(await overlay.locator('#ai-disclosure').textContent(),/to Anthropic/);
+  assert.match((await state()).ai.error,/No evidence was sent/);
+  pass('Provider changes refresh the disclosure on focus and visibility, require a fresh Run and pin each worker request');
   await deliver({type:'STOP'});
   console.log(`${checks} focused controller checks passed.`);
 } finally {await browser.close();}

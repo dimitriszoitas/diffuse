@@ -15,30 +15,74 @@
 <body class="settings-page settings-legacy">
   <header class="topbar"><a class="brand" href="report.html"><span class="brand-mark" aria-hidden="true"><i></i><i></i></span>Diffuse</a><a href="settings.html">All settings <span aria-hidden="true">↗</span></a></header>
   <main>
-    <section class="intro"><h1>AI review</h1><p>Connect your Anthropic API key to review a captured screen with Claude. You choose which suggestions become comments.</p></section>
+    <section class="intro"><h1>AI settings</h1><p>Connect Anthropic or OpenAI for screenshot reviews and journey testing. You choose which suggestions become comments.</p></section>
     <div class="layout">
       <form id="ai-settings-form" aria-busy="true">
-        <div class="section-heading"><h2>Claude connection</h2><span class="key-status" id="key-status" role="status">Loading…</span></div>
+        <section class="ai-provider-settings" aria-labelledby="ai-provider-heading">
+          <div class="section-heading"><h3 id="ai-provider-heading">AI provider</h3><span id="ai-active-provider" class="status" role="status">Using Anthropic</span></div>
+          <fieldset class="ai-provider-options" aria-describedby="ai-provider-help"><legend>Use for AI review and agents</legend>
+            <label><input id="provider-anthropic" type="radio" name="ai-provider" value="anthropic" checked><span><strong>Anthropic · Claude</strong><small id="anthropic-connection-state">Checking connection…</small></span></label>
+            <label><input id="provider-openai" type="radio" name="ai-provider" value="openai"><span><strong>OpenAI</strong><small id="openai-connection-state">Checking connection…</small></span></label>
+          </fieldset>
+          <p class="help" id="ai-provider-help">Save the selected provider to use it for new AI reviews, journey tests, and agents. Each connection keeps its own key and settings.</p>
+        </section>
+
+        <div class="section-heading"><h2 id="ai-connection-heading">Anthropic connection</h2><span class="key-status" id="key-status" role="status">Loading…</span></div>
         <label for="api-key">Anthropic API key</label>
         <div class="password-field"><input id="api-key" name="api-key" type="password" autocomplete="off" spellcheck="false" maxlength="512" placeholder="Paste your API key" aria-describedby="key-help"><button id="toggle-key" type="button" aria-label="Show entered API key" aria-controls="api-key" aria-pressed="false">Show</button></div>
         <p class="help" id="key-help">Your saved key is never displayed. Leave this blank to keep it.</p>
         <label class="check-row"><input id="remember-key" type="checkbox" aria-labelledby="remember-label" aria-describedby="remember-help"><span><span id="remember-label">Remember my key on this device</span><small id="remember-help">Otherwise it is kept only until Chrome closes. Remembered keys are stored in this Chrome profile, not in a password vault.</small></span></label>
         <div class="divider"></div>
-        <label for="model">Claude model</label>
+        <label id="model-label" for="model">Claude model</label>
         <input id="model" type="text" spellcheck="false" autocomplete="off" maxlength="120" value="claude-sonnet-5" required aria-describedby="model-help">
         <p class="help" id="model-help">Use an Anthropic model ID with vision and structured output support. <a href="https://platform.claude.com/docs/en/models/overview" target="_blank" rel="noopener noreferrer">See available models ↗</a></p>
         <div class="range-heading"><label for="threshold">Minimum issue size</label><output id="threshold-value" for="threshold">35 / 100</output></div>
         <input id="threshold" type="range" min="0" max="100" step="1" value="35" aria-valuetext="35 out of 100" aria-describedby="threshold-help">
         <p class="help" id="threshold-help">0 shows all findings. Higher numbers hide smaller differences; 90 shows only the largest issues. This is a display filter, not review accuracy or confidence.</p>
+                <section class="journey-agent-settings" aria-labelledby="review-agent-heading">
+          <div class="section-heading"><h3 id="review-agent-heading">UX &amp; accessibility review</h3><span id="review-agent-status" class="status">Direct</span></div>
+          <p class="help">Choose how Review with AI examines a captured page or compares two screens.</p>
+          <fieldset class="journey-engine-options"><legend>Review engine</legend>
+            <label><input id="review-engine-direct" type="radio" name="review-engine" value="direct" checked><span><strong>Direct</strong><small id="review-direct-description">Review screenshots using your chosen Claude model.</small></span></label>
+            <label><input id="review-engine-managed" type="radio" name="review-engine" value="managed"><span><strong>UX &amp; Accessibility Reviewer <span class="journey-pilot">Pilot</span></strong><small>One agent combines NN/g usability guidance with W3C accessibility guidance. Recommendations include source links.</small></span></label>
+          </fieldset>
+          <div id="review-agent-options" hidden>
+            <div class="journey-agent-model"><span>Reviewer model</span><strong id="review-managed-model">Claude Opus 5.5 · Max effort</strong></div>
+            <label for="review-budget">Spending limit per review (USD)</label>
+            <div class="journey-budget-field"><span aria-hidden="true">$</span><input id="review-budget" type="number" min="0.1" max="20" step="0.01" value="2" inputmode="decimal" aria-describedby="review-budget-help"></div>
+            <p class="help" id="review-budget-help">Applies to each screenshot review. Usage may exceed the limit by the final request already in progress.</p>
+            <p class="help">Sources checked 24 October 2026. This is a curated reference snapshot. A screenshot cannot verify keyboard use, screen-reader behavior, or full WCAG conformance; those checks stay unverified.</p>
+            <p id="review-agent-notice" class="journey-agent-notice">Claude stores the review’s screenshots, instructions, and linked design context in your Anthropic account. API charges apply only when you run a review.</p>
+            <div class="actions"><button id="setup-review-agent" type="button" disabled>Set up reviewer</button></div>
+            <p class="help" id="review-agent-help">Diffuse creates one reviewer in your Claude account. Setup does not start a review.</p>
+          </div>
+        </section>
+        <section class="journey-agent-settings" aria-labelledby="journey-agent-heading">
+          <div class="section-heading"><h3 id="journey-agent-heading">Journey testing</h3><span id="journey-agent-status" class="status" role="status">Direct</span></div>
+          <p class="help">Choose how Diffuse tries a task across your app. This is separate from the screenshot reviewer above.</p>
+          <fieldset class="journey-engine-options"><legend>Journey engine</legend>
+            <label><input id="journey-engine-direct" type="radio" name="journey-engine" value="direct" checked><span><strong>Direct</strong><small id="journey-direct-description">Diffuse manages the journey using your chosen Claude model.</small></span></label>
+            <label><input id="journey-engine-managed" type="radio" name="journey-engine" value="managed"><span><strong><span id="journey-managed-label">Claude agents</span> <span class="journey-pilot">Pilot</span></strong><small>A journey agent follows your persona. A separate evaluator reviews the recorded evidence.</small></span></label>
+          </fieldset>
+          <div id="journey-agent-options" hidden>
+            <div class="journey-agent-model"><span>Journey and evaluator model</span><strong id="journey-managed-model">Claude Opus 5.5 · Max effort</strong></div>
+            <label for="journey-budget">Journey spending limit (USD)</label>
+            <div class="journey-budget-field"><span aria-hidden="true">$</span><input id="journey-budget" type="number" min="0.1" max="20" step="0.01" value="2" inputmode="decimal" aria-describedby="journey-budget-help"></div>
+            <p class="help" id="journey-budget-help">Shared between the journey agent (75%) and evaluator (25%). Usage may exceed the limit by the final request already in progress.</p>
+            <p id="journey-agent-notice" class="journey-agent-notice">Claude stores the journey’s conversation and evidence in your Anthropic account. API charges apply. Keep Chrome and the reviewed tab open while the journey runs.</p>
+            <div class="actions"><button id="setup-journey-agents" type="button" disabled>Set up journey agents</button></div>
+            <p class="help" id="journey-agent-help">Use your existing API key. Diffuse sets up both agents for you; no console setup is needed. Setup does not start a journey.</p>
+          </div>
+        </section>
         <div id="ai-feedback" role="status" aria-live="polite" tabindex="-1" hidden></div>
         <div class="actions"><button id="save" class="primary" type="submit" disabled>Save settings</button><button id="clear-key" class="text-button" type="button" disabled>Remove key</button></div>
       </form>
       <aside>
         <h2>How AI review works</h2>
-        <div class="note"><div><h3>Screenshots and billing</h3><p>An AI review sends the production screenshot, the prototype screenshot in comparison mode, and your review instructions directly to Anthropic. API usage is billed to your Anthropic account.</p></div></div>
-        <div class="note"><div><h3>Your key stays separate</h3><p>The key is used only by Diffuse’s connection to Anthropic. It is never added to comments, exported reports, or the pages you are reviewing.</p></div></div>
-        <div class="note"><div><h3>Review the suggestions</h3><p>Claude sees the captured screen. It does not test hidden states or interactions. Review every finding before accepting it.</p></div></div>
-        <a class="console-link" href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener noreferrer">Manage Anthropic API keys <span aria-hidden="true">↗</span></a>
+        <div class="note"><div><h3>Screenshots and billing</h3><p>An AI review sends the production screenshot, the prototype screenshot in comparison mode, and your review instructions to your selected AI provider. API usage is billed to that account.</p></div></div>
+        <div class="note"><div><h3>Your key stays separate</h3><p>Each key is used only by Diffuse’s connection to that provider. It is never added to comments, exported reports, or the pages you are reviewing.</p></div></div>
+        <div class="note"><div><h3>Review the suggestions</h3><p>Screenshot audits see the captured screen. Journey testing can interact with the app. Review every finding before accepting it.</p></div></div>
+        <a id="provider-console-link" class="console-link" href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener noreferrer">Manage Anthropic API keys <span aria-hidden="true">↗</span></a>
       </aside>
     </div>
     <footer><a href="settings.html#jira">Jira connections</a><span>Diffuse</span></footer>

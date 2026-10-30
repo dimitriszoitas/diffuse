@@ -64,7 +64,7 @@ async function harness({stateReply = async () => ({ok: true, run: null}), messag
     load() {}
     play() { return Promise.resolve(); }
     reportValidity() { return true; }
-    reset() { for (const field of this.querySelectorAll('textarea,select')) field.value = ''; }
+    reset() { for (const field of this.querySelectorAll('textarea,select,input')) field.value = field.defaultValue || ''; }
     showModal() { this.open = true; }
     close() { this.open = false; }
   }
@@ -75,6 +75,7 @@ async function harness({stateReply = async () => ({ok: true, run: null}), messag
   });
   for (const match of markup.matchAll(/<([a-z][\w-]*)\b([^>]*\bid="([^"]+)"[^>]*)>/gi)) {
     const element = new Element(match[1]); element.id = match[3]; element.hidden = /\bhidden\b/.test(match[2]); document.body.append(element);
+    element.defaultValue = match[2].match(/\bvalue="([^"]*)"/)?.[1] || ''; element.value = element.defaultValue;
   }
   const window = new Events();
   const session = {id: 'session', reviewId: 'review', target: {url: 'https://example.test/'}};

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import {aiProviderName, aiProviderOrigin} from '../extension/ai-providers.mjs';
 import {readFile} from 'node:fs/promises';
 import {webcrypto} from 'node:crypto';
 import {parseFigmaReference} from '../extension/mcp-client.mjs';
@@ -15,7 +16,7 @@ async function harness({enabled=true,allowed=true,readReference,prepareReference
   const chrome={runtime:{id:'test',getURL:p=>`chrome-extension://test/${p}`,onMessage:event,onInstalled:event},storage:{session:{get:async()=>({}),set:async data=>{state.saved=structuredClone(data);await saveSession?.(data);}}},tabs:{onUpdated:event,onRemoved:event},permissions:{contains:async({origins})=>origins[0].includes('anthropic')||allowed}};
   const config={enabled,endpoint:'http://127.0.0.1:3845/mcp',token:'fixture-secret'};
   const ctx=vm.createContext({chrome,createViewportController,assertPageAccess(){},protectAIStorage:async()=>{},DEFAULT_SETTINGS:{},viewportWarning:()=>'',crypto:webcrypto,AbortController,setTimeout,clearTimeout,setInterval,clearInterval,
-    parseFigmaReference,mcpPermissionOrigin,
+    parseFigmaReference,mcpPermissionOrigin,aiProviderName,aiProviderOrigin,
     readAISettings:async()=>({hasKey:true,apiKey:'sk-ant-fixture',model:'fixture'}),
     readMCPSettings:async({includeToken=false}={})=>includeToken?config:{enabled,endpoint:config.endpoint,hasToken:true},
     saveMCPSettings:async()=>{state.calls.push('save-config');return{};},clearMCPSettings:async()=>{},testMCPConnection:async()=>({tools:['get_design_context']}),

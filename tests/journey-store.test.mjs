@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {retainedJourneyIds} from '../extension/journey-store.mjs';
+import {retainedJourneyIds, archiveJourneyEvidence} from '../extension/journey-store.mjs';
 
 const saved = (index, extra = {}) => ({id: `run-${index}`, reviewId: 'review', updatedAt: new Date(1000 * index).toISOString(), ...extra});
 
@@ -70,4 +70,21 @@ test('saving a help response pointer protects the new child rather than evicting
   for (const invalid of [{...child, reviewId: 'foreign'}, {...child, continuation: {...child.continuation, assistanceResponseId: 'wrong'}}, {...child, continuation: {...child.continuation, parentRunId: grandparent.id}}]) {
     assert.deepEqual([...retainedJourneyIds([grandparent, parent, invalid], parent.id, {maxBytes: 1})].sort(), [grandparent.id, parent.id].sort());
   }
+});
+
+
+test('older journey archival keeps every step, stop reason and discussion while releasing only media', () => {
+  const run = saved(0, {status:'stopped', goal:'Create an entry', stopReason:{message:'Stopped by reviewer'},
+    steps:[{index:1, reason:'Open the table', action:{type:'click',controlId:'add'}, observation:{title:'Ingredients',screenshot:{dataUrl:'data:image/png;base64,AAAA',width:1200}}}],
+    video:{dataUrl:'data:video/webm;base64,AAAA',durationMs:2000},followUps:[{question:'Why stop?',answer:'The reviewer stopped it.'}]});
+  const before=structuredClone(run), archived=archiveJourneyEvidence(run);
+  assert.deepEqual(run,before);
+  assert.equal(archived.evidenceArchived,true);
+  assert.equal(archived.steps.length,1);
+  assert.equal(archived.steps[0].reason,'Open the table');
+  assert.equal(archived.steps[0].observation.screenshot.width,1200);
+  assert.equal(archived.steps[0].observation.screenshot.dataUrl,undefined);
+  assert.equal(archived.video.dataUrl,undefined);
+  assert.deepEqual(archived.stopReason,run.stopReason);
+  assert.deepEqual(archived.followUps,run.followUps);
 });

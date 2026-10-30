@@ -1,0 +1,56 @@
+/* The audit browser stays separate from the reviewed tab and its live controls. */
+body[data-interactive-audit-view="open"] #dock-workspace > :is(.workspace-heading, #panel-page, #panel-warning, #panel-away, #panel-live) { display: none !important; }
+body[data-surface="sidepanel"] .popup #panel-interactive-audit.review-tool {
+  display: flex; align-items: center; gap: 11px; width: 100%; min-height: 73px;
+  margin: 0; padding: 13px; border: 0; border-top: 1px solid var(--ui-line); border-radius: 0;
+  background: transparent; color: var(--ui-ink); text-align: left; box-shadow: none;
+}
+body[data-surface="sidepanel"] .popup #panel-interactive-audit.review-tool:hover { background: var(--ui-surface-muted); }
+body[data-surface="sidepanel"] .popup #panel-interactive-audit.review-tool::before { display: none; }
+.popup #panel-interactive-audit .review-tool-icon { background: color-mix(in srgb, #8b78bd 14%, var(--ui-surface)); color: light-dark(#705199, #c2adeb); }
+#panel-interactive-audit-view { min-width: 0; }
+.popup #panel-interactive-audit-view .section-heading { flex-wrap: wrap; gap: 8px; }
+.popup #interactive-audit-title:focus { outline: none; }
+.popup #panel-interactive-audit-view .audit-help { margin: 8px 0; color: var(--ui-muted); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.popup #panel-interactive-audit-view .audit-intro { margin: 10px 0 18px; font-size: 12px; }
+.popup #panel-interactive-audit-view .audit-card { display: block; min-width: 0; margin: 16px 0; padding: 15px; border: 1px solid var(--ui-line); border-radius: 11px; background: var(--ui-surface); }
+.popup #panel-interactive-audit-view .audit-card h3 { margin: 0 0 12px; font-size: 13px; line-height: 1.45; }
+.popup #panel-interactive-audit-view .audit-card h4 { font-size: 12px; margin: 14px 0 5px; }
+.popup #panel-interactive-audit-view .audit-card p { overflow-wrap: anywhere; }
+.popup #panel-interactive-audit-view .audit-card > summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--ui-ink); background: transparent; }
+.popup #panel-interactive-audit-view .audit-connection > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.popup #panel-interactive-audit-view .audit-connection > summary::before { content: '›'; font-size: 18px; line-height: 1; color: var(--ui-muted); }
+.popup #panel-interactive-audit-view .audit-connection[open] > summary::before { transform: rotate(90deg); }
+.popup #panel-interactive-audit-view .audit-connection > summary > span:first-child { flex: 1; }
+.popup #panel-interactive-audit-view .audit-connection-content { padding-top: 12px; }
+.popup #panel-interactive-audit-view .audit-command { display: block; padding: 10px; font-size: 11px; line-height: 1.5; border-radius: 7px; background: var(--ui-surface-muted); color: var(--ui-ink); overflow-wrap: anywhere; white-space: normal; }
+.popup #panel-interactive-audit-view .audit-status { flex: 0 0 auto; font-size: 10px; font-weight: 500; color: var(--ui-accent); }
+.popup #panel-interactive-audit-view .audit-status[data-status="error"] { color: var(--ui-danger, #d75d63); }
+.popup #panel-interactive-audit-view .audit-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; }
+.popup #panel-interactive-audit-view .audit-actions button { flex: 1 1 auto; }
+.popup #panel-interactive-audit-view :is(input[type="url"], input[type="password"], textarea) { width: 100%; min-width: 0; box-sizing: border-box; }
+.popup #panel-interactive-audit-view #interactive-audit-check { margin-top: 10px; }
+.popup #panel-interactive-audit-view .audit-checks { margin: 17px 0 12px; padding: 0; border: 0; }
+.popup #panel-interactive-audit-view .audit-checks legend { margin-bottom: 10px; padding: 0; font-size: 12px; font-weight: 600; }
+.popup #panel-interactive-audit-view .audit-checks label { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 11px 0; cursor: pointer; font-size: 12px; }
+.popup #panel-interactive-audit-view .audit-checks label + label { border-top: 1px solid var(--ui-line); }
+.popup #panel-interactive-audit-view .audit-checks input { flex: 0 0 16px; width: 16px; height: 16px; margin: 1px 0 0; accent-color: var(--ui-accent); }
+.popup #panel-interactive-audit-view .audit-checks strong { display: block; font-weight: 550; }
+.popup #panel-interactive-audit-view .audit-checks small { display: block; margin-top: 3px; font-size: 11px; font-weight: 400; line-height: 1.55; color: var(--ui-muted); }
+.popup #panel-interactive-audit-view .audit-section-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; justify-content: space-between; }
+.popup #panel-interactive-audit-view .audit-section-heading h3 { margin-bottom: 0; }
+.popup #panel-interactive-audit-view .primary-button { width: 100%; margin-top: 10px; }
+.popup #panel-interactive-audit-view .audit-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.popup #panel-interactive-audit-view .audit-metric { padding: 12px; border-radius: 9px; background: var(--ui-surface-muted); }
+.popup #panel-interactive-audit-view .audit-metric strong { display: block; font-size: 17px; line-height: 1.4; font-weight: 600; }
+.popup #panel-interactive-audit-view .audit-metric span { font-size: 10px; line-height: 1.5; color: var(--ui-muted); }
+.popup #panel-interactive-audit-view .audit-steps { padding-left: 20px; margin: 8px 0 0; }
+.popup #panel-interactive-audit-view .audit-steps li { padding: 9px 0; font-size: 12px; }
+.popup #panel-interactive-audit-view .audit-steps small { display: block; margin-top: 3px; color: var(--ui-muted); font-size: 10px; }
+.popup #panel-interactive-audit-view .audit-finding { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--ui-line); }
+.popup #panel-interactive-audit-view .audit-finding h4 { margin-top: 0; }
+.popup #panel-interactive-audit-view .audit-finding p { margin: 5px 0; font-size: 12px; line-height: 1.6; }
+.popup #panel-interactive-audit-view .audit-footer-note { margin: 18px 2px; }
+html[data-theme="dark"] .popup #interactive-audit-back.journey-back { background: transparent; }
+html[data-theme="dark"] .popup #interactive-audit-back.journey-back:hover { background: var(--ui-accent-soft); }
+#panel-interactive-audit-view [hidden] { display: none !important; }

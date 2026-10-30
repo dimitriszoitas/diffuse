@@ -369,7 +369,7 @@ export function createJiraExporter({onError = () => {}, clientFactory, titleGene
     });
     body.append(grid, settingsLink, metadataStatus, extraFields, error, intent, list);
     const footer = element('footer', null, 'dialog-footer');
-    const footnote = element('p', 'With AI configured, comment text is sent to Anthropic to suggest titles. Jira receives these observations and their saved evidence only when you select Create tickets.');
+    const footnote = element('p', 'With AI configured, comment text is sent to your selected AI provider to suggest titles. Jira receives these observations and their saved evidence only when you select Create tickets.');
     const actions = element('div', null, 'jira-export-actions');
     const cancel = button('Cancel', () => dialog.close());
     const submit = button(`Create ${comments.length} ticket${comments.length === 1 ? '' : 's'}`, () => send(), true);submit.disabled = true;
@@ -565,6 +565,7 @@ export function createJiraExporter({onError = () => {}, clientFactory, titleGene
   }
   function mount(review, container, cards) {
     observer?.disconnect();
+    if (!cards.length) { selections.delete(review.id); return; }
     let selected = selections.get(review.id);
     if (!selected) { selected = new Set();selections.set(review.id, selected); }
     const valid = new Set(review.comments.map(comment => comment.id));

@@ -203,3 +203,20 @@ test('per-build anchors and new-preview source identity are portable without rep
  const recentBundle=createReviewBundle(recent,{now:when});assert.equal(recentBundle.review.comments[0].prSourcePreviewUrl,'https://example.test/');
  recentBundle.review.comments[0].prSourcePreviewUrl='https://unrelated.test/';assert.throws(()=>parseReviewBundle(recentBundle),/source must match/);
 });
+
+test('source-linked reviewer findings survive sharing with bounded metadata and trusted source domains', () => {
+  const source = fixture();
+  const provenance = {sources: [{title: 'Error-Message Guidelines', url: 'https://www.nngroup.com/articles/error-message-guidelines/'}, {title: 'Keyboard', url: 'https://www.w3.org/WAI/WCAG22/Understanding/keyboard.html'}], ruleIds: ['ux-error-recovery-copy', 'a11y-keyboard'], assessment: 'needs-verification', knowledgeRevision: 'knowledge-2026-10-24', checkedAt: '2026-10-24'};
+  Object.assign(source.comments[0].ai, provenance);
+  const bundle = createReviewBundle(source, {now: when});
+  const imported = prepareImportedReview(JSON.stringify(bundle), {now: when});
+  for (const [key, value] of Object.entries(provenance)) assert.deepEqual(imported.comments[0].ai[key], value);
+  for (const url of ['https://nngroup.com.evil.test/','https://www.w3.org:8443/test','http://www.nngroup.com/articles/test/','javascript:alert(1)','https://name:pass@www.w3.org/']) {
+    const copy = structuredClone(bundle); copy.review.comments[0].ai.sources[0].url = url;
+    assert.throws(() => parseReviewBundle(copy));
+  }
+  for (const assessment of ['passed', 'WCAG-certified', 'failed']) {
+    const copy = structuredClone(bundle); copy.review.comments[0].ai.assessment = assessment;
+    assert.throws(() => parseReviewBundle(copy), /unsupported/);
+  }
+});

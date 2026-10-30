@@ -22,7 +22,6 @@ button, select { font: inherit; }
 button, select { min-height: 44px; -webkit-tap-highlight-color: transparent; }
 button { cursor: pointer; }
 button:disabled, select:disabled { cursor: default; }
-button:focus-visible, select:focus-visible, [tabindex="-1"]:focus-visible { outline: 3px solid var(--violet); outline-offset: 3px; }
 button:focus-visible { position: relative; z-index: 1; }
 .popup { padding: 16px; }
 .brand-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid #ddd4e9; }
@@ -210,11 +209,12 @@ body[data-surface=popup] .primary-button { min-height: 44px; padding: 10px 12px;
 body[data-surface=popup] .primary-button:hover { background: var(--ui-primary-hover); }
 body[data-surface=popup] .primary-button:disabled { color: var(--ui-muted); background: var(--ui-surface-muted); border-color: var(--ui-line); box-shadow: none; }
 body[data-surface=popup] .launcher-menu { display: grid; gap: 2px; margin-top: 7px; }
-body[data-surface=popup] .popup .launcher-item { display: flex; align-items: center; gap: 11px; min-height: 44px; width: 100%; padding: 10px 11px; border: 1px solid transparent; border-radius: 6px; color: var(--ui-ink); background: transparent; font-size: 13px; font-weight: 500; text-align: left; }
-body[data-surface=popup] .popup .launcher-item:hover { background: var(--ui-surface); border-color: var(--ui-line); }
+body[data-surface=popup] .popup .launcher-item { position: relative; display: flex; align-items: center; gap: 11px; min-height: 44px; width: 100%; padding: 10px 12px; border: 0; border-radius: 10px; color: var(--ui-ink); background: transparent; font-size: 13px; font-weight: 500; text-align: left; }
+body[data-surface=popup] .popup .launcher-item:hover { background: var(--ui-surface); }
 body[data-surface=popup] .popup .launcher-item:disabled { opacity: .55; }
 body[data-surface=popup] .popup .launcher-item svg { flex: 0 0 18px; width: 18px; height: 18px; color: var(--ui-muted); }
 body[data-surface=popup] .launcher-chevron { margin-left: auto; font-size: 20px; color: var(--ui-muted); font-weight: 400; }
-body[data-surface=popup] #settings { border-top: 1px solid var(--ui-line); margin-top: 3px; border-radius: 0 0 6px 6px; }
+body[data-surface=popup] #settings { margin-top: 9px; }
+body[data-surface=popup] #settings::before { content: ''; position: absolute; left: 0; right: 0; top: -5px; height: 1px; background: var(--ui-line); pointer-events: none; }
 body[data-surface=popup] .initial-loading { min-height: 72px; font-size: 12px; }
 body[data-surface=popup] :is(.feedback,.session-error) { margin: 10px 0 0; padding: 9px 10px; font-size: 12px; }

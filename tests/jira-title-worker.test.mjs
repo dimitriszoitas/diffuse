@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import {aiProviderName, aiProviderOrigin} from '../extension/ai-providers.mjs';
 import {readFile} from 'node:fs/promises';
 import {hasJiraTitle} from '../extension/jira-titles.mjs';
 
@@ -15,7 +16,7 @@ async function harness({permission = true} = {}) {
     tabs: {onUpdated: listener, onRemoved: listener},
     permissions: {contains: async () => permission},
   };
-  const context = vm.createContext({chrome, hasJiraTitle, createViewportController: () => ({}), assertPageAccess() {}, protectAIStorage: async () => {},
+  const context = vm.createContext({chrome, hasJiraTitle, aiProviderName, aiProviderOrigin, createViewportController: () => ({}), assertPageAccess() {}, protectAIStorage: async () => {},
     reviews: {getReview: async id => id === 'review' ? structuredClone(saved) : null},
     readAISettings: async () => {state.settingsReads++;return {apiKey: 'PRIVATE-KEY', model: 'configured-model'};},
     generateJiraTitles: async (comments, config) => {state.calls.push({comments, config});return {titles: [{commentId: comments[0].id, title: 'Suggested title'}], reason: 'generated'};},
@@ -47,7 +48,7 @@ test('only the trusted report can generate titles, and the worker reads saved co
 test('missing permission, missing comments and invalid batches cannot spend AI tokens', async () => {
   const worker = await harness({permission: false});
   assert.equal((await worker.send({})).reason, 'not-configured');
-  assert.equal(worker.state.settingsReads, 0);
+  assert.equal(worker.state.settingsReads, 1, 'The selected provider is read before checking its origin permission.');
   for (const message of [{reviewId: 'missing'}, {commentIds: ['missing']}, {commentIds: ['new', 'new']}, {commentIds: []}, {commentIds: Array.from({length: 21}, (_, index) => String(index))}]) {
     assert.equal((await worker.send(message)).ok, false);
   }

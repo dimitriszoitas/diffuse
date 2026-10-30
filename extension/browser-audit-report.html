@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Interactive audit — Diffuse</title>
+  <link rel="stylesheet" href="browser-audit-report.css">
+  <link rel="stylesheet" href="ui-theme.css">
+  <link rel="stylesheet" href="ui-dark.css">
+  <script src="theme.js"></script>
+  <script src="browser-audit-report.js" type="module"></script>
+</head>
+<body>
+  <nav class="audit-toolbar" aria-label="Audit report actions">
+    <a id="back-to-reviews" href="report.html">← Review Reports</a>
+    <div><button id="refresh-audit" type="button">Refresh</button><button id="download-audit" type="button" disabled>Download HTML</button></div>
+  </nav>
+  <p id="audit-notice" class="audit-notice" role="status" hidden></p>
+  <main id="audit-report" aria-busy="true"><h1>Loading interactive audit…</h1><p>Reading the evidence saved on this device.</p></main>
+</body>
+</html>
